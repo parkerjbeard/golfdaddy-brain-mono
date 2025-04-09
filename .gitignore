@@ -109,3 +109,14 @@ dmypy.json
 
 # Rope project settings
 .ropeproject 
+
+# Pytest
+.pytest_cache/
+
+# folder for docs
+docs/
+
+CLAUDE.md
+
+# folder for data
+data/
