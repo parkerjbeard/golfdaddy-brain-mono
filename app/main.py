@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import logging
@@ -17,6 +17,9 @@ from app.api.docs_generation import router as docs_router
 from app.api.task_endpoints import router as tasks_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
+from app.middleware.api_key_auth import ApiKeyMiddleware
+from app.middleware.rate_limiter import RateLimiterMiddleware
+from app.middleware.request_metrics import RequestMetricsMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +35,38 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Add CORS middleware
+# Create metrics middleware instance for metrics endpoint
+metrics_middleware = RequestMetricsMiddleware(app)
+
+# Add middleware
+# Order is important - middleware executes in reverse order (last added, first executed)
+
+# Add metrics middleware first (will be executed last)
+app.add_middleware(RequestMetricsMiddleware)
+
+# Add rate limiting middleware if enabled
+if settings.enable_rate_limiting:
+    logger.info("Adding rate limiting middleware")
+    app.add_middleware(
+        RateLimiterMiddleware,
+        rate_limit_per_minute=settings.default_rate_limit,
+        api_key_header=settings.api_key_header,
+        api_keys={key: info.get("rate_limit", settings.default_rate_limit) 
+                 for key, info in settings.api_keys.items()},
+        exclude_paths=settings.rate_limit_exclude_paths
+    )
+
+# Add API key authentication middleware if enabled
+if settings.enable_api_auth:
+    logger.info("Adding API key authentication middleware")
+    app.add_middleware(
+        ApiKeyMiddleware,
+        api_keys=settings.api_keys,
+        api_key_header=settings.api_key_header,
+        exclude_paths=settings.auth_exclude_paths
+    )
+
+# Add CORS middleware last (will be executed first)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, this should be restricted
@@ -95,6 +129,21 @@ def send_eod_reminders():
     except Exception as e:
         logger.error(f"Error sending EOD reminders: {str(e)}")
 
+# Metrics endpoint
+@app.get("/metrics")
+def get_metrics(request: Request):
+    """
+    Get API usage metrics.
+    This endpoint is only accessible without authentication in development mode.
+    """
+    if not settings.testing_mode and request.url.hostname not in ["localhost", "127.0.0.1"]:
+        # Check if request has a valid API key with admin role
+        api_key_info = getattr(request.state, "api_key_info", {})
+        if api_key_info.get("role") != "admin":
+            return {"error": "Unauthorized", "message": "Admin role required"}
+    
+    return metrics_middleware.get_metrics()
+
 # Simple health check endpoint
 @app.get("/health")
 def health_check():
@@ -117,6 +166,9 @@ def read_root():
     }
 
 if __name__ == "__main__":
+    # Start the background scheduler
+    start_scheduler()
+    
     # Run the application with uvicorn when executed directly
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
