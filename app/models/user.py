@@ -1,32 +1,28 @@
-from sqlalchemy import Column, String, Integer, JSON, DateTime, Enum
-from sqlalchemy.sql import func
-import enum
-import uuid
+from pydantic import BaseModel, Field, Json
 from typing import Optional, Dict, Any
+from uuid import UUID
 from datetime import datetime
+from enum import Enum
 
-from app.config.database import Base
+class UserRole(str, Enum):
+    DEVELOPER = "Developer"
+    MANAGER = "Manager"
+    ADMIN = "Admin"
 
-class UserRole(str, enum.Enum):
-    """Enum for user roles in the system."""
-    DEVELOPER = "developer"
-    MANAGER = "manager"
-    ADMIN = "admin"
+class User(BaseModel):
+    id: UUID = Field(..., description="Corresponds to the Supabase auth.users id")
+    email: Optional[str] = None
+    slack_id: Optional[str] = Field(None, unique=True)
+    role: UserRole = UserRole.DEVELOPER
+    team: Optional[str] = None
+    personal_mastery: Optional[Json[Dict[str, Any]]] = Field(None, description="Manager-specific tasks/feedback")
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-class User(Base):
-    """User model representing employees in the system."""
-    
-    __tablename__ = "users"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    slack_id = Column(String, unique=True, nullable=False, index=True)
-    name = Column(String, nullable=False)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.DEVELOPER)
-    team = Column(String, nullable=True)
-    personal_mastery = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+    class Config:
+        from_attributes = True # Replaces orm_mode=True in Pydantic v1
+        use_enum_values = True # Important for serialization/deserialization of enums
+
     def __repr__(self) -> str:
         return f"<User id={self.id}, slack_id={self.slack_id}, role={self.role}>"
     
@@ -34,8 +30,8 @@ class User(Base):
         """Convert User model to dictionary."""
         return {
             "id": self.id,
+            "email": self.email,
             "slack_id": self.slack_id,
-            "name": self.name,
             "role": self.role.value if self.role else None,
             "team": self.team,
             "personal_mastery": self.personal_mastery,

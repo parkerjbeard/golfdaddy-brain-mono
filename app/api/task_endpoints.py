@@ -1,8 +1,8 @@
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, status
 from pydantic import BaseModel, Field
 from datetime import datetime
+from uuid import UUID
 
 from app.config.database import get_db
 from app.repositories.task_repository import TaskRepository
@@ -10,6 +10,11 @@ from app.repositories.user_repository import UserRepository
 from app.services.raci_service import RaciService
 from app.services.notification_service import NotificationService
 from app.models.task import TaskStatus
+from app.api.auth import get_current_user_profile
+from app.models.user import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -50,17 +55,28 @@ class TaskList(BaseModel):
     tasks: List[TaskResponse]
     total: int
 
-@router.post("", response_model=TaskResponse)
-def create_task(
+# Helper to instantiate services (consider dependency injection later)
+def get_task_repository():
+    return TaskRepository()
+
+def get_raci_service():
+    return RaciService()
+
+def get_notification_service():
+    return NotificationService()
+
+@router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+async def create_task(
     task: TaskCreate = Body(...),
-    db: Session = Depends(get_db)
+    task_repo: TaskRepository = Depends(get_task_repository),
+    raci_service: RaciService = Depends(get_raci_service),
+    notification_service: NotificationService = Depends(get_notification_service),
+    current_user: User = Depends(get_current_user_profile)
 ):
     """
     Create a new task with RACI roles.
     """
-    # Initialize services
-    raci_service = RaciService(db)
-    notification_service = NotificationService(db)
+    logger.info(f"User {current_user.id} attempting to create task: {task.description[:50]}...")
     
     # Create task with RACI validation
     created_task, warnings = raci_service.assign_raci(
@@ -73,42 +89,55 @@ def create_task(
         due_date=task.due_date
     )
     
+    if not created_task:
+        logger.warning(f"RACI validation failed during task creation by user {current_user.id}")
+        # Depending on assign_raci implementation, decide how to respond
+        # For now, we proceed but log the warning.
+        pass
+    
+    logger.info(f"Task {created_task.id} created successfully by user {current_user.id}")
+    
     # Send notification to assignee
     notification_service.task_created_notification(created_task.id)
     
-    # Return created task
     return created_task.to_dict()
 
 @router.get("", response_model=TaskList)
-def list_tasks(
-    assignee_id: Optional[str] = Query(None, description="Filter by assignee ID"),
-    status: Optional[str] = Query(None, description="Filter by task status"),
-    skip: int = Query(0, description="Number of tasks to skip"),
-    limit: int = Query(100, description="Max number of tasks to return"),
-    db: Session = Depends(get_db)
+async def list_tasks(
+    assignee_id: Optional[UUID] = None,
+    status: Optional[TaskStatus] = None,
+    task_repo: TaskRepository = Depends(get_task_repository),
+    current_user: User = Depends(get_current_user_profile)
 ):
     """
     List tasks with optional filtering.
     """
-    task_repository = TaskRepository(db)
+    logger.info(f"User {current_user.id} listing tasks. Filters: assignee={assignee_id}, status={status}")
     
-    # Apply filters based on query parameters
-    if assignee_id and status:
-        filtered_tasks = [t for t in task_repository.find_tasks_by_assignee(assignee_id) 
-                         if t.status.value == status]
-    elif assignee_id:
-        filtered_tasks = task_repository.find_tasks_by_assignee(assignee_id)
+    if assignee_id:
+        filtered_tasks = task_repo.find_tasks_by_assignee(assignee_id)
     elif status:
         try:
             status_enum = TaskStatus(status)
-            filtered_tasks = task_repository.find_tasks_by_status(status_enum)
+            filtered_tasks = task_repo.find_tasks_by_status(status_enum)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
     else:
-        filtered_tasks = task_repository.list_tasks()
+        # TODO: Implement filtering based on current_user's role/permissions
+        # For now, fetching all tasks - potentially insecure / inefficient
+        # Example: Fetch tasks where user is involved in RACI
+        user_tasks = []
+        user_tasks.extend(task_repo.find_tasks_by_assignee(current_user.id))
+        user_tasks.extend(task_repo.find_tasks_by_raci_role(current_user.id, 'responsible_id'))
+        user_tasks.extend(task_repo.find_tasks_by_raci_role(current_user.id, 'accountable_id'))
+        user_tasks.extend(task_repo.find_tasks_by_raci_role(current_user.id, 'consulted_ids'))
+        user_tasks.extend(task_repo.find_tasks_by_raci_role(current_user.id, 'informed_ids'))
+        # Deduplicate tasks
+        tasks_dict = {task.id: task for task in user_tasks}
+        filtered_tasks = list(tasks_dict.values())
     
     # Apply pagination
-    paginated_tasks = filtered_tasks[skip:skip+limit]
+    paginated_tasks = filtered_tasks
     
     # Convert to response format
     return {
@@ -117,15 +146,16 @@ def list_tasks(
     }
 
 @router.get("/{task_id}", response_model=TaskResponse)
-def get_task(
-    task_id: str,
-    db: Session = Depends(get_db)
+async def get_task(
+    task_id: UUID,
+    task_repo: TaskRepository = Depends(get_task_repository),
+    current_user: User = Depends(get_current_user_profile)
 ):
     """
     Get a specific task by ID.
     """
-    task_repository = TaskRepository(db)
-    task = task_repository.get_task_by_id(task_id)
+    logger.info(f"User {current_user.id} attempting to get task {task_id}")
+    task = task_repo.get_task_by_id(task_id)
     
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -133,21 +163,19 @@ def get_task(
     return task.to_dict()
 
 @router.put("/{task_id}", response_model=TaskResponse)
-def update_task(
-    task_id: str,
+async def update_task(
+    task_id: UUID,
     task_update: TaskUpdate = Body(...),
-    db: Session = Depends(get_db)
+    task_repo: TaskRepository = Depends(get_task_repository),
+    raci_service: RaciService = Depends(get_raci_service),
+    current_user: User = Depends(get_current_user_profile)
 ):
     """
     Update a task's details or status.
     """
-    task_repository = TaskRepository(db)
-    raci_service = RaciService(db)
-    notification_service = NotificationService(db)
-    
-    # Get existing task
-    task = task_repository.get_task_by_id(task_id)
-    if not task:
+    logger.info(f"User {current_user.id} attempting to update task {task_id}")
+    existing_task = task_repo.get_task_by_id(task_id)
+    if not existing_task:
         raise HTTPException(status_code=404, detail="Task not found")
     
     # Update RACI roles if provided
@@ -155,7 +183,7 @@ def update_task(
         task_update.responsible_id, task_update.accountable_id, 
         task_update.consulted_ids, task_update.informed_ids
     ]):
-        task = task_repository.assign_raci_roles(
+        existing_task = task_repo.assign_raci_roles(
             task_id=task_id,
             responsible_id=task_update.responsible_id,
             accountable_id=task_update.accountable_id,
@@ -166,7 +194,7 @@ def update_task(
     # Update other fields
     update_data = task_update.dict(exclude_unset=True, exclude={'status'})
     if update_data:
-        task = task_repository.update_task(task_id, **update_data)
+        existing_task = task_repo.update_task(task_id, **update_data)
     
     # Update status if provided
     if task_update.status:
@@ -178,7 +206,7 @@ def update_task(
                 # Notify accountable person (in real app, would capture blocking reason)
                 notification_service.blocked_task_alert(task_id, "Task blocked by manager")
             
-            task = task_repository.update_task_status(task_id, status_enum)
+            existing_task = task_repo.update_task_status(task_id, status_enum)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {task_update.status}")
     
@@ -186,26 +214,31 @@ def update_task(
     is_valid, errors = raci_service.raci_validation(task_id)
     if not is_valid:
         return {
-            **task.to_dict(),
+            **existing_task.to_dict(),
             "warnings": errors
         }
     
-    return task.to_dict()
+    return existing_task.to_dict()
 
-@router.delete("/{task_id}")
-def delete_task(
-    task_id: str,
-    db: Session = Depends(get_db)
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: UUID,
+    task_repo: TaskRepository = Depends(get_task_repository),
+    current_user: User = Depends(get_current_user_profile)
 ):
     """
     Delete a task.
     """
-    task_repository = TaskRepository(db)
-    
-    # Attempt to delete the task
-    success = task_repository.delete_task(task_id)
-    
-    if not success:
+    logger.info(f"User {current_user.id} attempting to delete task {task_id}")
+    existing_task = task_repo.get_task_by_id(task_id)
+    if not existing_task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    return {"message": "Task deleted successfully"}
+    # TODO: Add permission check - can current_user delete this task?
+    
+    deleted = task_repo.delete_task(task_id)
+    if not deleted:
+        raise HTTPException(status_code=500, detail="Failed to delete task")
+    
+    logger.info(f"Task {task_id} deleted successfully by user {current_user.id}")
+    return

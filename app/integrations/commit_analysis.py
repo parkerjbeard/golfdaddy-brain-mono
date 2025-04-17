@@ -29,6 +29,81 @@ class CommitAnalyzer:
         """Check if the model is a reasoning model that doesn't support temperature."""
         return any(prefix in model_name for prefix in self.reasoning_models)
     
+    def _format_analysis_log(self, result: Dict[str, Any], commit_hash: str, repository: str) -> str:
+        """Create a nicely formatted log string for commit analysis results."""
+        horizontal_line = "═" * 80
+        header = f"╔{horizontal_line}╗"
+        footer = f"╚{horizontal_line}╝"
+        
+        # Format the main sections
+        title = f"║ COMMIT ANALYSIS: {commit_hash[:8]} - {repository}"
+        title = f"{title}{' ' * (79 - len(title))}║"
+        
+        complexity = f"║ Complexity Score: {result.get('complexity_score', 'N/A')}/10"
+        complexity = f"{complexity}{' ' * (79 - len(complexity))}║"
+        
+        hours = f"║ Estimated Hours: {result.get('estimated_hours', 'N/A')}"
+        hours = f"{hours}{' ' * (79 - len(hours))}║"
+        
+        risk = f"║ Risk Level: {result.get('risk_level', 'N/A')}"
+        risk = f"{risk}{' ' * (79 - len(risk))}║"
+        
+        # Format key changes
+        key_changes = result.get('key_changes', [])
+        key_changes_header = "║ Key Changes:"
+        key_changes_header = f"{key_changes_header}{' ' * (79 - len(key_changes_header))}║"
+        
+        key_changes_lines = []
+        for change in key_changes:
+            if len(change) > 75:  # Truncate long items
+                change = change[:72] + "..."
+            change_line = f"║   • {change}"
+            change_line = f"{change_line}{' ' * (79 - len(change_line))}║"
+            key_changes_lines.append(change_line)
+        
+        # Format tech debt
+        tech_debt = result.get('technical_debt', [])
+        tech_debt_header = "║ Technical Debt:"
+        tech_debt_header = f"{tech_debt_header}{' ' * (79 - len(tech_debt_header))}║"
+        
+        tech_debt_lines = []
+        for debt in tech_debt:
+            if len(debt) > 75:  # Truncate long items
+                debt = debt[:72] + "..."
+            debt_line = f"║   • {debt}"
+            debt_line = f"{debt_line}{' ' * (79 - len(debt_line))}║"
+            tech_debt_lines.append(debt_line)
+        
+        # Assemble the complete log message
+        divider = f"║{'-' * 78}║"
+        log_parts = [
+            header,
+            title,
+            divider,
+            complexity,
+            hours,
+            risk,
+            divider,
+            key_changes_header
+        ]
+        
+        if key_changes_lines:
+            log_parts.extend(key_changes_lines)
+        else:
+            log_parts.append("║   None specified" + " " * 64 + "║")
+            
+        log_parts.append(divider)
+        log_parts.append(tech_debt_header)
+        
+        if tech_debt_lines:
+            log_parts.extend(tech_debt_lines)
+        else:
+            log_parts.append("║   None specified" + " " * 64 + "║")
+            
+        log_parts.append(footer)
+        
+        return "\n".join(log_parts)
+    
     def analyze_commit_diff(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze a commit diff using AI to provide insights and estimates.
@@ -158,6 +233,12 @@ Your analysis should be technically precise, balanced, and presented in the requ
                 "repository": commit_data.get("repository"),
                 "model_used": self.commit_analysis_model  # Include the model used in the response
             })
+            
+            # Log formatted analysis results
+            commit_hash = commit_data.get("commit_hash", "unknown")
+            repository = commit_data.get("repository", "unknown")
+            formatted_log = self._format_analysis_log(result, commit_hash, repository)
+            print(formatted_log)  # Using print for cleaner formatting in console
             
             return result
             

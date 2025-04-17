@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from contextlib import asynccontextmanager
 import uvicorn
 import logging
-from sqlalchemy.orm import Session
 import os
 from datetime import datetime, timedelta
 import schedule
@@ -10,11 +12,11 @@ import time
 import threading
 
 from app.config.settings import settings
-from app.config.database import Base, engine, get_db
-from app.api.slack_events import router as slack_router
-from app.api.slack import router as slack_webhook_router
+from app.config.supabase_client import get_supabase_client
 from app.api.docs_generation import router as docs_router
 from app.api.task_endpoints import router as tasks_router
+from app.api.auth_endpoints import router as auth_router
+from app.api.github_events import router as github_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
 from app.middleware.api_key_auth import ApiKeyMiddleware
@@ -28,147 +30,113 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
+# Create app instance
 app = FastAPI(
     title="GolfDaddy Brain API",
-    description="Backend API for task management with RACI framework and AI-powered features",
+    description="Backend API for GolfDaddy Brain, the AI assistant for software engineering",
     version="1.0.0",
 )
 
-# Create metrics middleware instance for metrics endpoint
-metrics_middleware = RequestMetricsMiddleware(app)
-
-# Add middleware
-# Order is important - middleware executes in reverse order (last added, first executed)
-
-# Add metrics middleware first (will be executed last)
-app.add_middleware(RequestMetricsMiddleware)
-
-# Add rate limiting middleware if enabled
-if settings.enable_rate_limiting:
-    logger.info("Adding rate limiting middleware")
-    app.add_middleware(
-        RateLimiterMiddleware,
-        rate_limit_per_minute=settings.default_rate_limit,
-        api_key_header=settings.api_key_header,
-        api_keys={key: info.get("rate_limit", settings.default_rate_limit) 
-                 for key, info in settings.api_keys.items()},
-        exclude_paths=settings.rate_limit_exclude_paths
-    )
-
-# Add API key authentication middleware if enabled
-if settings.enable_api_auth:
-    logger.info("Adding API key authentication middleware")
-    app.add_middleware(
-        ApiKeyMiddleware,
-        api_keys=settings.api_keys,
-        api_key_header=settings.api_key_header,
-        exclude_paths=settings.auth_exclude_paths
-    )
-
-# Add CORS middleware last (will be executed first)
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, this should be restricted
+    allow_origins=["*"],  # Replace with specific origins in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(slack_router)
-app.include_router(slack_webhook_router)
+# Add custom middleware
+app.add_middleware(RequestMetricsMiddleware)
+if settings.ENABLE_RATE_LIMITING:
+    app.add_middleware(
+        RateLimiterMiddleware,
+        rate_limit_per_minute=settings.DEFAULT_RATE_LIMIT,
+        exclude_paths=settings.RATE_LIMIT_EXCLUDE_PATHS.split(","),
+    )
+if settings.ENABLE_API_AUTH:
+    app.add_middleware(
+        ApiKeyMiddleware,
+        api_key_header=settings.API_KEY_HEADER,
+        api_keys=settings.API_KEYS,
+        exclude_paths=settings.AUTH_EXCLUDE_PATHS.split(","),
+    )
+
+# Register routers
+app.include_router(auth_router)
 app.include_router(docs_router)
 app.include_router(tasks_router)
+app.include_router(github_router)
+
+# Error handling
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.error(f"Validation error: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()},
+    )
+
+# Health check endpoint
+@app.get("/health", tags=["status"])
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0",
+    }
 
 # Create database tables on startup
 @app.on_event("startup")
 def startup_db_client():
     try:
-        # Create tables if they don't exist
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created or verified")
+        # Initialize the Supabase client
+        supabase_client = get_supabase_client()
+        logger.info("Supabase client initialized")
+        
+        # Database schema is managed via Supabase migrations in supabase/schemas
+        logger.info("Database tables are managed declaratively via supabase/schemas")
+        
     except Exception as e:
         logger.error(f"Error during startup: {e}")
         raise
 
-# Background scheduler for recurring tasks
-def start_scheduler():
-    """Start the background scheduler for recurring tasks."""
+# Schedule daily tasks
+def schedule_tasks():
+    schedule.every().day.at("01:00").do(daily_maintenance)
     
-    def run_schedule():
-        while True:
-            schedule.run_pending()
-            time.sleep(60)  # Check every minute
-    
-    # Schedule EOD reminders daily at 4:30 PM
-    schedule.every().day.at("16:30").do(send_eod_reminders)
-    
-    # Start the scheduler in a background thread
-    scheduler_thread = threading.Thread(target=run_schedule, daemon=True)
-    scheduler_thread.start()
-    logger.info("Background scheduler started")
+    # Run scheduled tasks in background
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
 
-def send_eod_reminders():
-    """Send end-of-day task reminders to all users."""
+def daily_maintenance():
+    """Run daily maintenance tasks."""
     try:
-        # Get database session
-        db = next(get_db())
+        logger.info("Running daily maintenance tasks")
+        # Example: Clean up old data, generate reports, etc.
+        supabase = get_supabase_client()
         
-        # Get all users
-        user_repository = UserRepository(db)
-        notification_service = NotificationService(db)
+        # Run notifications for overdue tasks
+        notification_service = NotificationService(supabase)
+        notification_service.send_task_reminders()
         
-        users = user_repository.list_users()
-        
-        # Send reminders to each user
-        for user in users:
-            notification_service.eod_reminder(user.id)
-        
-        logger.info(f"Sent EOD reminders to {len(users)} users")
+        logger.info("Daily maintenance completed")
     except Exception as e:
-        logger.error(f"Error sending EOD reminders: {str(e)}")
+        logger.error(f"Error in daily maintenance: {e}")
 
-# Metrics endpoint
-@app.get("/metrics")
-def get_metrics(request: Request):
-    """
-    Get API usage metrics.
-    This endpoint is only accessible without authentication in development mode.
-    """
-    if not settings.testing_mode and request.url.hostname not in ["localhost", "127.0.0.1"]:
-        # Check if request has a valid API key with admin role
-        api_key_info = getattr(request.state, "api_key_info", {})
-        if api_key_info.get("role") != "admin":
-            return {"error": "Unauthorized", "message": "Admin role required"}
-    
-    return metrics_middleware.get_metrics()
+# Start scheduler in background on startup
+@app.on_event("startup")
+def start_scheduler():
+    t = threading.Thread(target=schedule_tasks, daemon=True)
+    t.start()
+    logger.info("Scheduler started")
 
-# Simple health check endpoint
-@app.get("/health")
-def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": app.version
-    }
-
-# Root endpoint
-@app.get("/")
-def read_root():
-    """Root endpoint with API information."""
-    return {
-        "name": "GolfDaddy Brain API",
-        "version": app.version,
-        "docs_url": "/docs",
-        "health_check": "/health"
-    }
-
+# Main entry point
 if __name__ == "__main__":
-    # Start the background scheduler
-    start_scheduler()
-    
-    # Run the application with uvicorn when executed directly
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "8000")),
+        reload=True,
+    )

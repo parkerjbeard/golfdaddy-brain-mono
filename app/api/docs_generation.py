@@ -1,11 +1,11 @@
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Body
-from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
-from app.config.database import get_db
+from app.config.supabase_client import get_supabase_client
 from app.services.doc_generation_service import DocGenerationService
 from app.integrations.clickup_integration import ClickUpIntegration
+from supabase import Client
 
 router = APIRouter(prefix="/docs", tags=["documentation"])
 
@@ -35,7 +35,7 @@ class DocumentationUpdateRequest(BaseModel):
 @router.post("/generate", response_model=DocumentationResponse)
 def generate_documentation(
     request: DocumentationRequest = Body(...),
-    db: Session = Depends(get_db)
+    supabase: Client = Depends(get_supabase_client)
 ):
     """
     Generate documentation from minimal input using AI.
@@ -44,7 +44,7 @@ def generate_documentation(
     Optionally saves the documentation to ClickUp.
     """
     # Initialize service
-    doc_service = DocGenerationService(db)
+    doc_service = DocGenerationService(supabase)
     
     # Prepare context for doc generation
     context = {
@@ -96,7 +96,7 @@ def generate_documentation(
 @router.post("/iterate", response_model=DocumentationResponse)
 def iterate_documentation(
     request: DocumentationUpdateRequest = Body(...),
-    db: Session = Depends(get_db)
+    supabase: Client = Depends(get_supabase_client)
 ):
     """
     Update a document based on feedback.
@@ -104,7 +104,7 @@ def iterate_documentation(
     Takes the document ID and feedback, then generates an updated version.
     """
     # Initialize service
-    doc_service = DocGenerationService(db)
+    doc_service = DocGenerationService(supabase)
     
     # Handle iteration
     updated_doc = doc_service.handle_iteration(
@@ -124,7 +124,7 @@ def iterate_documentation(
 @router.get("/{doc_id}")
 def get_documentation(
     doc_id: str,
-    db: Session = Depends(get_db)
+    supabase: Client = Depends(get_supabase_client)
 ):
     """
     Retrieve a generated document by ID.

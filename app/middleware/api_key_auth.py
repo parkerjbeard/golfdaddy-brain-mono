@@ -32,6 +32,14 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         self.api_key_header = api_key_header
         self.exclude_paths = exclude_paths or ["/docs", "/redoc", "/openapi.json", "/health"]
         
+        # Debug - log available API keys (securely)
+        if api_keys:
+            logger.info(f"ApiKeyMiddleware initialized with {len(api_keys)} API keys")
+            for key in api_keys.keys():
+                logger.info(f"Available API key: {key[:5]}... (length: {len(key)})")
+        else:
+            logger.warning("ApiKeyMiddleware initialized with NO API keys")
+        
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip authentication for excluded paths
         if any(request.url.path.startswith(path) for path in self.exclude_paths):
@@ -39,6 +47,9 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             
         # Get API key from header
         api_key = request.headers.get(self.api_key_header)
+        
+        # Debug log
+        logger.info(f"Processing request to {request.url.path}. Header '{self.api_key_header}' = '{api_key[:5] if api_key else None}...' (length: {len(api_key) if api_key else 0})")
         
         # Check if API key is provided and valid
         if not api_key:
@@ -52,6 +63,15 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         # Validate API key
         if api_key not in self.api_keys:
             logger.warning(f"Invalid API key provided for {request.url.path}")
+            # Debug - more detailed logging
+            logger.error(f"Received key: '{api_key[:5]}...' (length: {len(api_key)})")
+            logger.error(f"Expected one of these keys (first 5 chars): {[k[:5] + '...' for k in self.api_keys.keys()]}")
+            
+            # Try to identify character encoding or whitespace issues
+            import base64
+            encoded_received = base64.b64encode(api_key.encode()).decode()
+            logger.error(f"Received API key (base64): {encoded_received}")
+            
             return Response(
                 content="Invalid API key",
                 status_code=403

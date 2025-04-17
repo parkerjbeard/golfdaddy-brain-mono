@@ -1,38 +1,23 @@
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from app.config.database import Base
 from app.models.user import User, UserRole
 from app.models.task import Task, TaskStatus
 from app.repositories.user_repository import UserRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.raci_service import RaciService
 
-# Create in-memory SQLite database for testing
-@pytest.fixture
-def db_session():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
-    
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-        Base.metadata.drop_all(bind=engine)
-
 @pytest.fixture
 def users(db_session):
     # Create test users
     user_repo = UserRepository(db_session)
     
+    # First clean up any existing test users
+    for slack_id in ["U1", "U2", "U3"]:
+        existing_user = user_repo.get_user_by_slack_id(slack_id)
+        if existing_user:
+            db_session.delete(existing_user)
+    db_session.commit()
+    
+    # Create test users
     dev_user = user_repo.create_user(
         slack_id="U1",
         name="Developer",
@@ -83,6 +68,10 @@ def test_assign_raci_all_roles_specified(db_session, users):
     assert users["other_dev"].id in task.consulted_ids
     assert users["other_dev"].id in task.informed_ids
     assert len(warnings) == 0
+    
+    # Clean up
+    db_session.delete(task)
+    db_session.commit()
 
 def test_assign_raci_default_responsible(db_session, users):
     # Arrange
@@ -99,6 +88,10 @@ def test_assign_raci_default_responsible(db_session, users):
     assert task is not None
     assert task.responsible_id == users["developer"].id  # Defaulted to assignee
     assert "Responsible role defaulted to assignee" in warnings
+    
+    # Clean up
+    db_session.delete(task)
+    db_session.commit()
 
 def test_assign_raci_default_accountable(db_session, users):
     # Arrange
@@ -114,6 +107,10 @@ def test_assign_raci_default_accountable(db_session, users):
     assert task is not None
     assert task.accountable_id == users["manager"].id  # Found the team manager
     assert any("Accountable role defaulted to team manager" in w for w in warnings)
+    
+    # Clean up
+    db_session.delete(task)
+    db_session.commit()
 
 def test_raci_validation(db_session, users):
     # Arrange
@@ -134,6 +131,10 @@ def test_raci_validation(db_session, users):
     # Assert
     assert is_valid is True
     assert len(errors) == 0
+    
+    # Clean up
+    db_session.delete(task)
+    db_session.commit()
 
 def test_escalate_blocked_task(db_session, users):
     # Arrange
@@ -161,3 +162,7 @@ def test_escalate_blocked_task(db_session, users):
     # Verify task status is updated
     updated_task = task_repo.get_task_by_id(task.id)
     assert updated_task.status == TaskStatus.BLOCKED
+    
+    # Clean up
+    db_session.delete(task)
+    db_session.commit()

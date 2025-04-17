@@ -9,6 +9,7 @@ project/
 ├── app/
 │   ├── config/           # Configuration settings and database setup
 │   ├── middleware/       # API Gateway and security middleware
+│   ├── auth/             # Authentication with Slack
 │   ├── models/           # SQLAlchemy models
 │   ├── repositories/     # Database operations
 │   ├── services/         # Business logic
@@ -29,6 +30,7 @@ project/
 - **AI-Powered Analytics**: Analyze GitHub commits and estimate points/time
 - **Documentation Generation**: Transform minimal input into robust documentation
 - **Slack Integration**: Notifications, task creation, and daily reminders
+- **Slack Authentication**: Log in with your Slack account
 - **Personal Mastery Tracking**: Manager-specific tasks with reminders
 - **API Gateway & Security**: API key authentication, rate limiting, and request metrics
 
@@ -39,6 +41,7 @@ project/
 - Python 3.8+
 - PostgreSQL
 - Redis (optional, for caching)
+- Slack workspace with admin privileges to create an app
 
 ### Installation
 
@@ -59,7 +62,18 @@ project/
    pip install -r requirements.txt
    ```
 
-4. Create a `.env` file with your configuration
+4. Create a Slack App for authentication
+   - Go to https://api.slack.com/apps
+   - Click "Create New App" and select "From scratch"
+   - Choose a name and select your workspace
+   - Under "OAuth & Permissions", add the redirect URL: `http://localhost:8000/auth/slack/callback`
+   - Add the following scopes:
+     - `identity.basic`
+     - `identity.email`
+   - Save changes and install the app to your workspace
+   - Note your Client ID and Client Secret from "Basic Information"
+
+5. Create a `.env` file with your configuration
    ```
    DB_HOST=localhost
    DB_PORT=5432
@@ -69,6 +83,18 @@ project/
    
    SLACK_TOKEN=your_slack_token
    SLACK_SIGNING_SECRET=your_slack_signing_secret
+   
+   # Slack OAuth for authentication
+   SLACK_CLIENT_ID=your_slack_client_id
+   SLACK_CLIENT_SECRET=your_slack_client_secret
+   SLACK_REDIRECT_URI=http://localhost:8000/auth/slack/callback
+   ALLOWED_SLACK_TEAMS=your_slack_team_id
+   
+   # JWT settings for authentication tokens
+   JWT_SECRET=random_secure_string
+   JWT_ALGORITHM=HS256
+   JWT_EXPIRY_HOURS=24
+   
    GITHUB_TOKEN=your_github_token
    CLICKUP_TOKEN=your_clickup_token
    AI_SERVICE_KEY=your_ai_service_key
@@ -83,7 +109,7 @@ project/
    API_KEYS={"your-api-key": {"owner": "your-name", "role": "admin", "rate_limit": 1000}}
    ```
 
-5. Run the application
+6. Run the application
    ```
    python -m app.main
    ```
@@ -101,11 +127,25 @@ Once the server is running, API documentation is available at:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
-## API Gateway Features
+## Authentication
+
+### Slack Authentication
+
+The application uses Slack for user authentication:
+
+1. Direct users to `/auth/login/slack` to initiate authentication
+2. Users will be redirected to Slack to authorize the application
+3. After authorization, they'll be redirected back with a JWT token
+4. Use this token in the Authorization header for all API requests:
+   ```
+   Authorization: Bearer your.jwt.token
+   ```
+
+To get the currently authenticated user, call the `/auth/me` endpoint.
 
 ### API Key Authentication
 
-The API Gateway includes API key authentication for secure access control. To use authenticated endpoints:
+For service-to-service communication, API key authentication is also available:
 
 1. Add your API key to the request header:
    ```
@@ -113,6 +153,8 @@ The API Gateway includes API key authentication for secure access control. To us
    ```
 
 2. API keys can be configured with different roles and rate limits in the `.env` file.
+
+## API Gateway Features
 
 ### Rate Limiting
 
@@ -153,10 +195,10 @@ API_KEY_HEADER=X-API-Key
 DEFAULT_RATE_LIMIT=60
 
 # Paths excluded from authentication (comma-separated)
-AUTH_EXCLUDE_PATHS=/docs,/redoc,/openapi.json,/health
+AUTH_EXCLUDE_PATHS=/docs,/redoc,/openapi.json,/health,/auth
 
 # Paths excluded from rate limiting (comma-separated)
-RATE_LIMIT_EXCLUDE_PATHS=/health
+RATE_LIMIT_EXCLUDE_PATHS=/health,/auth
 
 # JSON string of API keys and their properties
 API_KEYS={"api-key": {"owner": "name", "role": "role", "rate_limit": 100}}

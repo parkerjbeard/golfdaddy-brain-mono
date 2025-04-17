@@ -1,25 +1,121 @@
 # Make.com Integration Documentation
 
-This document details all Make.com scenarios required for the project's notification system. Each scenario is responsible for receiving webhook data from our backend and transforming it into appropriate Slack messages.
+This document details potential Make.com scenarios for the project, primarily focusing on the notification system and potentially bridging other services like GitHub to the backend. Each scenario receives data (via webhooks from the backend or directly from services like GitHub) and performs actions like calling backend APIs or sending Slack messages.
 
 ## Prerequisites
 
 - A Make.com account with access to create new scenarios
-- A Slack connection configured in Make.com (or permissions to create one)
-- Access to update backend environment variables/settings
+- Connections configured in Make.com for relevant services (Slack, GitHub) or permissions to create them
+- Access to update backend environment variables/settings and potentially deploy new API endpoints
 
 ## Overview
 
-The backend's `NotificationService` identifies events (like task creation) and sends specific data (JSON payloads) to unique Make.com webhook URLs. Each URL triggers a separate Make.com scenario responsible for formatting and sending a message to Slack.
+Make.com can serve multiple roles:
 
-## Required Make.com Scenarios
+1.  **Notification Relay (Primary Use):** The backend's `NotificationService` identifies events (like task creation) and sends specific data (JSON payloads) to unique Make.com webhook URLs. Each URL triggers a separate Make.com scenario responsible for formatting and sending a message to Slack.
+2.  **Event Forwarding (e.g., GitHub):** Make.com can listen for events from external services (like GitHub commits) and forward structured data to specific backend API endpoints for processing (e.g., commit analysis).
 
-You need to create **four** distinct scenarios in Make.com, one for each notification type triggered by your backend:
+## Required Make.com Scenarios (Notifications)
 
-1. Task Created Notification
-2. Task Blocked Notification
-3. End-of-Day (EOD) Reminder
-4. Personal Mastery Reminder
+These scenarios are triggered by webhooks called from the backend `NotificationService`. You need to create **four** distinct scenarios in Make.com for notifications:
+
+1.  Task Created Notification
+2.  Task Blocked Notification
+3.  End-of-Day (EOD) Reminder
+4.  Personal Mastery Reminder
+
+---
+
+## Potential Additional Make.com Scenarios
+
+Based on the project outline (`docs/outline.md`), here are other areas where Make.com *could* be used.
+
+### 5. Make.com Scenario: GitHub Commit Forwarding
+
+**Purpose:** To capture new commits from a specified GitHub repository and forward relevant information to the backend for AI analysis (`commit_analysis_service.py`).
+
+**Triggering Event (External):** A push event to a specific branch in a configured GitHub repository.
+
+**Target Backend API Endpoint:** You will need to create a dedicated endpoint in your backend (e.g., within `app/api/github_events.py` or similar) to receive this data. Let's assume `POST /api/v1/integrations/github/commit` for this example. This endpoint should be secured appropriately (e.g., using an API key known to Make.com).
+
+**Backend API Endpoint Setting (Backend):** Store the URL for this new endpoint in `settings.py` (e.g., `settings.backend_github_commit_endpoint`). Also store any necessary API key in settings (e.g., `settings.make_integration_api_key`).
+
+**Expected Payload (Sent *to* Backend API):** The Make.com scenario should construct and send a JSON payload like this to your backend endpoint:
+
+```json
+{
+  "commit_hash": "string (SHA)",
+  "commit_message": "string",
+  "commit_url": "string (URL to commit)",
+  "commit_timestamp": "string (ISO 8601 format)",
+  "author_github_username": "string",
+  "author_email": "string",
+  "repository_name": "string",
+  "repository_url": "string",
+  "branch": "string",
+  "diff_url": "string (URL to diff, e.g., commit_url.patch or .diff)"
+  // Optionally, if Make.com fetches the diff:
+  // "commit_diff": "string (The actual diff content)"
+}
+```
+*(Note: Your backend's `commit_analysis_service.py` will need to map `author_github_username` or `author_email` to an internal `User` record).*
+
+**Make.com Scenario Setup Steps (Detailed):**
+
+1.  **Log in to Make.com & Create New Scenario:** Follow Steps 1-3 from Scenario 1 (Task Created Notification).
+2.  **Search for Trigger Module:** Click the central "+", search for "GitHub".
+3.  **Select GitHub Module:** Click the "GitHub" module icon.
+4.  **Choose GitHub Trigger:** Select the "Watch Commits" (or "Watch Push Events" - choose the one that provides the most useful initial data) trigger.
+5.  **Configure GitHub Connection:**
+    *   Click "Add" next to "Connection" if you haven't connected your GitHub account. Follow the prompts to authorize Make.com to access your repositories. You might need to grant access to specific repositories.
+    *   Select the specific **Repository** you want to monitor.
+    *   Select the **Branch** (e.g., `main`, `develop`) to watch for commits/pushes.
+    *   Configure **Limit** (how many commits to process per run). Start with a small number like 5 or 10.
+    *   Click "OK". Make.com might ask to run the trigger once to determine the data structure based on recent commits.
+6.  **(Optional) Add GitHub Module: Get a Commit:** If the trigger event payload doesn't include enough detail (e.g., the commit timestamp or full author details), you might need to add another GitHub module *after* the trigger.
+    *   Click "+ Add another module".
+    *   Select "GitHub" -> "Get a Commit".
+    *   Use the `Commit SHA` data field mapped from the *trigger* module (`1. sha` or similar) as input.
+    *   Click "OK".
+7.  **Add HTTP Module (Call Backend API):**
+    *   Click "+ Add another module" after the GitHub trigger (or the optional "Get a Commit" module).
+    *   Search for "HTTP" and select it.
+    *   Choose the "Make a request" action.
+    *   **URL:** Enter the URL of your backend endpoint (e.g., `{{settings.backend_github_commit_endpoint}}` - you'll likely paste the actual URL here or retrieve it from a Make.com variable if you set one up).
+    *   **Method:** `POST`.
+    *   **Headers:**
+        *   Add item: Name = `Content-Type`, Value = `application/json`.
+        *   Add item: Name = `X-API-Key` (or your chosen header from `settings.api_key_header`), Value = `YOUR_MAKE_INTEGRATION_API_KEY` (paste the actual key value stored in your backend settings).
+    *   **Body type:** `Raw`.
+    *   **Content type:** `JSON (application/json)`.
+    *   **Request content:** Construct the JSON payload defined in **Expected Payload (Sent *to* Backend API)** above. Map the relevant data fields from the GitHub trigger module (and the optional "Get a Commit" module). Example mappings (numbers depend on your specific module order):
+        ```json
+        {
+          "commit_hash": "{{1.sha}}", // From Trigger
+          "commit_message": "{{1.commit.message}}", // From Trigger
+          "commit_url": "{{1.html_url}}", // From Trigger
+          "commit_timestamp": "{{formatDate(2.commit.author.date; "YYYY-MM-DDTHH:mm:ssZ")}}", // From 'Get a Commit' module (Module 2)
+          "author_github_username": "{{1.author.login}}", // From Trigger
+          "author_email": "{{2.commit.author.email}}", // From 'Get a Commit' module (Module 2)
+          "repository_name": "{{1.repository.name}}", // From Trigger (adjust path as needed)
+          "repository_url": "{{1.repository.html_url}}", // From Trigger (adjust path as needed)
+          "branch": "main", // Or map dynamically if trigger provides it
+          "diff_url": "{{1.html_url}}.diff" // Construct diff URL
+        }
+        ```
+        *(Carefully check the available fields from your GitHub modules in Make.com and adjust the mappings)*.
+    *   **Parse response:** Enable this if you want Make.com to process the backend's response.
+    *   Click "OK".
+8.  **Save Scenario:** Give it a name like `Forward GitHub Commits to Backend`.
+9.  **Activate Scenario:** Toggle scheduling to "ON". It will now periodically check GitHub for new commits and forward them. Adjust the schedule interval as needed (e.g., every 15 minutes).
+
+---
+
+### ClickUp Integration Note
+
+The current project outline (`docs/outline.md` sections 11, 18, 20) suggests that after the AI generates documentation (`doc_generation_service.py`), the backend *directly* calls the ClickUp API via `clickup_integration.py` to create or update the document in ClickUp.
+
+While a Make.com scenario *could* be designed to receive generated documentation from a backend webhook and then call the ClickUp API, this is **not** the flow implied by the current outline. If you wish to use Make.com for this, the backend services (`doc_generation_service.py`, `clickup_integration.py`) and potentially the API layer (`docs_generation.py`) would need to be adjusted to trigger a Make.com webhook instead of making a direct ClickUp API call.
 
 ---
 
@@ -278,7 +374,7 @@ You need to create **four** distinct scenarios in Make.com, one for each notific
 
 ## Running Test Scripts
 
-We've created a set of Python scripts to help you test each Make.com webhook integration. These scripts are located in the `scripts/make_tests/` directory.
+We've created a set of Python scripts to help you test each Make.com webhook integration triggered *by the backend*. These scripts are located in the `scripts/make_tests/` directory. Testing the GitHub forwarding scenario requires triggering a commit in the monitored repository.
 
 ### Setup Instructions
 
@@ -291,18 +387,22 @@ We've created a set of Python scripts to help you test each Make.com webhook int
 2. **Configure Environment Variables:**
    Create or update your `.env` file in the root of your `golfdaddy-brain` workspace with the following variables:
    ```dotenv
-   # Make.com Webhook URLs
-   MAKE_WEBHOOK_TASK_CREATED="https://hook.us2.make.com/gte26y9nx8yqiqvwtogjcf4gwyhzki9j"
+   # Make.com Webhook URLs (Triggered by Backend)
+   MAKE_WEBHOOK_TASK_CREATED="YOUR_TASK_CREATED_WEBHOOK_URL"
    MAKE_WEBHOOK_TASK_BLOCKED="YOUR_TASK_BLOCKED_WEBHOOK_URL"
    MAKE_WEBHOOK_EOD_REMINDER="YOUR_EOD_REMINDER_WEBHOOK_URL"
    MAKE_WEBHOOK_MASTERY_REMINDER="YOUR_MASTERY_REMINDER_WEBHOOK_URL"
 
-   # Slack User IDs for testing
+   # Backend Endpoint URL & API Key (For Make.com -> Backend Calls, e.g., GitHub)
+   BACKEND_GITHUB_COMMIT_ENDPOINT="YOUR_BACKEND_API_ENDPOINT_FOR_GITHUB_COMMITS"
+   MAKE_INTEGRATION_API_KEY="YOUR_SECRET_API_KEY_FOR_MAKE_TO_CALL_BACKEND"
+
+   # Slack User IDs for testing Notifications
    TEST_SLACK_USER_ID="U0XXXXXXXXX"  # Replace with a real Slack User ID
    TEST_BLOCKER_SLACK_ID="U0ZZZZZZZZZ"  # Optional: Replace if needed
    ```
 
-### Available Test Scripts
+### Available Test Scripts (Backend -> Make.com)
 
 1. **Task Created Notification**
    ```bash
@@ -353,9 +453,9 @@ If you encounter issues:
 
 Remember to test each scenario in Make.com before running the scripts to ensure the webhook is properly configured and the Slack connection is working.
 
-## Testing Webhook URLs
+## Testing Webhook URLs (Backend -> Make.com)
 
-Here are example `curl` commands to test each webhook (replace `YOUR_WEBHOOK_URL` with the actual URLs from Make.com):
+Here are example `curl` commands to test each webhook where the backend initiates the call (replace `YOUR_WEBHOOK_URL` with the actual URLs from Make.com):
 
 **1. Test Task Created:**
 ```bash
@@ -421,4 +521,15 @@ curl -X POST -H "Content-Type: application/json" -d '{
 }' "YOUR_WEBHOOK_URL"
 ```
 
-Replace `U0XXXXXXXXX` with actual Slack user IDs when testing. You can get these IDs from your Slack workspace's user profile information or through the Slack API. 
+Replace `U0XXXXXXXXX` with actual Slack user IDs when testing notifications. You can get these IDs from your Slack workspace's user profile information or through the Slack API.
+
+### Testing GitHub Forwarding (GitHub -> Make.com -> Backend)
+
+1.  **Ensure the Make.com scenario is active.**
+2.  **Ensure your backend API endpoint (`BACKEND_GITHUB_COMMIT_ENDPOINT`) is running and accessible.**
+3.  **Push a commit** to the specific branch of the repository monitored by the Make.com scenario.
+4.  **Check the Make.com scenario execution history** to see if it triggered and successfully called your backend API.
+5.  **Check your backend logs** to verify it received the payload correctly from Make.com.
+6.  **Check your backend database** (`commits` table) to see if the commit information was processed and stored.
+
+Replace `U0XXXXXXXXX` with actual Slack user IDs when testing notifications. You can get these IDs from your Slack workspace's user profile information or through the Slack API. 
