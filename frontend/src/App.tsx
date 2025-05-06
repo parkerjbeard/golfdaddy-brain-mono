@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,8 +9,9 @@ import CompanyDashboard from "./pages/CompanyDashboard";
 import DepartmentDashboard from "./pages/DepartmentDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import EmployeeDetail from "./pages/EmployeeDetail";
-import Login from "./pages/Login";
+import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
+import UserManagementPage from "./pages/UserManagementPage";
 
 const queryClient = new QueryClient();
 
@@ -23,10 +23,11 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<Layout><CompanyDashboard /></Layout>} />
             <Route path="/department" element={<Layout><DepartmentDashboard /></Layout>} />
             <Route path="/admin" element={<Layout><AdminDashboard /></Layout>} />
+            <Route path="/admin/users" element={<Layout><UserManagementPage /></Layout>} />
             <Route path="/admin/employee/:id" element={<Layout><EmployeeDetail /></Layout>} />
             <Route path="*" element={<Layout><NotFound /></Layout>} />
           </Routes>
