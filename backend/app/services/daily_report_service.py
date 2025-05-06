@@ -5,7 +5,7 @@ import logging
 
 from app.models.daily_report import DailyReport, DailyReportCreate, DailyReportUpdate, AiAnalysis, ClarificationRequest
 from app.repositories.daily_report_repository import DailyReportRepository
-# from app.services.ai_integration_service import AiIntegrationService # To be created/enhanced
+from app.integrations.ai_integration import AIIntegration # Added
 # from app.services.user_service import UserService # Assuming a user service exists to validate user_id
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class DailyReportService:
     def __init__(self):
         self.report_repository = DailyReportRepository()
-        # self.ai_service = AiIntegrationService() # Placeholder
+        self.ai_integration = AIIntegration() # Instantiate AIIntegration
         # self.user_service = UserService() # Placeholder
 
     async def submit_daily_report(self, report_data: DailyReportCreate, current_user_id: UUID) -> DailyReport:
@@ -44,32 +44,64 @@ class DailyReportService:
         else:
             new_report = await self.report_repository.create_daily_report(report_create_with_user)
 
-        # --- AI Processing Placeholder ---
+        # --- AI Processing ---
         try:
-            # ai_processed_data: AiAnalysis = await self.ai_service.analyze_eod_report(new_report.raw_text_input)
-            # For now, create a dummy AiAnalysis object
-            dummy_ai_analysis = AiAnalysis(
-                estimated_hours=None, # AI will fill this
-                estimated_difficulty=None, # AI will fill this
-                summary="AI processing pending for: " + new_report.raw_text_input[:50] + "...",
-                clarification_requests=[] # AI might add clarification questions here
-            )
+            logger.info(f"Performing AI analysis on EOD report {new_report.id} for user {current_user_id}")
+            ai_analysis_dict = await self.ai_integration.analyze_eod_report_text(new_report.raw_text_input)
+            
+            if ai_analysis_dict.get("error"):
+                logger.error(f"AI analysis for EOD report {new_report.id} returned an error: {ai_analysis_dict.get('error')}")
+                # Create a default AiAnalysis object with the error message
+                ai_analysis_obj = AiAnalysis(
+                    summary=f"AI analysis failed: {ai_analysis_dict.get('error')}",
+                    clarification_requests=[],
+                    estimated_hours=0.0
+                )
+                clarified_summary_for_update = f"AI analysis failed: {ai_analysis_dict.get('error')}"
+                final_hours_for_update = 0.0
+            else:
+                # Convert clarification request dicts to ClarificationRequest objects
+                parsed_clarification_requests = []
+                for req_data in ai_analysis_dict.get("clarification_requests", []):
+                    try:
+                        parsed_clarification_requests.append(ClarificationRequest(**req_data))
+                    except Exception as p_err:
+                        logger.warning(f"Could not parse clarification request item: {req_data}. Error: {p_err}")
+                
+                ai_analysis_obj = AiAnalysis(
+                    estimated_hours=ai_analysis_dict.get('estimated_hours', 0.0),
+                    estimated_difficulty=ai_analysis_dict.get('estimated_difficulty'),
+                    summary=ai_analysis_dict.get('summary'),
+                    sentiment=ai_analysis_dict.get('sentiment'),
+                    key_achievements=ai_analysis_dict.get('key_achievements', []),
+                    potential_blockers=ai_analysis_dict.get('potential_blockers', []),
+                    clarification_requests=parsed_clarification_requests
+                )
+                clarified_summary_for_update = ai_analysis_obj.summary
+                final_hours_for_update = ai_analysis_obj.estimated_hours
+
             update_with_ai_data = DailyReportUpdate(
-                ai_analysis=dummy_ai_analysis,
-                clarified_tasks_summary=new_report.raw_text_input # Initially same, AI can refine
+                ai_analysis=ai_analysis_obj,
+                clarified_tasks_summary=clarified_summary_for_update, # Initially AI summary, can be refined
+                final_estimated_hours=final_hours_for_update # Set final_estimated_hours from AI analysis
             )
+            
             processed_report = await self.report_repository.update_daily_report(new_report.id, update_with_ai_data)
             if processed_report:
+                logger.info(f"Successfully processed and updated EOD report {new_report.id} with AI analysis.")
                 return processed_report
-            else: # Should not happen with in-memory store if ID is valid
-                logger.error(f"Failed to update report {new_report.id} with AI data.")
-                return new_report # Return the report without AI data if update fails
+            else: 
+                logger.error(f"Failed to update report {new_report.id} with AI data after successful AI analysis.")
+                # Fallback: return the report as it was before this update attempt, but with AI data attached if possible
+                # This situation implies a repository save error, so the original new_report is more accurate to DB state.
+                # However, the AI analysis *was* done. For now, log and return original to reflect DB.
+                return new_report 
 
         except Exception as e:
-            logger.error(f"Error during AI processing for report {new_report.id}: {e}")
-            # Return the report without AI data if an error occurs
+            logger.error(f"Error during AI processing or update for report {new_report.id}: {e}", exc_info=True)
+            # Return the report without AI data if a broader error occurs
             return new_report
-        # --- End AI Processing Placeholder ---
+        # --- End AI Processing ---
 
     async def get_report_by_id(self, report_id: UUID) -> Optional[DailyReport]:
         return await self.report_repository.get_daily_report_by_id(report_id)
@@ -80,6 +112,45 @@ class DailyReportService:
 
     async def get_user_report_for_date(self, user_id: UUID, report_date: datetime) -> Optional[DailyReport]:
         return await self.report_repository.get_daily_reports_by_user_and_date(user_id, report_date)
+
+    async def get_all_reports(self) -> List[DailyReport]:
+        """Retrieves all daily reports. For admin use."""
+        # TODO: Add pagination for admin view
+        return await self.report_repository.get_all_daily_reports()
+
+    async def update_daily_report(self, report_id: UUID, report_data: DailyReportUpdate, user_id: UUID) -> Optional[DailyReport]:
+        """
+        Updates an existing daily report. Ensures the user owns the report.
+        Called by user-facing update endpoint.
+        """
+        report_to_update = await self.report_repository.get_daily_report_by_id(report_id)
+        if not report_to_update:
+            return None # Report not found
+        if report_to_update.user_id != user_id:
+            # This check is also in the endpoint, but good for service layer integrity
+            logger.warning(f"User {user_id} attempted to update report {report_id} owned by {report_to_update.user_id}")
+            return None # Or raise an authorization error
+        
+        # Ensure updated_at is set
+        if report_data.updated_at is None:
+            report_data.updated_at = datetime.utcnow()
+            
+        return await self.report_repository.update_daily_report(report_id, report_data)
+
+    async def delete_daily_report(self, report_id: UUID, user_id: UUID) -> bool:
+        """
+        Deletes a daily report. Ensures the user owns the report.
+        Returns True if deletion was successful, False otherwise.
+        """
+        report_to_delete = await self.report_repository.get_daily_report_by_id(report_id)
+        if not report_to_delete:
+            return False # Report not found
+        if report_to_delete.user_id != user_id:
+            # Also checked in endpoint
+            logger.warning(f"User {user_id} attempted to delete report {report_id} owned by {report_to_delete.user_id}")
+            return False # Or raise an authorization error
+
+        return await self.report_repository.delete_daily_report(report_id)
 
     async def update_report_assessment(self, report_id: UUID, assessment_notes: str, final_hours: float) -> Optional[DailyReport]:
         """Allows a manager or system to add overall assessment and final hours."""

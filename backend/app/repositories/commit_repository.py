@@ -136,14 +136,13 @@ class CommitRepository:
             logger.exception(f"❌ Exception fetching commit {commit_hash}: {e}")
             return None
 
-    def update_commit_analysis(self, commit_hash: str, ai_points: int, ai_estimated_hours: float, seniority_score: int = None) -> Optional[Commit]:
+    def update_commit_analysis(self, commit_hash: str, ai_estimated_hours: float, seniority_score: int = None) -> Optional[Commit]:
         """Updates an existing commit with AI analysis results."""
         try:
             logger.info(f"Updating commit analysis: {commit_hash}")
-            logger.info(f"New analysis values: Points={ai_points}, Hours={ai_estimated_hours}, Seniority={seniority_score}")
+            logger.info(f"New analysis values: Hours={ai_estimated_hours}, Seniority={seniority_score}")
             
             update_data = {
-                "ai_points": ai_points,
                 "ai_estimated_hours": str(ai_estimated_hours),  # Convert to string for Supabase
                 "updated_at": datetime.now().isoformat()
             }

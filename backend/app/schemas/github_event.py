@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, EmailStr
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -20,8 +20,8 @@ class CommitPayload(BaseModel):
     parent_commit: Optional[str] = Field(None, description="SHA of the parent commit")
     
     class Config:
-        orm_mode = True # Allows compatibility if needed later, good practice
-        anystr_strip_whitespace = True
+        from_attributes = True # Replaced orm_mode
+        str_strip_whitespace = True
 
 
 class CommitFileData(BaseModel):
@@ -33,7 +33,7 @@ class CommitFileData(BaseModel):
     patch: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True # Replaced orm_mode
 
         
 class CommitDetail(BaseModel):
@@ -42,13 +42,46 @@ class CommitDetail(BaseModel):
     files_changed: List[str]
     additions: int
     deletions: int
-    retrieved_at: str
+    retrieved_at: str # Consider changing to datetime if appropriate
     author: Dict[str, Any]
     committer: Dict[str, Any]
     message: str
-    url: str
+    url: str # Consider HttpUrl
     verification: Dict[str, Any]
     files: List[CommitFileData]
 
     class Config:
-        orm_mode = True 
+        from_attributes = True # Replaced orm_mode
+
+class GitHubRepo(BaseModel):
+    id: int
+    name: str # e.g., "octocat/Hello-World"
+    url: HttpUrl
+
+    class Config:
+        from_attributes = True # Allows compatibility if needed later, good practice
+
+class GitHubUser(BaseModel):
+    login: str # Username
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+    class Config:
+        from_attributes = True
+
+class Commit(BaseModel):
+    id: str # SHA
+    distinct: bool
+
+    class Config:
+        from_attributes = True
+
+class PushEvent(BaseModel):
+    ref: Optional[str] = None
+    before: Optional[str] = None
+    after: Optional[str] = None
+    repository: Optional[GitHubRepo] = None
+    pusher: Optional[GitHubUser] = None
+    commits: List[Commit] = []
+    head_commit: Optional[Commit] = None
+    pass

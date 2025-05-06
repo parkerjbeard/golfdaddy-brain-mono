@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 import logging
 
@@ -9,6 +9,7 @@ from app.models.commit import Commit
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.commit_repository import CommitRepository
+from app.repositories.daily_report_repository import DailyReportRepository
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,13 @@ class KpiService:
         self.task_repo = TaskRepository()
         self.user_repo = UserRepository()
         self.commit_repo = CommitRepository()
+        self.daily_report_repo = DailyReportRepository()
     
     def calculate_commit_metrics_for_user(self, user_id: UUID, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
         """Calculates commit-based KPIs for a specific user in a date range."""
         commits = self.commit_repo.get_commits_by_user_in_range(user_id, start_date, end_date)
         
         total_commits = len(commits)
-        total_points = sum(c.ai_points or 0 for c in commits)
         total_hours = sum(float(c.ai_estimated_hours or 0) for c in commits)
         
         return {
@@ -33,9 +34,7 @@ class KpiService:
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "total_commits": total_commits,
-            "total_ai_points": total_points,
             "total_ai_estimated_hours": round(total_hours, 2),
-            "avg_points_per_commit": round(total_points / total_commits, 2) if total_commits else 0,
         }
     
     def calculate_task_velocity(self, user_id: UUID, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
@@ -91,5 +90,62 @@ class KpiService:
         }
         logger.info(f"Generated weekly KPIs for user {user_id}")
         return kpis
+    
+    async def get_user_performance_summary(self, user_id: UUID, period_days: int = 7) -> Dict[str, Any]:
+        """Generates a performance summary for a user over a specified period."""
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=period_days)
+        
+        logger.info(f"Generating performance summary for user {user_id} from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.")
+
+        # 1. Fetch Daily Reports and sum final_estimated_hours
+        daily_reports = await self.daily_report_repo.get_reports_by_user_and_date_range(user_id, start_date, end_date)
+        
+        total_eod_reported_hours = sum(dr.final_estimated_hours or 0.0 for dr in daily_reports)
+        eod_report_details = [
+            {
+                "report_date": dr.report_date.strftime('%Y-%m-%d'),
+                "reported_hours": dr.final_estimated_hours or 0.0,
+                "ai_summary": dr.ai_analysis.summary if dr.ai_analysis else "N/A",
+                "ai_estimated_hours": dr.ai_analysis.estimated_hours if dr.ai_analysis and dr.ai_analysis.estimated_hours is not None else 0.0,
+                "clarification_requests_count": len(dr.ai_analysis.clarification_requests) if dr.ai_analysis else 0
+            } for dr in daily_reports
+        ]
+
+        # 2. Fetch Commit-based metrics
+        # Note: calculate_commit_metrics_for_user is synchronous, adjust if KpiService methods become async
+        # For now, let's assume it's okay to call sync from async, or adapt it. Let's make it callable.
+        # To call it, we need to pass datetime objects, not date objects if original method expects datetime.
+        # The existing calculate_commit_metrics_for_user takes datetime. We have datetime for start_date and end_date.
+        
+        commits_in_period = self.commit_repo.get_commits_by_user_in_range(user_id, start_date.date(), end_date.date())
+        
+        total_commit_ai_estimated_hours = sum(float(c.ai_estimated_hours or 0.0) for c in commits_in_period)
+        total_commits = len(commits_in_period)
+        
+        seniority_scores = [c.seniority_score for c in commits_in_period if c.seniority_score is not None]
+        average_seniority_score = sum(seniority_scores) / len(seniority_scores) if seniority_scores else 0.0
+        
+        all_comparison_notes = []
+        for commit in commits_in_period:
+            if commit.comparison_notes:
+                all_comparison_notes.append({
+                    "commit_hash": commit.commit_hash,
+                    "commit_timestamp": commit.commit_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    "notes": commit.comparison_notes
+                })
+
+        return {
+            "user_id": str(user_id),
+            "period_start_date": start_date.isoformat(),
+            "period_end_date": end_date.isoformat(),
+            "total_eod_reported_hours": round(total_eod_reported_hours, 2),
+            "eod_report_details": eod_report_details,
+            "total_commits_in_period": total_commits,
+            "total_commit_ai_estimated_hours": round(total_commit_ai_estimated_hours, 2),
+            "average_commit_seniority_score": round(average_seniority_score, 2),
+            "commit_comparison_insights": all_comparison_notes,
+            # Could add task velocity here too if desired by calling self.calculate_task_velocity
+        }
     
     # Add methods for team KPIs, burndown charts, etc.

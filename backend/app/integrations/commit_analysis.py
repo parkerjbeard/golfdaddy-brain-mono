@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 import json
 from datetime import datetime
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 from app.config.settings import settings
 
@@ -14,12 +14,13 @@ class CommitAnalyzer:
         if not self.api_key:
             raise ValueError("OpenAI API key not configured in settings")
             
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = AsyncOpenAI(api_key=self.api_key)
         self.commit_analysis_model = settings.commit_analysis_model  # Specific model for commit analysis
         
         # Models that don't support temperature parameter (typically reasoning/embedding models)
         self.reasoning_models = [
             "o3-mini-", 
+            "o4-mini-",
             "text-embedding-",
             "-e-",
             "text-search-"
@@ -108,7 +109,7 @@ class CommitAnalyzer:
         
         return "\n".join(log_parts)
     
-    def analyze_commit_diff(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze_commit_diff(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze a commit diff using AI to provide insights and estimates.
         
@@ -259,7 +260,7 @@ Your analysis should be technically precise, balanced, and presented in the requ
                 api_params["temperature"] = 0.3  # Lower temperature for more consistent analysis
 
             # Make API call to OpenAI using the commit-specific model
-            response = self.client.chat.completions.create(**api_params)
+            response = await self.client.chat.completions.create(**api_params)
             
             # Parse and enhance the response
             result = json.loads(response.choices[0].message.content)
