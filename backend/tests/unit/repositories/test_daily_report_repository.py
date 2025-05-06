@@ -134,7 +134,6 @@ async def test_update_daily_report(report_repository: DailyReportRepository, sam
         overall_assessment_notes="Assessed.",
         final_estimated_hours=5.0,
         linked_commit_ids=["commit1", "commit2"],
-        status="Reviewed",
         ai_analysis=AiAnalysis(summary="Updated AI", estimated_hours=4.0)
     )
 
@@ -149,7 +148,6 @@ async def test_update_daily_report(report_repository: DailyReportRepository, sam
     assert updated_report.overall_assessment_notes == "Assessed."
     assert updated_report.final_estimated_hours == 5.0
     assert updated_report.linked_commit_ids == ["commit1", "commit2"]
-    assert updated_report.status == "Reviewed"
     assert updated_report.ai_analysis is not None
     assert updated_report.ai_analysis.summary == "Updated AI"
     assert updated_report.ai_analysis.estimated_hours == 4.0

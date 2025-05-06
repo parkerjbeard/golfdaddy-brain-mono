@@ -7,7 +7,6 @@ from app.models.daily_report import (
     AiAnalysis,
     ClarificationRequest,
     ClarificationStatus,
-    DailyReportBase,
     DailyReportCreate,
     DailyReportUpdate,
     DailyReport
@@ -21,7 +20,7 @@ def test_ai_analysis_creation_minimal():
     assert ai_analysis.clarification_requests == []
 
 def test_ai_analysis_creation_full():
-    cr = ClarificationRequest(question="Need more details?", requested_by_ai=True)
+    cr = ClarificationRequest(question="Need more details?", original_text="details about what?", requested_by_ai=True)
     ai_analysis = AiAnalysis(
         summary="Full test",
         estimated_hours=5.5,
@@ -35,39 +34,34 @@ def test_ai_analysis_creation_full():
     assert ai_analysis.clarification_requests[0].question == "Need more details?"
 
 def test_clarification_request_creation_defaults():
-    cr = ClarificationRequest(question="A question")
+    cr = ClarificationRequest(question="A question", original_text="context for question")
     assert cr.question == "A question"
     assert cr.answer is None
     assert cr.status == ClarificationStatus.PENDING
     assert cr.requested_by_ai is False
     assert isinstance(cr.created_at, datetime)
-    assert isinstance(cr.updated_at, datetime)
-    assert cr.id is None # Assuming ID is assigned by DB or not part of this Pydantic model directly for creation
 
 def test_clarification_request_creation_with_status():
     cr = ClarificationRequest(
         question="A question",
+        original_text="Some original text for context",
         answer="An answer",
-        status=ClarificationStatus.ADDRESSED,
+        status=ClarificationStatus.ANSWERED,
         requested_by_ai=True
     )
-    assert cr.status == ClarificationStatus.ADDRESSED
+    assert cr.status == ClarificationStatus.ANSWERED
     assert cr.answer == "An answer"
     assert cr.requested_by_ai is True
 
-def test_daily_report_base_creation():
+def test_daily_report_create_fields():
     base_data = {
         "user_id": uuid4(),
         "raw_text_input": "Base text input"
     }
-    report_base = DailyReportBase(**base_data)
-    assert report_base.user_id == base_data["user_id"]
-    assert report_base.raw_text_input == base_data["raw_text_input"]
-    assert report_base.clarified_tasks_summary is None
-    assert report_base.overall_assessment_notes is None
-    assert report_base.final_estimated_hours is None
-    assert report_base.linked_commit_ids == []
-    assert report_base.status == "Pending" # Default from model
+    report_create_instance = DailyReportCreate(**base_data)
+    assert report_create_instance.user_id == base_data["user_id"]
+    assert report_create_instance.raw_text_input == base_data["raw_text_input"]
+    # Fields not in DailyReportCreate are not asserted here
 
 def test_daily_report_create_creation():
     create_data = {
@@ -121,18 +115,21 @@ def test_daily_report_db_model_creation():
     assert db_report.ai_analysis.summary == "DB model AI summary"
     assert db_report.created_at == now
     assert db_report.updated_at == now
-    assert db_report.status == "Pending" # Default
     assert db_report.linked_commit_ids == []
 
 def test_daily_report_validation_error():
+    # Test for DailyReportCreate (user_id is UUID, raw_text_input is str)
     with pytest.raises(ValidationError):
-        DailyReportBase(user_id="not-a-uuid", raw_text_input="test")
+        DailyReportCreate(user_id="not-a-uuid", raw_text_input="test")
+
+    with pytest.raises(ValidationError):
+        DailyReportCreate(user_id=uuid4()) # Missing raw_text_input
 
     with pytest.raises(ValidationError):
         AiAnalysis(summary="test", estimated_hours="not-a-float")
 
 def test_model_serialization_deserialization():
-    cr = ClarificationRequest(question="Serialize me?")
+    cr = ClarificationRequest(question="Serialize me?", original_text="text to serialize")
     ai_analysis = AiAnalysis(summary="Test Serialize", clarification_requests=[cr])
     
     json_data = ai_analysis.model_dump_json()

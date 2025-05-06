@@ -44,18 +44,17 @@ def mock_commit_repo(mocker) -> MagicMock:
     """Provides a MagicMock for the CommitRepository."""
     mock = mocker.MagicMock(spec=CommitRepository)
     mock.get_commit_by_hash = mocker.MagicMock()
-    mock.create_commit = mocker.MagicMock()
-    mock.update_commit_analysis = mocker.MagicMock()
+    mock.save_commit = mocker.MagicMock()
     return mock
 
 @pytest.fixture
-def mock_ai_integration(mocker) -> AsyncMock:
-    """Provides an AsyncMock for the AiIntegration."""
-    # Since the actual call is commented out and returns a placeholder dict,
-    # we don't need to mock a specific method for now.
-    # If you implement the real call, mock that specific async method.
-    # Example: mock.analyze_commit_diff = mocker.AsyncMock()
-    return mocker.AsyncMock(spec=AIIntegration)
+def mock_ai_integration(mocker) -> MagicMock:
+    """Provides a MagicMock for the AiIntegration (for its sync methods)."""
+    mock = mocker.MagicMock(spec=AIIntegration)
+    # Explicitly mock synchronous methods used if spec alone isn't enough or for clarity
+    mock.analyze_commit_diff = mocker.MagicMock()
+    # If other sync methods from AIIntegration are used, mock them here too.
+    return mock
 
 @pytest.fixture
 def commit_analysis_service(
@@ -133,7 +132,7 @@ async def test_process_commit_new_commit_success(
     commit_analysis_service: CommitAnalysisService,
     mock_commit_repo: MagicMock,
     mock_user_repo: MagicMock,
-    mock_ai_integration: AsyncMock, # Keep for consistency, though not directly used now
+    mock_ai_integration: MagicMock,
     test_commit_payload: CommitPayload,
     test_user: User,
     sample_commit_data: dict,
@@ -147,55 +146,51 @@ async def test_process_commit_new_commit_success(
     mock_commit_repo.get_commit_by_hash.return_value = None
     # 2. User exists
     mock_user_repo.get_user_by_email.return_value = test_user
-    # 3. Commit creation succeeds
-    created_commit_mock = Commit(**sample_commit_data) # Create mock obj with initial data
-    mock_commit_repo.create_commit.return_value = created_commit_mock
-    # 4. AI analysis result (placeholder, adjust if AiIntegration changes)
-    mock_analysis_result = {"points": 5, "estimated_hours": 0.5}
-    # No specific AI method mock needed yet due to placeholder logic
-
-    # 5. Commit update succeeds
-    updated_commit_mock = Commit(**sample_commit_data) # Make a copy
-    updated_commit_mock.ai_points = mock_analysis_result["points"]
-    updated_commit_mock.ai_estimated_hours = mock_analysis_result["estimated_hours"]
-    mock_commit_repo.update_commit_analysis.return_value = updated_commit_mock
+    # 3. AI analysis result (mocked for ai_integration call inside analyze_commit)
+    mock_analysis_result = {"complexity_score": 5, "estimated_hours": 0.5, "seniority_score": 3}
+    mock_ai_integration.analyze_commit_diff.return_value = mock_analysis_result
+    
+    # 4. Commit save (which includes analysis data) succeeds
+    # Construct what the fully analyzed Commit object would look like to be returned by save_commit
+    # This is what analyze_commit would build and pass to save_commit, and what save_commit returns.
+    saved_commit_obj = Commit(
+        commit_hash=test_commit_payload.commit_hash,
+        author_id=test_user.id,
+        ai_points=mock_analysis_result["complexity_score"], # ai_points comes from complexity_score
+        ai_estimated_hours=mock_analysis_result["estimated_hours"],
+        seniority_score=mock_analysis_result["seniority_score"],
+        commit_timestamp=test_commit_payload.commit_timestamp
+    )
+    mock_commit_repo.save_commit.return_value = saved_commit_obj
 
     # --- Act ---
     result = await commit_analysis_service.process_commit(test_commit_payload)
 
     # --- Assert ---
-    # Check interactions
     mock_commit_repo.get_commit_by_hash.assert_called_once_with(test_commit_payload.commit_hash)
     mock_user_repo.get_user_by_email.assert_called_once_with(test_commit_payload.author_email)
-    mock_commit_repo.create_commit.assert_called_once()
-    # Verify the data passed to create_commit includes the user_id
-    create_args, _ = mock_commit_repo.create_commit.call_args
-    assert create_args[0]['author_id'] == test_user.id
-    assert create_args[0]['commit_hash'] == test_commit_payload.commit_hash
+    mock_ai_integration.analyze_commit_diff.assert_called_once()
+    mock_commit_repo.save_commit.assert_called_once()
+    
+    # Assert the structure of the object passed to save_commit
+    saved_arg = mock_commit_repo.save_commit.call_args[0][0]
+    assert isinstance(saved_arg, Commit)
+    assert saved_arg.commit_hash == test_commit_payload.commit_hash
+    assert saved_arg.author_id == test_user.id
+    assert saved_arg.ai_points == mock_analysis_result["complexity_score"]
+    assert saved_arg.ai_estimated_hours == mock_analysis_result["estimated_hours"]
+    assert saved_arg.seniority_score == mock_analysis_result["seniority_score"]
 
-    # Placeholder AI interaction check (none for now)
-
-    mock_commit_repo.update_commit_analysis.assert_called_once_with(
-        commit_hash=test_commit_payload.commit_hash,
-        ai_points=mock_analysis_result["points"],
-        ai_estimated_hours=mock_analysis_result["estimated_hours"],
-    )
-
-    # Check result
-    assert result is not None
-    assert result.commit_hash == test_commit_payload.commit_hash
-    assert result.ai_points == mock_analysis_result["points"]
-    assert result.ai_estimated_hours == mock_analysis_result["estimated_hours"]
-    assert result.author_id == test_user.id
+    assert result is saved_commit_obj
 
 @pytest.mark.asyncio
-# Add patch for the internal method
-@patch.object(CommitAnalysisService, '_get_ai_analysis', new_callable=AsyncMock)
+# @patch.object(CommitAnalysisService, '_get_ai_analysis', new_callable=AsyncMock) # Removed patch
 async def test_process_commit_existing_needs_analysis(
-    mock_get_ai_analysis: AsyncMock, # Add the mock object from the patch
+    # mock_get_ai_analysis: AsyncMock, # Removed mock parameter
     commit_analysis_service: CommitAnalysisService,
     mock_commit_repo: MagicMock,
     mock_user_repo: MagicMock,
+    mock_ai_integration: MagicMock,
     test_commit_payload: CommitPayload,
     test_user: User,
     sample_commit_data: dict,
@@ -208,39 +203,41 @@ async def test_process_commit_existing_needs_analysis(
     existing_commit_mock = Commit(**sample_commit_data)
     existing_commit_mock.ai_points = None
     existing_commit_mock.ai_estimated_hours = None
+    existing_commit_mock.seniority_score = None
+    existing_commit_mock.author_id = test_user.id # Ensure existing commit has author_id for re-analysis context
     mock_commit_repo.get_commit_by_hash.return_value = existing_commit_mock
     # 2. User exists (still need to look up for context, though not used for creation)
     mock_user_repo.get_user_by_email.return_value = test_user
-    # 3. Configure the patched _get_ai_analysis method
-    mock_analysis_result = {"points": 7, "estimated_hours": 1.0}
-    mock_get_ai_analysis.return_value = mock_analysis_result # Make the patched method return the expected result
-    # 4. Commit update succeeds (using the result from the patched method)
-    updated_commit_mock = Commit(**sample_commit_data) # Use existing data
-    updated_commit_mock.id = existing_commit_mock.id # Ensure ID matches
-    updated_commit_mock.ai_points = mock_analysis_result["points"]
-    updated_commit_mock.ai_estimated_hours = mock_analysis_result["estimated_hours"]
-    mock_commit_repo.update_commit_analysis.return_value = updated_commit_mock
+    # 3. Configure the AIIntegration mock directly on the service instance
+    mock_analysis_result = {"complexity_score": 7, "estimated_hours": 1.0, "seniority_score": 6}
+    mock_ai_integration.analyze_commit_diff.return_value = mock_analysis_result
+    # 4. Commit save (which includes analysis data) succeeds
+    re_analyzed_commit_obj = Commit(
+        commit_hash=existing_commit_mock.commit_hash,
+        author_id=existing_commit_mock.author_id,
+        ai_points=mock_analysis_result["complexity_score"],
+        ai_estimated_hours=mock_analysis_result["estimated_hours"],
+        seniority_score=mock_analysis_result["seniority_score"],
+        commit_timestamp=existing_commit_mock.commit_timestamp # or test_commit_payload.commit_timestamp
+    )
+    mock_commit_repo.save_commit.return_value = re_analyzed_commit_obj
 
     # --- Act ---
     result = await commit_analysis_service.process_commit(test_commit_payload)
 
     # --- Assert ---
     mock_commit_repo.get_commit_by_hash.assert_called_once_with(test_commit_payload.commit_hash)
-    mock_user_repo.get_user_by_email.assert_called_once_with(test_commit_payload.author_email)
-    mock_commit_repo.create_commit.assert_not_called() # Should not create again
-
-    # Verify _get_ai_analysis was called
-    mock_get_ai_analysis.assert_called_once()
-
-    # This assertion should now pass
-    mock_commit_repo.update_commit_analysis.assert_called_once_with(
-        commit_hash=test_commit_payload.commit_hash,
-        ai_points=mock_analysis_result["points"],
-        ai_estimated_hours=mock_analysis_result["estimated_hours"],
-    )
-    assert result is not None
-    assert result.id == existing_commit_mock.id
-    assert result.ai_points == mock_analysis_result["points"]
+    # mock_user_repo.get_user_by_email.assert_called_once_with(test_commit_payload.author_email) # Not called in re-analysis if author_id is known
+    mock_ai_integration.analyze_commit_diff.assert_called_once()
+    mock_commit_repo.save_commit.assert_called_once()
+    
+    saved_arg = mock_commit_repo.save_commit.call_args[0][0]
+    assert saved_arg.ai_points == mock_analysis_result["complexity_score"]
+    assert saved_arg.ai_estimated_hours == mock_analysis_result["estimated_hours"]
+    assert saved_arg.seniority_score == mock_analysis_result["seniority_score"]
+    
+    assert result is re_analyzed_commit_obj
+    assert result.ai_points == 7
 
 @pytest.mark.asyncio
 async def test_process_commit_already_processed(
@@ -267,8 +264,7 @@ async def test_process_commit_already_processed(
     mock_commit_repo.get_commit_by_hash.assert_called_once_with(test_commit_payload.commit_hash)
     # Should return early, no other calls
     mock_user_repo.get_user_by_email.assert_not_called()
-    mock_commit_repo.create_commit.assert_not_called()
-    mock_commit_repo.update_commit_analysis.assert_not_called()
+    mock_commit_repo.save_commit.assert_not_called()
 
     assert result is existing_commit_mock # Should return the existing object
 
@@ -277,6 +273,7 @@ async def test_process_commit_user_not_found(
     commit_analysis_service: CommitAnalysisService,
     mock_commit_repo: MagicMock,
     mock_user_repo: MagicMock,
+    mock_ai_integration: MagicMock,
     test_commit_payload: CommitPayload,
     sample_commit_data: dict,
 ):
@@ -286,18 +283,21 @@ async def test_process_commit_user_not_found(
     # --- Arrange ---
     mock_commit_repo.get_commit_by_hash.return_value = None
     mock_user_repo.get_user_by_email.return_value = None # User not found
-    # Commit creation succeeds
-    created_commit_mock = Commit(**sample_commit_data)
-    created_commit_mock.author_id = None # Expect author_id to be None
-    mock_commit_repo.create_commit.return_value = created_commit_mock
+    
     # AI analysis result
-    mock_analysis_result = {"points": 3, "estimated_hours": 0.2}
-    # Commit update succeeds
-    updated_commit_mock = Commit(**sample_commit_data)
-    updated_commit_mock.author_id = None
-    updated_commit_mock.ai_points = mock_analysis_result["points"]
-    updated_commit_mock.ai_estimated_hours = mock_analysis_result["estimated_hours"]
-    mock_commit_repo.update_commit_analysis.return_value = updated_commit_mock
+    mock_analysis_result = {"complexity_score": 3, "estimated_hours": 0.2, "seniority_score": 2}
+    mock_ai_integration.analyze_commit_diff.return_value = mock_analysis_result
+    
+    # Commit save succeeds, but with author_id = None
+    saved_commit_obj = Commit(
+        commit_hash=test_commit_payload.commit_hash,
+        author_id=None, # Important: author_id should be None
+        ai_points=mock_analysis_result["complexity_score"],
+        ai_estimated_hours=mock_analysis_result["estimated_hours"],
+        seniority_score=mock_analysis_result["seniority_score"],
+        commit_timestamp=test_commit_payload.commit_timestamp
+    )
+    mock_commit_repo.save_commit.return_value = saved_commit_obj
 
     # --- Act ---
     result = await commit_analysis_service.process_commit(test_commit_payload)
@@ -305,20 +305,21 @@ async def test_process_commit_user_not_found(
     # --- Assert ---
     mock_commit_repo.get_commit_by_hash.assert_called_once_with(test_commit_payload.commit_hash)
     mock_user_repo.get_user_by_email.assert_called_once_with(test_commit_payload.author_email)
-    mock_commit_repo.create_commit.assert_called_once()
-    # Verify author_id is None in the created data
-    create_args, _ = mock_commit_repo.create_commit.call_args
-    assert create_args[0]['author_id'] is None
-    mock_commit_repo.update_commit_analysis.assert_called_once()
-    assert result is not None
-    assert result.author_id is None # Verify final result has no author_id
-    assert result.ai_points == mock_analysis_result["points"]
+    mock_ai_integration.analyze_commit_diff.assert_called_once()
+    mock_commit_repo.save_commit.assert_called_once()
+    
+    saved_arg = mock_commit_repo.save_commit.call_args[0][0]
+    assert saved_arg.author_id is None
+    
+    assert result is saved_commit_obj
+    assert result.author_id is None
 
 @pytest.mark.asyncio
 async def test_process_commit_create_fails(
     commit_analysis_service: CommitAnalysisService,
     mock_commit_repo: MagicMock,
     mock_user_repo: MagicMock,
+    mock_ai_integration: MagicMock,
     test_commit_payload: CommitPayload,
     test_user: User,
 ):
@@ -326,7 +327,12 @@ async def test_process_commit_create_fails(
     # --- Arrange ---
     mock_commit_repo.get_commit_by_hash.return_value = None
     mock_user_repo.get_user_by_email.return_value = test_user
-    mock_commit_repo.create_commit.return_value = None # Simulate DB error
+    
+    # AI analysis (still happens before save attempt)
+    mock_analysis_result = {"complexity_score": 5, "estimated_hours": 0.5, "seniority_score": 4}
+    mock_ai_integration.analyze_commit_diff.return_value = mock_analysis_result
+    
+    mock_commit_repo.save_commit.return_value = None # Simulate DB error during save
 
     # --- Act ---
     result = await commit_analysis_service.process_commit(test_commit_payload)
@@ -334,8 +340,8 @@ async def test_process_commit_create_fails(
     # --- Assert ---
     mock_commit_repo.get_commit_by_hash.assert_called_once_with(test_commit_payload.commit_hash)
     mock_user_repo.get_user_by_email.assert_called_once_with(test_commit_payload.author_email)
-    mock_commit_repo.create_commit.assert_called_once()
-    mock_commit_repo.update_commit_analysis.assert_not_called() # Should not proceed
+    mock_ai_integration.analyze_commit_diff.assert_called_once()
+    mock_commit_repo.save_commit.assert_called_once() # save_commit was called
     assert result is None
 
 @pytest.mark.asyncio
@@ -343,6 +349,7 @@ async def test_process_commit_update_fails(
     commit_analysis_service: CommitAnalysisService,
     mock_commit_repo: MagicMock,
     mock_user_repo: MagicMock,
+    mock_ai_integration: MagicMock,
     test_commit_payload: CommitPayload,
     test_user: User,
     sample_commit_data: dict,
@@ -351,15 +358,21 @@ async def test_process_commit_update_fails(
     # --- Arrange ---
     mock_commit_repo.get_commit_by_hash.return_value = None
     mock_user_repo.get_user_by_email.return_value = test_user
-    created_commit_mock = Commit(**sample_commit_data)
-    mock_commit_repo.create_commit.return_value = created_commit_mock
-    mock_analysis_result = {"points": 5, "estimated_hours": 0.5}
-    mock_commit_repo.update_commit_analysis.return_value = None # Simulate update failure
+    
+    # AI analysis happens
+    mock_analysis_result = {"complexity_score": 5, "estimated_hours": 0.5, "seniority_score": 4}
+    mock_ai_integration.analyze_commit_diff.return_value = mock_analysis_result
+    
+    mock_commit_repo.save_commit.return_value = None # Simulate save failure
 
     # --- Act ---
     result = await commit_analysis_service.process_commit(test_commit_payload)
 
     # --- Assert ---
+    mock_commit_repo.save_commit.assert_called_once()
+    assert result is None
+
+# Add more tests for AI error scenarios if the placeholder logic is replaced
     mock_commit_repo.create_commit.assert_called_once()
     mock_commit_repo.update_commit_analysis.assert_called_once()
     # Should still return the commit object created, just without updated analysis

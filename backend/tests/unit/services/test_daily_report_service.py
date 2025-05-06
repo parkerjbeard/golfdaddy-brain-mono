@@ -32,8 +32,11 @@ def sample_report_id():
     return uuid4()
 
 @pytest.fixture
-def sample_daily_report_create_data():
-    return DailyReportCreate(raw_text_input="Initial report text")
+def sample_daily_report_create_data(sample_user_id: UUID):
+    return DailyReportCreate(
+        user_id=sample_user_id,
+        raw_text_input="Initial report text"
+    )
 
 @pytest.fixture
 def sample_daily_report(sample_user_id, sample_report_id):
@@ -58,7 +61,6 @@ async def test_submit_daily_report_new(
     
     created_report_mock = DailyReport(
         id=sample_report_id, 
-        user_id=sample_user_id, 
         **sample_daily_report_create_data.model_dump()
     )
     mock_report_repository.create_daily_report.return_value = created_report_mock
@@ -166,7 +168,6 @@ async def test_submit_daily_report_ai_processing_fails(
     mock_report_repository.get_daily_reports_by_user_and_date.return_value = None
     created_report_mock = DailyReport(
         id=sample_report_id, 
-        user_id=sample_user_id, 
         **sample_daily_report_create_data.model_dump()
     )
     mock_report_repository.create_daily_report.return_value = created_report_mock
@@ -396,7 +397,6 @@ async def test_submit_daily_report_ai_service_exception(
     mock_report_repository.get_daily_reports_by_user_and_date.return_value = None
     created_report_mock = DailyReport(
         id=sample_report_id, 
-        user_id=sample_user_id, 
         **sample_daily_report_create_data.model_dump()
     )
     mock_report_repository.create_daily_report.return_value = created_report_mock

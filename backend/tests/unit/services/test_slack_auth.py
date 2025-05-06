@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import jwt
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.main import app
 from app.auth.slack_auth import SlackAuthManager, SlackUserInfo
@@ -83,7 +83,7 @@ class TestSlackAuth:
         auth_manager = SlackAuthManager()
         
         # Create a test payload
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         payload = {
             "sub": "U12345",
             "email": "test@example.com",
@@ -115,7 +115,7 @@ class TestSlackAuth:
         auth_manager = SlackAuthManager()
         
         # Create a test payload with expired token
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         payload = {
             "sub": "U12345",
             "email": "test@example.com",

@@ -1,5 +1,5 @@
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from fastapi import status, FastAPI
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4, UUID
@@ -9,6 +9,12 @@ from app.main import app # Main FastAPI application
 from app.services.daily_report_service import DailyReportService
 from app.models.daily_report import DailyReport, DailyReportCreate, AiAnalysis
 from app.models.user import User # For mocking current_user
+
+# from httpx import ASGITransport # No longer needed for TestClient
+from fastapi.testclient import TestClient # Import TestClient
+
+# Import the actual dependency functions
+from app.api.daily_report_endpoints import get_daily_report_service, get_current_active_user
 
 # Mark all tests in this module as asyncio
 pytestmark = pytest.mark.asyncio
@@ -26,9 +32,10 @@ def current_test_user():
 # Apply dependency overrides for the test session
 @pytest.fixture(autouse=True)
 def override_dependencies(mock_daily_report_service: AsyncMock, current_test_user: User):
-    app.dependency_overrides[DailyReportService] = lambda: mock_daily_report_service # For type hint in endpoint
-    app.dependency_overrides[app.api.daily_report_endpoints.get_daily_report_service] = lambda: mock_daily_report_service
-    app.dependency_overrides[app.api.daily_report_endpoints.get_current_active_user] = lambda: current_test_user
+    # app.dependency_overrides[DailyReportService] = lambda: mock_daily_report_service # This might be too broad or not what endpoints use directly
+    # Prefer overriding the specific functions used in Depends()
+    app.dependency_overrides[get_daily_report_service] = lambda: mock_daily_report_service
+    app.dependency_overrides[get_current_active_user] = lambda: current_test_user
     yield
     app.dependency_overrides = {} # Clear overrides after tests
 
@@ -176,9 +183,11 @@ async def test_get_daily_report_by_id_invalid_uuid(async_client: AsyncClient):
     assert "detail" in content
     assert any(err["type"] == "uuid_parsing" and err["loc"] == ["path", "report_id"] for err in content["detail"])
 
-# Fixture to provide an AsyncClient instance for tests
-@pytest.fixture
-async def async_client() -> AsyncClient:
+# Fixture to provide a TestClient instance for tests
+@pytest.fixture(scope="function")
+def async_client() -> TestClient: # Changed to TestClient, synchronous fixture
     # Use the global app instance from app.main
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        yield client 
+    with TestClient(app) as client:
+        yield client
+
+# Ensure all test coroutines are properly marked (they are with pytestmark) 
