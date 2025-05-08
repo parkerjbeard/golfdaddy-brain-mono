@@ -156,7 +156,6 @@ async def test_process_commit(mock_get_diff, mock_analyze_commit):
     # Mock the analyze_commit method
     mock_analyze_commit.return_value = {
         "commit_hash": "test123",
-        "ai_points": 5,
         "ai_estimated_hours": 0.5
     }
     

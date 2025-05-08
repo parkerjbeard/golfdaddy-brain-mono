@@ -119,7 +119,6 @@ def sample_commit_data(test_commit_payload, test_user) -> dict:
         "repository_url": str(test_commit_payload.repository_url),
         "branch": test_commit_payload.branch,
         "diff_url": str(test_commit_payload.diff_url),
-        "ai_points": None, # Start with no analysis
         "ai_estimated_hours": None,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -156,7 +155,6 @@ async def test_process_commit_new_commit_success(
     saved_commit_obj = Commit(
         commit_hash=test_commit_payload.commit_hash,
         author_id=test_user.id,
-        ai_points=mock_analysis_result["complexity_score"], # ai_points comes from complexity_score
         ai_estimated_hours=mock_analysis_result["estimated_hours"],
         seniority_score=mock_analysis_result["seniority_score"],
         commit_timestamp=test_commit_payload.commit_timestamp
@@ -177,7 +175,6 @@ async def test_process_commit_new_commit_success(
     assert isinstance(saved_arg, Commit)
     assert saved_arg.commit_hash == test_commit_payload.commit_hash
     assert saved_arg.author_id == test_user.id
-    assert saved_arg.ai_points == mock_analysis_result["complexity_score"]
     assert saved_arg.ai_estimated_hours == mock_analysis_result["estimated_hours"]
     assert saved_arg.seniority_score == mock_analysis_result["seniority_score"]
 
@@ -201,7 +198,6 @@ async def test_process_commit_existing_needs_analysis(
      # --- Arrange ---
     # 1. Commit exists but lacks AI analysis
     existing_commit_mock = Commit(**sample_commit_data)
-    existing_commit_mock.ai_points = None
     existing_commit_mock.ai_estimated_hours = None
     existing_commit_mock.seniority_score = None
     existing_commit_mock.author_id = test_user.id # Ensure existing commit has author_id for re-analysis context
@@ -215,7 +211,6 @@ async def test_process_commit_existing_needs_analysis(
     re_analyzed_commit_obj = Commit(
         commit_hash=existing_commit_mock.commit_hash,
         author_id=existing_commit_mock.author_id,
-        ai_points=mock_analysis_result["complexity_score"],
         ai_estimated_hours=mock_analysis_result["estimated_hours"],
         seniority_score=mock_analysis_result["seniority_score"],
         commit_timestamp=existing_commit_mock.commit_timestamp # or test_commit_payload.commit_timestamp
@@ -232,12 +227,11 @@ async def test_process_commit_existing_needs_analysis(
     mock_commit_repo.save_commit.assert_called_once()
     
     saved_arg = mock_commit_repo.save_commit.call_args[0][0]
-    assert saved_arg.ai_points == mock_analysis_result["complexity_score"]
     assert saved_arg.ai_estimated_hours == mock_analysis_result["estimated_hours"]
     assert saved_arg.seniority_score == mock_analysis_result["seniority_score"]
     
     assert result is re_analyzed_commit_obj
-    assert result.ai_points == 7
+    assert result.ai_estimated_hours == 1.0
 
 @pytest.mark.asyncio
 async def test_process_commit_already_processed(
@@ -253,8 +247,7 @@ async def test_process_commit_already_processed(
     # --- Arrange ---
     # 1. Commit exists AND has AI points
     existing_commit_mock = Commit(**sample_commit_data)
-    existing_commit_mock.ai_points = 10 # Already analyzed
-    existing_commit_mock.ai_estimated_hours = 2.0
+    existing_commit_mock.ai_estimated_hours = 2.0 # Has been analyzed
     mock_commit_repo.get_commit_by_hash.return_value = existing_commit_mock
 
     # --- Act ---
@@ -267,6 +260,8 @@ async def test_process_commit_already_processed(
     mock_commit_repo.save_commit.assert_not_called()
 
     assert result is existing_commit_mock # Should return the existing object
+    assert result.ai_estimated_hours is None # Or ensure it remains as initially set
+    assert result.seniority_score is None # Or ensure it remains as initially set
 
 @pytest.mark.asyncio
 async def test_process_commit_user_not_found(
@@ -292,7 +287,6 @@ async def test_process_commit_user_not_found(
     saved_commit_obj = Commit(
         commit_hash=test_commit_payload.commit_hash,
         author_id=None, # Important: author_id should be None
-        ai_points=mock_analysis_result["complexity_score"],
         ai_estimated_hours=mock_analysis_result["estimated_hours"],
         seniority_score=mock_analysis_result["seniority_score"],
         commit_timestamp=test_commit_payload.commit_timestamp
@@ -377,7 +371,7 @@ async def test_process_commit_update_fails(
     mock_commit_repo.update_commit_analysis.assert_called_once()
     # Should still return the commit object created, just without updated analysis
     assert result is created_commit_mock
-    assert result.ai_points is None # Should not have been updated
+    assert result.ai_estimated_hours is None # Should not have been updated
 
 # Add more tests for AI error scenarios if the placeholder logic is replaced
 # e.g., test_process_commit_ai_raises_exception

@@ -12,7 +12,6 @@ CREATE TABLE public.commits (
     repository_url character varying,
     branch character varying,
     diff_url character varying,
-    ai_points integer,
     ai_estimated_hours real, -- Use 'real' for float in PostgreSQL
     created_at timestamp without time zone DEFAULT now(),
     updated_at timestamp without time zone DEFAULT now(),
@@ -22,8 +21,7 @@ CREATE TABLE public.commits (
     ai_analysis_notes text,
     complexity_score integer,
     risk_level character varying,
-    risk_factor real,
-    point_calculation jsonb
+    risk_factor real
 );
 
 -- Add indexes for frequently queried columns
@@ -99,7 +97,6 @@ COMMENT ON COLUMN public.commits.repository_name IS 'Name of the repository wher
 COMMENT ON COLUMN public.commits.repository_url IS 'URL of the repository';
 COMMENT ON COLUMN public.commits.branch IS 'The branch the commit was made on';
 COMMENT ON COLUMN public.commits.diff_url IS 'URL to the diff patch for the commit';
-COMMENT ON COLUMN public.commits.ai_points IS 'AI-calculated points for the commit complexity/effort';
 COMMENT ON COLUMN public.commits.ai_estimated_hours IS 'AI-estimated hours for the work involved in the commit';
 COMMENT ON COLUMN public.commits.created_at IS 'Timestamp when the record was created in the database';
 COMMENT ON COLUMN public.commits.updated_at IS 'Timestamp when the record was last updated in the database';
@@ -109,5 +106,4 @@ COMMENT ON COLUMN public.commits.changed_files IS 'JSON array of file paths chan
 COMMENT ON COLUMN public.commits.ai_analysis_notes IS 'Text notes from the AI analysis of the commit';
 COMMENT ON COLUMN public.commits.complexity_score IS 'AI-rated complexity score (e.g., 1-10)';
 COMMENT ON COLUMN public.commits.risk_level IS 'AI-assessed risk level (e.g., low, medium, high)';
-COMMENT ON COLUMN public.commits.risk_factor IS 'Multiplier based on risk level (e.g., 1.0, 1.5, 2.0)';
-COMMENT ON COLUMN public.commits.point_calculation IS 'JSON object storing details of how points were calculated'; 
+COMMENT ON COLUMN public.commits.risk_factor IS 'Multiplier based on risk level (e.g., 1.0, 1.5, 2.0)'; 
