@@ -12,6 +12,8 @@ import EmployeeDetail from "./pages/EmployeeDetail";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 import UserManagementPage from "./pages/UserManagementPage";
+import ManagerDashboardPage from "./pages/ManagerDashboardPage";
+import TeamManagementPage from "./pages/TeamManagementPage";
 
 const queryClient = new QueryClient();
 
@@ -28,7 +30,9 @@ const App = () => (
             <Route path="/department" element={<Layout><DepartmentDashboard /></Layout>} />
             <Route path="/admin" element={<Layout><AdminDashboard /></Layout>} />
             <Route path="/admin/users" element={<Layout><UserManagementPage /></Layout>} />
+            <Route path="/admin/teams" element={<Layout><TeamManagementPage /></Layout>} />
             <Route path="/admin/employee/:id" element={<Layout><EmployeeDetail /></Layout>} />
+            <Route path="/manager-dashboard" element={<Layout><ManagerDashboardPage /></Layout>} />
             <Route path="*" element={<Layout><NotFound /></Layout>} />
           </Routes>
         </BrowserRouter>

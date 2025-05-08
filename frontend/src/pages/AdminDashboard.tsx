@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
 import { TaskOverview } from '@/components/admin/TaskOverview';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Chart } from '@/components/ui/chart';
+import { UserRole } from '@/types/user';
 
 interface Employee {
   id: string;
@@ -132,7 +132,7 @@ const AdminDashboard = () => {
   ];
 
   // Check if user has leadership role
-  if (user?.role !== 'leadership') {
+  if (user?.role !== UserRole.ADMIN) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8">
         <h1 className="text-2xl font-semibold mb-4">Access Denied</h1>

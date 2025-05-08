@@ -1,6 +1,6 @@
-
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { UserRole } from '@/types/user';
 import { 
   BarChart, 
   ChevronLeft, 
@@ -102,7 +102,7 @@ export function Sidebar() {
                 </Link>
               </li>
 
-              {user?.department && (
+              {user?.team && (
                 <li>
                   <Link
                     to="/department"
@@ -134,7 +134,7 @@ export function Sidebar() {
                 </Link>
               </li>
 
-              {(user?.role === 'leadership') && (
+              {(user?.role === UserRole.ADMIN) && (
                 <li>
                   <Link
                     to="/admin"
@@ -158,10 +158,10 @@ export function Sidebar() {
             <div className="border-t p-4">
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  {user.avatar ? (
+                  {user.avatar_url ? (
                     <img 
-                      src={user.avatar} 
-                      alt={user.name} 
+                      src={user.avatar_url} 
+                      alt={user.name || 'User Avatar'} 
                       className="h-8 w-8 rounded-full object-cover" 
                     />
                   ) : (
@@ -172,7 +172,7 @@ export function Sidebar() {
                   <div className="text-sm font-medium">{user.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                    {user.department && ` • ${user.department}`}
+                    {user.team && ` • ${user.team}`}
                   </div>
                 </div>
               </div>

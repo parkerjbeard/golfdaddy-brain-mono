@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
+// Define the schema for form validation
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
@@ -25,17 +26,54 @@ const loginSchema = z.object({
 type LoginFormInputs = z.infer<typeof loginSchema>;
 
 const LoginPage: React.FC = () => {
+  console.log("Rendering LoginPage");
+  
   const navigate = useNavigate();
   const location = useLocation();
-  const { loginWithEmailPassword, signUpWithEmailPassword, user, loading: authLoading, session } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false); // To toggle between Sign In and Sign Up
+  
+  // Try/catch around useAuth to catch any potential rendering errors
+  let authHook;
+  try {
+    authHook = useAuth();
+    console.log("useAuth hook loaded successfully");
+  } catch (error) {
+    console.error("Error loading useAuth hook:", error);
+    // Render fallback UI instead of crashing
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold">Authentication Error</CardTitle>
+            <CardDescription>
+              There was a problem loading the authentication system.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-red-500">Please try refreshing the page or contact support.</p>
+            <p className="text-sm mt-2">{String(error)}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
+  const { 
+    loginWithEmailPassword, 
+    signUpWithEmailPassword, 
+    user, 
+    loading: authLoading, 
+    session 
+  } = authHook;
+  
+  const [isSignUp, setIsSignUp] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
     reset,
   } = useForm<LoginFormInputs>({
     resolver: zodResolver(loginSchema),
@@ -44,38 +82,55 @@ const LoginPage: React.FC = () => {
   const from = location.state?.from?.pathname || "/";
 
   useEffect(() => {
-    // If user is already logged in (e.g. navigated here by mistake or session restored)
-    // and session is active, redirect them.
+    console.log("LoginPage useEffect - User:", user ? "Exists" : "None", "Session:", session ? "Exists" : "None");
+    
+    // Only redirect if both user and session exist
+    // This should prevent premature redirects
     if (user && session) {
+      console.log("User authenticated, redirecting to:", from);
       navigate(from, { replace: true });
     }
   }, [user, session, navigate, from]);
 
   const onSubmit = async (data: LoginFormInputs) => {
+    console.log("Form submitted with email:", data.email);
     setFormError(null);
     setFormSuccess(null);
+    setIsSubmitting(true);
+    
     try {
       if (isSignUp) {
+        console.log("Attempting signup");
         await signUpWithEmailPassword({ email: data.email, password: data.password });
-        // Supabase might require email confirmation. The message is logged in useAuth.
         setFormSuccess('Sign up successful! Please check your email for a confirmation link if required.');
-        toast.success('Sign up successful!', { description: 'Please check your email for a confirmation link if required.'});
-        // Optionally reset form or redirect to a specific page post-signup email sent
-        // For now, user will see success message. onAuthStateChange will handle eventual login.
+        toast.success('Sign up successful!');
       } else {
+        console.log("Attempting login");
         await loginWithEmailPassword({ email: data.email, password: data.password });
-        // Successful login is handled by onAuthStateChange in useAuth, which will update user state
-        // and trigger the useEffect above to navigate.
         toast.success('Login successful!');
-        // No need to navigate here, useEffect will handle it when user state changes
       }
-      // reset(); // Reset form on success if desired, or let user see their input
     } catch (error: any) {
-      console.error("Login/Signup Page Error:", error);
+      console.error("Login/Signup error:", error);
       setFormError(error.message || (isSignUp ? 'Sign up failed' : 'Login failed'));
       toast.error(isSignUp ? 'Sign up failed' : 'Login failed', { description: error.message });
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  // Display loading state when the component is initially rendering
+  if (authLoading && !formError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 px-4">
+        <Card className="w-full max-w-md p-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Loading...</h2>
+            <p>Authenticating, please wait.</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 px-4">
@@ -114,7 +169,7 @@ const LoginPage: React.FC = () => {
             {formSuccess && <p className="text-sm text-green-500 text-center">{formSuccess}</p>}
             
             <Button type="submit" className="w-full" disabled={isSubmitting || authLoading}>
-              {authLoading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+              {isSubmitting ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
             </Button>
           </form>
         </CardContent>
