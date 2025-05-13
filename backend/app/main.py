@@ -18,6 +18,7 @@ from app.api.task_endpoints import router as tasks_router
 from app.api.auth_endpoints import router as auth_router
 from app.api.github_events import router as github_router
 from app.api.daily_report_endpoints import router as daily_reports_router
+from app.api.v1.api import api_v1_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
 from app.middleware.api_key_auth import ApiKeyMiddleware
@@ -69,6 +70,7 @@ app.include_router(docs_router)
 app.include_router(tasks_router)
 app.include_router(github_router)
 app.include_router(daily_reports_router)
+app.include_router(api_v1_router, prefix="/api/v1")
 
 # Error handling
 @app.exception_handler(RequestValidationError)

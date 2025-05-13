@@ -108,32 +108,12 @@ async def handle_commit_event(
         # Initialize service with the obtained session
         commit_analysis_service = CommitAnalysisService(db_session)
         
-        # Prepare commit data with proper repository format
-        repo_parts = payload.repository_url.path.strip('/').split('/')
-        if len(repo_parts) >= 2:
-            repository = f"{repo_parts[-2]}/{repo_parts[-1]}"
-            if repository.endswith('.git'):
-                repository = repository[:-4]  # Remove .git suffix if present
-        else:
-            repository = payload.repository_name
-            logger.warning(f"Could not parse repository path from URL, using repository_name: {repository}")
-        
-        # Prepare the commit data for processing
-        commit_data = {
-            "commit_hash": payload.commit_hash,
-            "message": payload.commit_message,
-            "timestamp": payload.commit_timestamp,
-            "repository": repository,
-            "branch": payload.branch,
-            "author": {
-                "email": payload.author_email,
-                "github_username": payload.author_github_username
-            },
-            "diff_url": payload.diff_url
-        }
+        # The 'payload' object is already a validated CommitPayload instance.
+        # We can pass it directly to the service.
+        # The service's process_commit method is designed to handle CommitPayload objects.
 
         # Process the commit (which includes finding user, fetching diff if needed, calling AI, saving)
-        result_commit = await commit_analysis_service.process_commit(commit_data, scan_docs=scan_docs)
+        result_commit = await commit_analysis_service.process_commit(payload, scan_docs=scan_docs) # Pass payload directly
         
         if result_commit:
             logger.info(f"Successfully processed commit {payload.commit_hash}. AI analysis scheduled/completed.")

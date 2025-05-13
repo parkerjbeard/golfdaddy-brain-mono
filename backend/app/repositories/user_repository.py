@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 from supabase import Client
-from app.config.supabase_client import get_supabase_client
+from app.config.supabase_client import get_supabase_client_safe
 from app.models.user import User, UserRole # Import Pydantic model
 import logging
 import json
@@ -11,8 +11,8 @@ from datetime import datetime # For potential datetime fields in User model
 logger = logging.getLogger(__name__)
 
 class UserRepository:
-    def __init__(self, client: Client = get_supabase_client()):
-        self._client = client
+    def __init__(self, client: Client = None):
+        self._client = client if client is not None else get_supabase_client_safe()
         self._table = "users"
 
     def _process_user_dict_for_supabase(self, data_dict: Dict[str, Any]) -> Dict[str, Any]:

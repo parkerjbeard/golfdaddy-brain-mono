@@ -2,10 +2,11 @@ from supabase import create_client, Client
 from app.config.settings import settings
 import os
 from typing import Generator
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # Initialize Supabase client
 supabase_url: str = str(settings.SUPABASE_URL) # Ensure URL is string
-supabase_key: str = settings.SUPABASE_SERVICE_ROLE_KEY
+supabase_key: str = settings.SUPABASE_SERVICE_KEY
 
 # Check if settings were loaded correctly
 if not supabase_url or not supabase_key:
@@ -38,3 +39,5 @@ def get_db() -> Generator[Client, None, None]:
     finally:
         # No need to close the connection with Supabase
         pass
+
+engine = create_async_engine(settings.DATABASE_URL, echo=True)

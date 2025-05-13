@@ -33,6 +33,14 @@ def get_supabase_client() -> Client:
     
     return _supabase_client
 
+# Make sure the client is safely serializable
+def get_supabase_client_safe():
+    """
+    Get the Supabase client instance for dependency injection.
+    This wrapper exists to prevent FastAPI from trying to include the client in response models.
+    """
+    return get_supabase_client()
+
 @contextmanager
 def get_supabase() -> Generator[Client, None, None]:
     """

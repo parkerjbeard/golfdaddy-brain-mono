@@ -1,30 +1,41 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Optional, Dict, Any, List
 from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
 class UserRole(str, Enum):
     USER = "USER"
-    DEVELOPER = "Developer"
-    MANAGER = "Manager"
-    ADMIN = "Admin"
+    DEVELOPER = "DEVELOPER"
+    MANAGER = "MANAGER"
+    ADMIN = "ADMIN"
 
 class User(BaseModel):
     id: UUID = Field(..., description="Corresponds to the Supabase auth.users id")
     name: Optional[str] = None
     avatar_url: Optional[str] = None
-    email: Optional[str] = None # This should ideally be consistently sourced from auth or kept in sync
+    email: Optional[EmailStr] = None # This should ideally be consistently sourced from auth or kept in sync
     slack_id: Optional[str] = Field(None, unique=True, description="User's Slack ID")
     github_username: Optional[str] = Field(None, description="User's GitHub username")
     role: UserRole = UserRole.USER
     team: Optional[str] = None
+    team_id: Optional[UUID] = None # Foreign key to Team model
     # personal_mastery field seems specific, maps to metadata or a separate feature.
     # For generic metadata from DB:
     metadata: Optional[Dict[str, Any]] = Field(None, description="Arbitrary user metadata from DB")
     personal_mastery: Optional[Dict[str, Any]] = Field(None, description="Manager-specific tasks/feedback, potentially part of metadata or separate structure")
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    last_login_at: Optional[datetime] = None
+    is_active: bool = True
+    preferences: Optional[dict] = None # For storing user-specific settings
+
+    @field_validator('role', mode='before')
+    @classmethod
+    def uppercase_role(cls, v):
+        if isinstance(v, str):
+            return v.upper()
+        return v
 
     class Config:
         from_attributes = True # Replaces orm_mode=True in Pydantic v1

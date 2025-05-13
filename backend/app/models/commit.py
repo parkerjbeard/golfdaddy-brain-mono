@@ -21,11 +21,17 @@ class Commit(BaseModel):
     lines_added: Optional[int] = None
     lines_deleted: Optional[int] = None
     changed_files: Optional[List[str]] = None
-    ai_analysis_notes: Optional[str] = None # Potentially JSON or Text in DB
-    complexity_score: Optional[int] = None
-    risk_level: Optional[str] = None # Could be an Enum: LOW, MEDIUM, HIGH
-    risk_factor: Optional[float] = None # Numeric factor contributing to risk
+    # ai_analysis_notes: Optional[str] = None # Potentially JSON or Text in DB - Replaced by specific fields
+    complexity_score: Optional[int] = None # From AI analysis
+    risk_level: Optional[str] = None # Could be an Enum: LOW, MEDIUM, HIGH - From AI analysis
+    # risk_factor: Optional[float] = None # Numeric factor contributing to risk - This seems duplicative if risk_level is string
 
+    # New fields from AI commit analysis
+    key_changes: Optional[List[str]] = Field(None, description="List of key changes identified by AI")
+    seniority_rationale: Optional[str] = Field(None, description="Rationale for the AI-assigned seniority score")
+    model_used: Optional[str] = Field(None, description="AI model used for the analysis")
+    analyzed_at: Optional[datetime] = Field(None, description="Timestamp of when the AI analysis was performed")
+    
     # New fields for EOD and Code Quality integration
     eod_report_id: Optional[UUID] = Field(None, description="ID of the linked EOD report, if any")
     eod_report_summary: Optional[str] = Field(None, description="Summary or key points from the EOD report")
@@ -33,7 +39,7 @@ class Commit(BaseModel):
     comparison_notes: Optional[str] = Field(None, description="Notes from comparing commit, EOD, and quality analysis")
 
     # Existing fields (ensure they remain)
-    ai_estimated_hours: Optional[Decimal] = Field(None, max_digits=5, decimal_places=2)
+    ai_estimated_hours: Optional[Decimal] = Field(None, max_digits=4, decimal_places=1)
     seniority_score: Optional[int] = None # Moved from ai_analysis for direct access
     commit_timestamp: datetime
     created_at: Optional[datetime] = Field(None, description="Timestamp when the record was added to this DB")

@@ -1,8 +1,8 @@
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Any
 from uuid import UUID
 from datetime import datetime, timezone
 from supabase import Client
-from app.config.supabase_client import get_supabase_client
+from app.config.supabase_client import get_supabase_client_safe
 from app.models.daily_report import DailyReport, DailyReportCreate, DailyReportUpdate, AiAnalysis, ClarificationRequest
 import logging
 import json
@@ -11,8 +11,8 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 class DailyReportRepository:
-    def __init__(self, client: Client = get_supabase_client()):
-        self._client = client
+    def __init__(self, client: Client = None):
+        self._client = client if client is not None else get_supabase_client_safe()
         self._table_name = "daily_reports"
 
     def _db_to_model(self, db_data: Dict[str, Any]) -> DailyReport:
@@ -163,12 +163,13 @@ class DailyReportRepository:
                 .eq("report_date", report_date_str) # Querying by date part
                 .maybe_single()
                 .execute
-            ) # Note: Supabase/PostgREST might need specific function for date part comparison on timestamp field like .eq("report_date::date", report_date_str)
-              # For now, this assumes direct date string match works or report_date is stored as DATE in DB (which it is not, it's TIMESTAMPTZ)
-              # More robust: .gte("report_date", report_date.replace(hour=0, minute=0, second=0, microsecond=0).isoformat())
-              #              .lt("report_date", (report_date + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat())
-            if response.data:
+            )
+            if response and response.data:
                 return self._db_to_model(response.data)
+            elif response and response.error:
+                logger.error(f"Error fetching daily report for user {user_id} on date {report_date_str}: {response.error.message}")
+            elif response is None:
+                logger.error(f"Received None response from Supabase for user {user_id} on date {report_date_str}")
             return None
         except Exception as e:
             logger.exception(f"Exception getting daily report for user {user_id} on date {report_date_str}: {e}")

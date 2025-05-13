@@ -21,7 +21,12 @@ CREATE TABLE public.commits (
     ai_analysis_notes text,
     complexity_score integer,
     risk_level character varying,
-    risk_factor real
+    risk_factor real,
+    seniority_score integer,
+    eod_report_id uuid,
+    eod_report_summary text,
+    code_quality_analysis jsonb,
+    comparison_notes text
 );
 
 -- Add indexes for frequently queried columns
@@ -106,4 +111,9 @@ COMMENT ON COLUMN public.commits.changed_files IS 'JSON array of file paths chan
 COMMENT ON COLUMN public.commits.ai_analysis_notes IS 'Text notes from the AI analysis of the commit';
 COMMENT ON COLUMN public.commits.complexity_score IS 'AI-rated complexity score (e.g., 1-10)';
 COMMENT ON COLUMN public.commits.risk_level IS 'AI-assessed risk level (e.g., low, medium, high)';
-COMMENT ON COLUMN public.commits.risk_factor IS 'Multiplier based on risk level (e.g., 1.0, 1.5, 2.0)'; 
+COMMENT ON COLUMN public.commits.risk_factor IS 'Multiplier based on risk level (e.g., 1.0, 1.5, 2.0)';
+COMMENT ON COLUMN public.commits.seniority_score IS 'Seniority score for the commit';
+COMMENT ON COLUMN public.commits.eod_report_id IS 'Foreign key referencing the end-of-day report associated with the commit';
+COMMENT ON COLUMN public.commits.eod_report_summary IS 'Summary of the end-of-day report associated with the commit';
+COMMENT ON COLUMN public.commits.code_quality_analysis IS 'JSON object containing code quality analysis results for the commit';
+COMMENT ON COLUMN public.commits.comparison_notes IS 'Text notes comparing the commit with previous versions'; 

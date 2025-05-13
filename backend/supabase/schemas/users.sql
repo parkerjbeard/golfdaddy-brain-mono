@@ -9,8 +9,12 @@ CREATE TABLE IF NOT EXISTS public.users (
   avatar_url TEXT,
   metadata JSONB DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  github_username TEXT -- Added column
 );
+
+-- Optional: Add a comment for the new column
+COMMENT ON COLUMN public.users.github_username IS 'User''''s GitHub username for integrations';
 
 -- Add RLS (Row Level Security) policies
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;

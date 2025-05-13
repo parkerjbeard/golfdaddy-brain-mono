@@ -31,6 +31,7 @@ class AIIntegration:
         # Models that don't support temperature parameter (typically reasoning/embedding models)
         self.reasoning_models = [
             "o3-mini-", 
+            "o4-mini-",
             "text-embedding-",
             "-e-",
             "text-search-"

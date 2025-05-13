@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Union
 from supabase import Client
 from datetime import datetime
 import math
@@ -81,13 +81,34 @@ class CommitAnalysisService:
             logger.info(f"Author: {commit_data.get('author', {}).get('name', 'N/A')} <{commit_data.get('author', {}).get('email', 'N/A')}>")
             
             diff_data = commit_data.get("diff_data")
-            repository = commit_data.get("repository") # Repository name in owner/repo format
+            repository = commit_data.get("repository")
             
             # 1. Fetch diff if necessary
             if fetch_diff and not diff_data and repository:
                 try:
-                    logger.info(f"Fetching diff from GitHub: {repository}/{commit_hash}")
-                    # Use the updated GitHub integration to get commit details
+                    # Ensure repository is in "owner/repo" format 
+                    owner = None
+                    repo_name_only = repository
+                    if "/" in repository:
+                        owner, repo_name_only = repository.split("/", 1)
+                    else:
+                        # If no owner in the repository string, try to use author_github_username from commit_data
+                        # This is a heuristic and might need adjustment based on actual webhook payload structure
+                        commit_author_info = commit_data.get("author", {})
+                        github_username_from_author = commit_author_info.get("login") # often from github webhook
+                        
+                        if commit_data.get("author_github_username"): # from CommitPayload
+                            owner = commit_data.get("author_github_username")
+                        elif github_username_from_author:
+                            owner = github_username_from_author
+                        else: # Fallback to a default if no author information can be derived
+                            owner = "golfdaddy" # Default owner, adjust if necessary
+                        
+                        repository = f"{owner}/{repo_name_only}"
+                        logger.info(f"Reformatted repository name to: {repository} (owner: {owner}, repo: {repo_name_only})")
+                    
+                    logger.info(f"Attempting to fetch diff from GitHub. Original repo input: '{commit_data.get('repository')}', Derived/Used repo: '{repository}', Commit SHA: '{commit_hash}'")
+                    
                     diff_data = self.github_integration.get_commit_diff(repository, commit_hash)
                     
                     if diff_data:
@@ -281,6 +302,19 @@ class CommitAnalysisService:
             ai_points = analysis_result.get("complexity_score") or analysis_result.get("points", 0)
             ai_hours = analysis_result.get("estimated_hours", 0)
             seniority_score = analysis_result.get("seniority_score", 0)
+            # Extract additional fields from analysis_result
+            complexity_score = analysis_result.get("complexity_score")
+            risk_level = analysis_result.get("risk_level")
+            key_changes = analysis_result.get("key_changes")
+            seniority_rationale = analysis_result.get("seniority_rationale")
+            model_used = analysis_result.get("model_used")
+            analyzed_at_str = analysis_result.get("analyzed_at")
+            analyzed_at = None
+            if analyzed_at_str:
+                try:
+                    analyzed_at = datetime.fromisoformat(analyzed_at_str)
+                except ValueError:
+                    logger.warning(f"Could not parse analyzed_at timestamp: {analyzed_at_str}")
             
             logger.info(f"✓ Analysis complete: Points={ai_points}, Hours={ai_hours}, Seniority={seniority_score}")
 
@@ -304,7 +338,14 @@ class CommitAnalysisService:
                 seniority_score=seniority_score,
                 commit_timestamp=commit_data.get("timestamp") or commit_data.get("commit_timestamp") or 
                                 diff_data.get("author", {}).get("date"),
-                # Populate new fields
+                # Populate fields from AI analysis (including newly added ones)
+                complexity_score=complexity_score,
+                risk_level=risk_level,
+                key_changes=key_changes,
+                seniority_rationale=seniority_rationale,
+                model_used=model_used,
+                analyzed_at=analyzed_at,
+                # Populate fields from EOD/Code Quality integration
                 eod_report_id=eod_report.id if eod_report else None,
                 eod_report_summary=eod_report.summary if eod_report and hasattr(eod_report, 'summary') else (eod_report.raw_text_input[:250] + "..." if eod_report and eod_report.raw_text_input else None),
                 code_quality_analysis=code_quality_analysis if code_quality_analysis and not code_quality_analysis.get("error") else None,
@@ -407,7 +448,7 @@ class CommitAnalysisService:
         self._log_separator("END OF BATCH ANALYSIS", "=")
         return results
 
-    def _find_user_for_commit(self, payload: CommitPayload) -> Optional[User]:
+    async def _find_user_for_commit(self, payload: CommitPayload) -> Optional[User]:
         """Attempts to find the internal user associated with the commit author."""
         # Prioritize finding by email, then by GitHub username if available
         user = None
@@ -417,7 +458,7 @@ class CommitAnalysisService:
         if payload.author_email:
             try:
                 logger.info(f"Searching for user by email: {payload.author_email}")
-                user = self.user_repository.get_user_by_email(payload.author_email)
+                user = await self.user_repository.get_user_by_email(payload.author_email)
                 if user:
                     logger.info(f"✓ Found user: {user.id}")
                     # Log user details for debugging (no sensitive data)
@@ -441,7 +482,7 @@ class CommitAnalysisService:
             logger.info(f"Trying GitHub username: {payload.author_github_username}")
             # Currently commented out as feature may not be implemented
             # try:
-            #     user = self.user_repository.get_user_by_github_username(payload.author_github_username)
+            #     user = await self.user_repository.get_user_by_github_username(payload.author_github_username)
             #     if user:
             #         logger.info(f"Found user {user.id} by GitHub username {payload.author_github_username}...")
             #         return user
@@ -451,113 +492,92 @@ class CommitAnalysisService:
         logger.warning(f"⚠ Could not map commit author to internal user")
         return None
     
-    async def process_commit(self, commit_data: CommitPayload, scan_docs: Optional[bool] = None) -> Optional[Commit]:
-        """
-        Processes an incoming commit payload.
-        
-        Args:
-            commit_data: CommitPayload Pydantic model instance.
-            scan_docs: Whether to scan documentation after commit analysis
-                       (None = use global setting, True = force enable, False = force disable)
-        
-        Returns:
-            The processed and analyzed commit, or None if processing fails
-        """
-        # Log the full payload for debugging (with sanitization)
-        commit_hash = commit_data.commit_hash
-        repository_name = commit_data.repository_name # Use repository_name
-        
-        self._log_separator(f"PROCESSING COMMIT: {commit_hash}", "=")
-        logger.info(f"Repository: {repository_name or 'N/A'}")
-        
+    async def process_commit(self, commit_data_input: Union[CommitPayload, Dict[str, Any]], scan_docs: Optional[bool] = None) -> Optional[Commit]:
+        """Process a commit for analysis, potentially fetching diff data first."""
         try:
-            # Create a sanitized version of the data for logging
-            # Since commit_data is now a Pydantic model, direct dict-like manipulation is less common.
-            # For logging, we can convert to dict.
-            log_data_dict = commit_data.model_dump(exclude_none=True) # exclude_none for cleaner logs
-            if "token" in log_data_dict: # Assuming token might be an extra field not in CommitPayload
-                log_data_dict["token"] = "***REDACTED***"
+            # Support both Dict and CommitPayload cases
+            if isinstance(commit_data_input, dict):
+                commit_data = CommitPayload(**commit_data_input)
+            else:
+                commit_data = commit_data_input
+                
+            commit_hash = commit_data.commit_hash
+            self._log_separator(f"PROCESSING COMMIT: {commit_hash}", "=")
             
-            # Only log essential fields for clarity
-            essential_data = {
-                "commit_hash": commit_data.commit_hash,
+            logger.info(f"Repository: {commit_data.repository_name}")
+            
+            # Extract basic metadata for logging
+            metadata = {
+                "commit_hash": commit_hash,
                 "repository_name": commit_data.repository_name,
                 "author_email": commit_data.author_email,
                 "author_github_username": commit_data.author_github_username,
                 "files_changed": len(commit_data.files_changed) if commit_data.files_changed else 0,
-                "has_diff": bool(commit_data.commit_diff), # Check commit_diff from CommitPayload
+                "has_diff": bool(commit_data.commit_diff)  # Whether diff content is provided
             }
-            logger.info(f"Commit metadata: {json.dumps(essential_data, default=str)}")
-        except Exception as e:
-            logger.error(f"❌ Error logging payload: {e}")
+            logger.info(f"Commit metadata: {json.dumps(metadata)}")
+            
+            # 1. Check if commit is already in DB
+            existing_commit = self.commit_repository.get_commit_by_hash(commit_hash)
+            if existing_commit:
+                logger.info(f"✓ Commit {commit_hash} already exists in database")
+                # If existing and has analysis, we could skip or perform re-analysis 
+                # based on settings.reanalyze_existing_commits
+                
+                # Opt out early of re-analysis if conditions are met
+                if not settings.reanalyze_existing_commits:
+                    logger.info(f"Skipping re-analysis (reanalyze_existing_commits=False)")
+                    self._log_separator(f"END: COMMIT {commit_hash} ALREADY PROCESSED", "=")
+                    return existing_commit
+                else:
+                    logger.info(f"Re-analyzing existing commit (reanalyze_existing_commits=True)")
 
-        # 1. Check if commit already exists (idempotency)
-        existing_commit = self.commit_repository.get_commit_by_hash(commit_hash)
-        if existing_commit:
-            logger.warning(f"⚠ Commit {commit_hash} already exists in database")
-            if existing_commit.ai_points is None:
-                 logger.info(f"Existing commit missing AI analysis - will analyze")
-                 # Prepare data for re-analysis. Convert CommitPayload to dict for analyze_commit
-                 re_analysis_data_dict = commit_data.model_dump(exclude_none=True)
-                 re_analysis_data_dict['repository'] = commit_data.repository_name # analyze_commit expects 'repository'
-                 if existing_commit.author_id:
-                     re_analysis_data_dict['author_id'] = existing_commit.author_id
-                 
-                 logger.info(f"Calling analyze_commit for existing commit {commit_hash}")
-                 analyzed_commit = await self.analyze_commit(
-                     commit_hash=commit_hash,
-                     commit_data=re_analysis_data_dict, 
-                     fetch_diff=not (commit_data.commit_diff) 
-                 )
-                 
-                 if analyzed_commit:
-                     logger.info(f"✓ Re-analysis and save successful for {commit_hash}")
-                     self._scan_documentation_for_updates(analyzed_commit, commit_data.repository_name, re_analysis_data_dict, scan_docs)
-                     self._log_separator(f"END: RE-ANALYZED COMMIT {commit_hash}", "=")
-                 else:
-                     logger.error(f"❌ Re-analysis failed for {commit_hash}")
-                     self._log_separator(f"END: RE-ANALYSIS FAILED {commit_hash}", "=")
-                 return analyzed_commit
+            # 2. Find the user associated with the commit author (using _find_user_for_commit helper)
+            # _find_user_for_commit already takes CommitPayload
+            user = await self._find_user_for_commit(commit_data)
+            author_id_to_store = user.id if user else None
+
+            # Prepare data for analyze_commit, which expects a dictionary
+            commit_data_dict_for_analysis = commit_data.model_dump(exclude_none=True)
+            commit_data_dict_for_analysis['repository'] = commit_data.repository_name # analyze_commit expects 'repository'
+            if author_id_to_store:
+                commit_data_dict_for_analysis['author_id'] = author_id_to_store
+            # Ensure diff is named as expected by analyze_commit if it comes from commit_diff
+            if commit_data.commit_diff and not commit_data_dict_for_analysis.get('diff'):
+                commit_data_dict_for_analysis['diff'] = commit_data.commit_diff
+
+            # 3. Fetch diff from GitHub if not included (analyze_commit handles this if fetch_diff=True)
+            # The fetch_diff flag will be True if commit_data.commit_diff is None.
+
+            # 4. Call analyze_commit to process the data and perform AI analysis
+            logger.info(f"Starting commit analysis...")
+            analyzed_commit = await self.analyze_commit(
+                commit_hash=commit_hash,
+                commit_data=commit_data_dict_for_analysis,
+                fetch_diff=not commit_data.commit_diff # Fetch only if not provided in CommitPayload
+            )
+            
+            if analyzed_commit:
+                logger.info(f"✓ Commit analysis completed successfully")
+                self._scan_documentation_for_updates(analyzed_commit, commit_data.repository_name, commit_data_dict_for_analysis, scan_docs)
+                self._log_separator(f"END: COMMIT {commit_hash} PROCESSED", "=")
+                return analyzed_commit
             else:
-                logger.info(f"✓ Commit already analyzed - returning existing record")
-                self._log_separator(f"END: EXISTING COMMIT {commit_hash}", "=")
-                return existing_commit
-        
-        logger.info(f"Commit {commit_hash} not found in DB. Processing as new.")
-
-        # 2. Find the user associated with the commit author (using _find_user_for_commit helper)
-        # _find_user_for_commit already takes CommitPayload
-        user = self._find_user_for_commit(commit_data)
-        author_id_to_store = user.id if user else None
-
-        # Prepare data for analyze_commit, which expects a dictionary
-        commit_data_dict_for_analysis = commit_data.model_dump(exclude_none=True)
-        commit_data_dict_for_analysis['repository'] = commit_data.repository_name # analyze_commit expects 'repository'
-        if author_id_to_store:
-            commit_data_dict_for_analysis['author_id'] = author_id_to_store
-        # Ensure diff is named as expected by analyze_commit if it comes from commit_diff
-        if commit_data.commit_diff and not commit_data_dict_for_analysis.get('diff'):
-            commit_data_dict_for_analysis['diff'] = commit_data.commit_diff
-
-        # 3. Fetch diff from GitHub if not included (analyze_commit handles this if fetch_diff=True)
-        # The fetch_diff flag will be True if commit_data.commit_diff is None.
-
-        # 4. Call analyze_commit to process the data and perform AI analysis
-        logger.info(f"Starting commit analysis...")
-        analyzed_commit = await self.analyze_commit(
-            commit_hash=commit_hash,
-            commit_data=commit_data_dict_for_analysis,
-            fetch_diff=not commit_data.commit_diff # Fetch only if not provided in CommitPayload
-        )
-        
-        if analyzed_commit:
-            logger.info(f"✓ Commit analysis completed successfully")
-            self._scan_documentation_for_updates(analyzed_commit, commit_data.repository_name, commit_data_dict_for_analysis, scan_docs)
-            self._log_separator(f"END: COMMIT {commit_hash} PROCESSED", "=")
-            return analyzed_commit
-        else:
-            logger.error(f"❌ Commit analysis failed")
-            self._log_separator(f"END: COMMIT {commit_hash} FAILED", "=")
+                logger.error(f"❌ Commit analysis failed")
+                self._log_separator(f"END: COMMIT {commit_hash} FAILED", "=")
+                return None
+                
+        except Exception as e:
+            if commit_data_input:
+                if isinstance(commit_data_input, dict):
+                    ch = commit_data_input.get("commit_hash", "unknown")
+                else:
+                    ch = commit_data_input.commit_hash
+                logger.exception(f"❌ Error processing commit {ch}: {e}")
+                self._log_separator(f"ERROR PROCESSING COMMIT: {ch}", "=")
+            else:
+                logger.exception(f"❌ Error processing commit (unknown hash): {e}")
+                self._log_separator("ERROR PROCESSING UNKNOWN COMMIT", "=")
             return None
     
     def _scan_documentation_for_updates(self, analyzed_commit: Commit, repository: str, commit_data: Dict[str, Any], scan_docs: Optional[bool] = None) -> None:

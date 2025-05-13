@@ -21,6 +21,7 @@ class CommitAnalyzer:
         self.reasoning_models = [
             "o3-mini-", 
             "o4-mini-",
+            "o3-",
             "text-embedding-",
             "-e-",
             "text-search-"
@@ -65,18 +66,20 @@ class CommitAnalyzer:
             change_line = f"{change_line}{' ' * (79 - len(change_line))}║"
             key_changes_lines.append(change_line)
         
-        # Format tech debt
-        tech_debt = result.get('technical_debt', [])
-        tech_debt_header = "║ Technical Debt:"
-        tech_debt_header = f"{tech_debt_header}{' ' * (79 - len(tech_debt_header))}║"
+        # Format seniority rationale (wrap long text)
+        rationale_text = result.get('seniority_rationale', '')
+        rationale_header = "║ Seniority Rationale:"
+        rationale_header = f"{rationale_header}{' ' * (79 - len(rationale_header))}║"
         
-        tech_debt_lines = []
-        for debt in tech_debt:
-            if len(debt) > 75:  # Truncate long items
-                debt = debt[:72] + "..."
-            debt_line = f"║   • {debt}"
-            debt_line = f"{debt_line}{' ' * (79 - len(debt_line))}║"
-            tech_debt_lines.append(debt_line)
+        rationale_lines = []
+        if rationale_text:
+            # Wrap the text at ~72 chars per line
+            import textwrap
+            wrapped_lines = textwrap.wrap(rationale_text, width=72)
+            for line in wrapped_lines:
+                line_fmt = f"║   {line}"
+                line_fmt = f"{line_fmt}{' ' * (79 - len(line_fmt))}║"
+                rationale_lines.append(line_fmt)
         
         # Assemble the complete log message
         divider = f"║{'-' * 78}║"
@@ -97,14 +100,11 @@ class CommitAnalyzer:
         else:
             log_parts.append("║   None specified" + " " * 64 + "║")
             
-        log_parts.append(divider)
-        log_parts.append(tech_debt_header)
+        if rationale_lines:
+            log_parts.append(divider)
+            log_parts.append(rationale_header)
+            log_parts.extend(rationale_lines)
         
-        if tech_debt_lines:
-            log_parts.extend(tech_debt_lines)
-        else:
-            log_parts.append("║   None specified" + " " * 64 + "║")
-            
         log_parts.append(footer)
         
         return "\n".join(log_parts)
@@ -130,105 +130,73 @@ class CommitAnalyzer:
                 - estimated_hours: Estimated time to implement
                 - risk_level: Risk assessment (low/medium/high)
                 - seniority_score: Code quality and implementation approach rating (1-10)
+                - seniority_rationale: Explanation of the seniority score
                 - key_changes: List of major changes identified
-                - technical_debt: Potential technical debt concerns
-                - suggestions: Improvement suggestions
         """
         try:
             # Prepare a detailed prompt for the analysis
-            prompt = f"""Analyze the following commit and provide a comprehensive technical assessment based on the code changes.
-            
-            Your goal is to evaluate the code quality, complexity, potential risks, and implementation effort required.
-            Carefully examine file types, code patterns, architectural changes, and potential impact on the codebase.
-            
-            Please format your response as a JSON object with the following structure:
-            {{
-                "complexity_score": <integer 1-10>,
-                "estimated_hours": <number>,
-                "risk_level": <"low"|"medium"|"high">, 
-                "seniority_score": <integer 1-10>,
-                "key_changes": [<string>],
-                "technical_debt": [<string>],
-                "suggestions": [<string>]
-            }}
-            
-            Analysis guidelines:
-            
-            - complexity_score: Rate from 1-10 where:
-              * 1-3: Simple changes (typo fixes, documentation, minor refactoring)
-              * 4-6: Moderate changes (new features, bug fixes, medium refactoring)
-              * 7-10: Complex changes (architectural changes, critical system components, high cognitive load)
-              
-            - estimated_hours: Provide realistic implementation time for an average developer familiar with the codebase.
-              Consider testing, documentation, and potential integration challenges.
-              
-            - risk_level: Assess based on:
-              * low: Isolated changes with minimal risk of regression or side effects
-              * medium: Changes that touch multiple components or introduce new patterns
-              * high: Changes to core functionality, critical paths, or security components
-              
-            - seniority_score: Rate from 1-10 using this structured evaluation approach:
-              1. Analyze the intended function and purpose of the code
-              2. Assess implementation quality based on industry best practices
-              3. Compare against what an ideal senior implementation would include
-              
-              Scoring criteria:
-              * 1-3: Basic implementation that fulfills functional requirements but shows limited engineering maturity.
-                    - Uses simplistic or naive approaches to problems
-                    - Lacks appropriate design patterns where beneficial
-                    - Minimal consideration of edge cases or error scenarios
-                    - Limited abstraction or poor separation of concerns
-                    - Little evidence of architectural thinking
-              
-              * 4-6: Competent implementation showing solid engineering practices.
-                    - Appropriate use of common design patterns
-                    - Reasonable component structure and organization
-                    - Standard error handling strategies
-                    - Some consideration for maintainability and readability
-                    - Evidence of testing and validation approaches
-              
-              * 7-10: Sophisticated implementation demonstrating senior-level engineering excellence:
-                    - Strategic application of advanced design patterns appropriate to the context
-                    - Elegant architectural solutions balancing flexibility and simplicity
-                    - Thoughtful abstraction with clear separation of concerns
-                    - Performance considerations and optimizations where relevant
-                    - Comprehensive handling of edge cases and failure modes
-                    - Forward-thinking design enabling future extension and maintenance
-                    - Security-conscious implementation where applicable
-                    - Evidence of systems thinking beyond the immediate code changes
-            
-            - key_changes: List the most significant changes, focusing on:
-              * Architectural modifications
-              * API changes or new endpoints
-              * Database schema changes
-              * New dependencies or third-party integrations
-              * Performance optimizations
-              * Security-related changes
-              
-            - technical_debt: Identify any of the following:
-              * Workarounds or temporary solutions
-              * Inconsistent patterns or anti-patterns
-              * Hardcoded values that should be configurable
-              * Missing tests or documentation
-              * Potential scalability issues
-              * Redundant or duplicate code
-              
-            - suggestions: Provide actionable recommendations for:
-              * Code quality improvements
-              * Better architectural approaches
-              * Testing strategies
-              * Performance optimizations
-              * Maintainability enhancements
-              * Security improvements
-            
-            Commit Details:
+            prompt = f"""You are analyzing a single Git commit with the primary objective of
+            estimating the real engineering effort (in hours) required to author
+            the change.  After estimating the effort you will also rate the
+            complexity and risk, and identify key changes. If the diff reveals
+            significant technical debt concerns, reflect that in a lower
+            seniority score and mention it in the rationale.  Respond **only**
+            with a single
+            valid JSON object using the exact keys listed below – no markdown or
+            extra commentary.
+
+            Required JSON schema:
+                {{
+                    "complexity_score": <integer 1-10>,
+                    "estimated_hours": <float>,
+                    "risk_level": <"low"|"medium"|"high">,
+                    "seniority_score": <integer 1-10>,
+                    "seniority_rationale": <string>,
+                    "key_changes": [<string>]
+                }}
+
+            Hours-estimation calibration table (baseline per commit – include
+            time for tests, docs and validation):
+                • Very simple (≤20 changed lines, trivial fix)……………… 0.25-1 h
+                • Simple       (21-100 lines or isolated feature)……… 1-2 h
+                • Moderate     (101-300 lines or multi-file feature)… 2-4 h
+                • Complex      (301-800 lines or architectural change) 4-8 h
+                • Extensive    (>800 lines or large scale refactor)…  8-20 h
+
+            Adjustment modifiers (apply cumulatively then round to 1 decimal):
+                +20 %  – non-trivial unit tests or documentation added/updated
+                +25 %  – new external integration or infrastructure work
+                −30 %  – mostly mechanical or generated changes
+                +15 %  – security-critical or high-risk code paths
+
+            Complexity, seniority and risk should be evaluated using standard
+            industry heuristics (see OWASP, clean-code, SOLID, etc.).  Make sure
+            the final **estimated_hours** is a single floating-point number with
+            one decimal place and never zero.
+
+            Seniority-scoring procedure (use every time):
+                1. Identify the intended function/purpose of the change.
+                2. Envision what an ideal senior-level implementation would look like (architecture, testing, error-handling, perf, security).
+                3. Compare the actual diff against this ideal.
+                4. Map the result to the 1-10 scale:
+                   • 1-3  – Junior-level, basic or naive implementation
+                   • 4-6  – Mid-level, competent but with notable gaps
+                   • 7-10 – Senior-level craftsmanship and forethought
+
+            Special case – trivial commits:
+                If the change is extremely small or mechanical (complexity_score ≤ 3 or ≤ 20 changed lines)
+                the seniority dimension is largely irrelevant.  In such cases:
+                    • Set seniority_score equal to 10.
+                    • Provide a brief seniority_rationale such as "Trivial change – seniority not meaningfully assessable."
+
+            Commit metadata for context – use it but do **not** echo it back:
             Repository: {commit_data.get('repository', '')}
             Author: {commit_data.get('author_name', '')} <{commit_data.get('author_email', '')}>
             Message: {commit_data.get('message', '')}
             Files Changed: {', '.join(commit_data.get('files_changed', []))}
             Lines Added: {commit_data.get('additions', 0)}
             Lines Deleted: {commit_data.get('deletions', 0)}
-            
+
             Diff:
             {commit_data.get('diff', '')}"""
 
@@ -236,20 +204,7 @@ class CommitAnalyzer:
             api_params = {
                 "model": self.commit_analysis_model,
                 "messages": [
-                    {"role": "system", "content": """You are an expert code reviewer and technical analyst with extensive experience in software development.
-Your task is to analyze git commit diffs and provide detailed, actionable insights.
-
-When analyzing commits:
-1. Focus on the technical impact rather than superficial changes
-2. Identify architectural patterns and anti-patterns
-3. Assess potential risks to system stability, security, and performance
-4. Consider maintainability, readability, and adherence to best practices
-5. Provide specific, actionable recommendations (not generic advice)
-6. Be objective and thorough in your assessment
-7. Pay special attention to security vulnerabilities and edge cases
-8. Consider the broader context of the codebase beyond just the changed lines
-
-Your analysis should be technically precise, balanced, and presented in the requested JSON format."""},
+                    {"role": "system", "content": """You are a senior software engineer specialising in effort estimation and code review. Your foremost task is to determine how many engineering hours were required to implement the provided Git commit. Follow the calibration table and modifiers supplied by the user prompt, be deterministic, and output only the JSON described. In addition, evaluate complexity, risk, seniority and improvement suggestions with professional rigour."""},
                     {"role": "user", "content": prompt}
                 ],
                 "response_format": {"type": "json_object"}
@@ -257,7 +212,7 @@ Your analysis should be technically precise, balanced, and presented in the requ
             
             # Only add temperature for models that support it
             if not self._is_reasoning_model(self.commit_analysis_model):
-                api_params["temperature"] = 0.3  # Lower temperature for more consistent analysis
+                api_params["temperature"] = 0.15  # Lower temperature for higher determinism in hour estimation
 
             # Make API call to OpenAI using the commit-specific model
             response = await self.client.chat.completions.create(**api_params)

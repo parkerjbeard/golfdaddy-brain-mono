@@ -12,8 +12,12 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: str = Field(..., env="SUPABASE_SERVICE_KEY")
     SUPABASE_ANON_KEY: Optional[str] = Field(None, env="SUPABASE_ANON_KEY") # Public key, needed for client-side JS/frontend
 
+    # PostgreSQL Database URL (for SQLAlchemy)
+    DATABASE_URL: str = Field(..., env="DATABASE_URL")
+
     # General App Settings
     TESTING_MODE: bool = Field(False, env="TESTING_MODE") # Added for testing purposes
+    REANALYZE_EXISTING_COMMITS: bool = Field(False, env="REANALYZE_EXISTING_COMMITS") # Controls whether to reprocess commits already in the database
 
     # Documentation Config
     DOCS_REPOSITORY: Optional[str] = Field(None, env="DOCS_REPOSITORY")  # Format: owner/repo
@@ -40,8 +44,8 @@ class Settings(BaseSettings):
     DOCUMENTATION_OPENAI_MODEL: Optional[str] = Field("gpt-4.1-2025-04-14", env="DOCUMENTATION_OPENAI_MODEL")
 
     # Service-specific AI models
-    COMMIT_ANALYSIS_MODEL: Optional[str] = Field("o3-mini-2025-01-31", env="COMMIT_ANALYSIS_MODEL")
-    CODE_QUALITY_MODEL: Optional[str] = Field("gpt-4o-mini", env="CODE_QUALITY_MODEL") # Default to gpt-4o-mini if not set
+    COMMIT_ANALYSIS_MODEL: Optional[str] = Field("o4-mini-2025-04-16", env="COMMIT_ANALYSIS_MODEL")
+    CODE_QUALITY_MODEL: Optional[str] = Field("o4-mini-2025-04-16", env="CODE_QUALITY_MODEL")
 
     # API Gateway Settings
     ENABLE_API_AUTH: bool = Field(True, env="ENABLE_API_AUTH")
@@ -161,6 +165,14 @@ class Settings(BaseSettings):
     @property
     def testing_mode(self): # Added property for convenient access
         return self.TESTING_MODE
+
+    @property
+    def database_url(self):
+        return self.DATABASE_URL
+        
+    @property
+    def reanalyze_existing_commits(self):
+        return self.REANALYZE_EXISTING_COMMITS
 
     class Config:
         env_file = '.env'
