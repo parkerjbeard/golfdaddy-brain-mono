@@ -8,7 +8,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - ./backend/.env
     depends_on:
       db:
         condition: service_healthy
@@ -20,13 +20,20 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+    container_name: golfdaddy_frontend_dev
     ports:
-      - "5173:80"
-    env_file:
-      - frontend/.env
-    depends_on:
-      - backend
+      - "8080:8080"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    environment:
+      - VITE_API_BASE_URL=/api/v1
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+      - VITE_API_KEY=${API_KEY}
+    restart: unless-stopped
     networks:
       - golfdaddy-network
 

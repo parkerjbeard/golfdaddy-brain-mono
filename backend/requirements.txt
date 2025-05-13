@@ -15,3 +15,6 @@ openai
 PyJWT
 pytest-mock
 PyGithub>=2.1.0
+SQLAlchemy
+psycopg2-binary
+asyncpg
