@@ -1,12 +1,13 @@
 import asyncio
 from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
-from supabase import Client
+from supabase import Client, PostgrestAPIResponse
 from app.config.supabase_client import get_supabase_client_safe
 from app.models.user import User, UserRole # Import Pydantic model
 import logging
 import json
 from datetime import datetime # For potential datetime fields in User model
+from app.core.exceptions import DatabaseError, ResourceNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,13 @@ class UserRepository:
     def __init__(self, client: Client = None):
         self._client = client if client is not None else get_supabase_client_safe()
         self._table = "users"
+
+    def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
+        """Helper to log and raise DatabaseError from Supabase errors."""
+        if response and hasattr(response, 'error') and response.error:
+            logger.error(f"{context_message}: Supabase error code {response.error.code if hasattr(response.error, 'code') else 'N/A'} - {response.error.message}")
+            raise DatabaseError(f"{context_message}: {response.error.message}")
+        # Add more specific checks if needed, e.g., for constraint violations like P0001, P0002, etc.
 
     def _process_user_dict_for_supabase(self, data_dict: Dict[str, Any]) -> Dict[str, Any]:
         processed_dict = {}
@@ -40,176 +48,210 @@ class UserRepository:
             
             if 'id' not in user_dict or not user_dict['id']:
                 logger.error("Cannot create user profile without a valid ID linked to auth.users.")
-                return None
+                raise DatabaseError("User profile creation requires a valid ID.") # Or BadRequestError depending on context
 
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).insert(user_dict).execute
             )
             
+            self._handle_supabase_error(response, "Failed to create user profile")
             if response.data:
                 logger.info(f"Successfully created user profile for ID: {response.data[0]['id']}")
                 return User(**response.data[0])
             else:
-                error_message = response.error.message if response.error else "Unknown error"
-                logger.error(f"Failed to create user profile: {error_message} {getattr(response, 'details', '')}")
-                return None
+                # This path should ideally be caught by _handle_supabase_error if error exists
+                logger.error(f"Failed to create user profile: No data returned and no Supabase error object.")
+                raise DatabaseError("Failed to create user profile: No data returned.")
+        except DatabaseError: # Re-raise if already our custom type
+            raise
         except Exception as e:
-            logger.exception(f"Error creating user profile: {e}")
-            return None
+            logger.error(f"Unexpected error creating user profile: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error creating user profile: {str(e)}")
 
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
-        """Retrieves a user by their UUID (which matches auth.users.id)."""
+        """Retrieves a user by their UUID."""
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("id", str(user_id)).maybe_single().execute
             )
+            # For maybe_single(), if no data and no error, it means not found.
+            # response.error might be None and response.data None/empty if not found.
+            # Supabase client typically returns status 406 if maybe_single finds no data.
             if response.data:
                 return User(**response.data)
-            else:
-                # Log Supabase errors if available and not just 'Not Found'
-                if response.error and response.status_code != 406: # 406 means no rows found for maybe_single()
-                     logger.error(f"Error fetching user by ID {user_id}: {response.error.message}")
-                return None
+            elif response.status_code == 406 or (not response.data and not response.error): # Explicit not found
+                logger.info(f"User with ID {user_id} not found.")
+                return None # Services expect None for not found, they will raise ResourceNotFoundError if needed
+            else: # Other errors
+                self._handle_supabase_error(response, f"Error fetching user by ID {user_id}")
+                # If _handle_supabase_error didn't raise (e.g. response.error was None but still no data and not 406)
+                raise DatabaseError(f"Failed to fetch user by ID {user_id} for unknown reason.")
+        except DatabaseError:
+            raise        
         except Exception as e:
-            logger.exception(f"Error getting user by ID {user_id}: {e}")
-            return None
+            logger.error(f"Unexpected error getting user by ID {user_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting user by ID {user_id}: {str(e)}")
 
     async def get_user_by_slack_id(self, slack_id: str) -> Optional[User]:
         """Retrieves a user by their Slack ID."""
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("slack_id", slack_id).maybe_single().execute
             )
             if response.data:
                 return User(**response.data)
-            else:
-                if response.error and response.status_code != 406:
-                    logger.error(f"Error fetching user by Slack ID {slack_id}: {response.error.message}")
+            elif response.status_code == 406 or (not response.data and not response.error):
+                logger.info(f"User with Slack ID {slack_id} not found.")
                 return None
+            else:
+                self._handle_supabase_error(response, f"Error fetching user by Slack ID {slack_id}")
+                raise DatabaseError(f"Failed to fetch user by Slack ID {slack_id} for unknown reason.")
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Error getting user by Slack ID {slack_id}: {e}")
-            return None
+            logger.error(f"Unexpected error getting user by Slack ID {slack_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting user by Slack ID {slack_id}: {str(e)}")
 
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Retrieves a user by their email address."""
         try:
-            logger.info(f"Looking up user by email: {email}")
-            
-            # Use from_ instead of table() to help bypass RLS
-            logger.info(f"Sending request to Supabase users table using from_ method")
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.from_(self._table).select("*").eq("email", email).maybe_single().execute
             )
-            
-            # Log the response status
-            logger.info(f"Supabase response status for email lookup: {getattr(response, 'status_code', 'unknown')}")
-            
-            # Check if response itself is None before trying to access response.data
-            if response is None:
-                logger.error(f"Received None response when fetching user by email {email}")
-                return None
-                
-            if hasattr(response, 'error') and response.error:
-                logger.error(f"Supabase error in email lookup: {response.error.message if hasattr(response.error, 'message') else response.error}")
-                
             if response.data:
-                logger.info(f"Found user with email {email}: {response.data.get('id')}")
-                # Log user fields but redact sensitive information
-                user_fields = {k: v for k, v in response.data.items() if k not in ['password', 'token']}
-                logger.info(f"User data retrieved: {json.dumps(user_fields, default=str)}")
                 return User(**response.data)
-            else:
-                if response.error and response.status_code != 406:  # 406 means no rows found
-                    logger.error(f"Error fetching user by email {email}: {response.error.message}")
-                logger.warning(f"No user found with email {email}")
+            elif response.status_code == 406 or (not response.data and not response.error):
+                logger.info(f"User with email {email} not found.")
                 return None
+            else:
+                self._handle_supabase_error(response, f"Error fetching user by email {email}")
+                raise DatabaseError(f"Failed to fetch user by email {email} for unknown reason.")
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Error getting user by email {email}: {e}")
-            return None
+            logger.error(f"Unexpected error getting user by email {email}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting user by email {email}: {str(e)}")
+
+    async def get_user_by_github_username(self, github_username: str) -> Optional[User]:
+        """Retrieves a user by their GitHub username."""
+        try:
+            response: PostgrestAPIResponse = await asyncio.to_thread(
+                self._client.table(self._table).select("*").eq("github_username", github_username).maybe_single().execute
+            )
+            if response.data:
+                return User(**response.data)
+            elif response.status_code == 406 or (not response.data and not response.error):
+                logger.info(f"User with GitHub username {github_username} not found.")
+                return None
+            else:
+                self._handle_supabase_error(response, f"Error fetching user by GitHub username {github_username}")
+                raise DatabaseError(f"Failed to fetch user by GitHub username {github_username} for unknown reason.")
+        except DatabaseError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error getting user by GitHub username {github_username}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting user by GitHub username {github_username}: {str(e)}")
 
     async def list_users_by_role(self, role: UserRole) -> List[User]:
         """Lists all users with a specific role."""
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("role", role.value).execute
             )
-            if response.data:
-                return [User(**item) for item in response.data]
-            else:
-                if response.error:
-                    logger.error(f"Error listing users by role {role.value}: {response.error.message}")
-                return []
+            self._handle_supabase_error(response, f"Error listing users by role {role.value}")
+            return [User(**item) for item in response.data] if response.data else []
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Error listing users by role {role.value}: {e}")
-            return []
+            logger.error(f"Unexpected error listing users by role {role.value}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error listing users by role {role.value}: {str(e)}")
 
     async def list_all_users(self, skip: int = 0, limit: int = 100) -> Tuple[List[User], int]:
         """Lists all users in the profile table with pagination."""
         try:
-            # First, get the total count of users that match the query (without limit/offset)
-            # For a simple list all, this is the total in the table. 
-            # If there were filters, the count query would need to match those filters.
-            count_response = await asyncio.to_thread(
+            count_response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*", count='exact').limit(0).execute
-                # Using limit(0) with count='exact' is a common way to get total count without data
             )
+            self._handle_supabase_error(count_response, "Error fetching total user count")
             total_count = count_response.count if count_response.count is not None else 0
 
-            # Then, get the paginated data
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").range(skip, skip + limit - 1).execute
-                # Supabase range is inclusive: range(from, to)
             )
-            
-            if response.data:
-                users = [User(**item) for item in response.data]
-                return users, total_count
-            else:
-                if response.error:
-                    logger.error(f"Error listing all users: {response.error.message}")
-                return [], total_count # Return 0 for count if error or no data and count failed
+            self._handle_supabase_error(response, f"Error listing all users with skip={skip}, limit={limit}")
+            users = [User(**item) for item in response.data] if response.data else []
+            return users, total_count
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Error listing all users: {e}")
-            return [], 0
+            logger.error(f"Unexpected error listing all users: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error listing all users: {str(e)}")
 
     async def update_user(self, user_id: UUID, update_data: Dict[str, Any]) -> Optional[User]:
-        """Updates a user's profile data.
-           `update_data` should be a dictionary of fields to update.
-        """
+        """Updates a user's profile data."""
         try:
-            # Optional: Validate update_data against User model fields if needed
-            # We don't allow changing the primary key (id)
             if 'id' in update_data:
                 del update_data['id']
-            
-            processed_update_data = self._process_user_dict_for_supabase(update_data)
+            if not update_data: # Check if update_data is empty
+                logger.warning(f"Update_user called with empty data for user_id {user_id}")
+                # Optionally, fetch and return the user if no changes are to be made, or raise BadRequestError
+                # For now, let it proceed, Supabase might handle empty update gracefully or error.
+                # However, it is better to handle it here.
+                # Let's assume an empty update should not proceed to DB and is not an error, but a no-op.
+                # If it should be an error, raise BadRequestError("No update data provided.")
+                # To maintain original behavior of potentially returning existing user, we'd fetch it.
+                # For now, if we want to prevent empty updates, we'd raise or return None early.
+                # Let's return the existing user if update_data is empty (treat as no-op).
+                return await self.get_user_by_id(user_id)
 
-            response = await asyncio.to_thread(
+            processed_update_data = self._process_user_dict_for_supabase(update_data)
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).update(processed_update_data).eq("id", str(user_id)).execute
             )
+            
+            # Check if user was found and updated. Response.data will contain updated record(s).
+            # If response.data is empty, it could mean user_id did not match or another issue.
             if response.data:
                 logger.info(f"Successfully updated user profile for ID: {user_id}")
                 return User(**response.data[0])
             else:
-                error_message = response.error.message if response.error else "Unknown error or user not found"
-                logger.error(f"Failed to update user profile {user_id}: {error_message} {getattr(response, 'details', '')}")
-                return None
+                # If no data, check if it was a "not found" scenario or other error
+                # First, check if the user actually exists. If not, ResourceNotFoundError.
+                existing_user = await self.get_user_by_id(user_id) # This returns None if not found
+                if not existing_user:
+                    logger.error(f"Failed to update user profile: User with ID {user_id} not found.")
+                    raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
+                
+                # If user exists but update failed for other reason (e.g. Supabase error not caught by `error` attribute)
+                self._handle_supabase_error(response, f"Failed to update user profile {user_id}")
+                logger.error(f"Failed to update user profile {user_id}: No data returned and no specific Supabase error attribute. User may exist but update failed.")
+                raise DatabaseError(f"Failed to update user profile {user_id}: Update operation returned no data.")
+        except (DatabaseError, ResourceNotFoundError):
+            raise
         except Exception as e:
-            logger.exception(f"Error updating user profile {user_id}: {e}")
-            return None
+            logger.error(f"Unexpected error updating user profile {user_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error updating user profile {user_id}: {str(e)}")
 
     async def delete_user(self, user_id: UUID) -> bool:
-        """Deletes a user's profile record. Does not delete the auth.users entry."""
+        """Deletes a user's profile record. Returns True if successful."""
         try:
-            response = await asyncio.to_thread(
+            # Check if user exists before attempting delete to provide ResourceNotFoundError if applicable
+            existing_user = await self.get_user_by_id(user_id) # Relies on get_user_by_id returning None if not found
+            if not existing_user:
+                logger.warning(f"Attempted to delete non-existent user profile with ID {user_id}")
+                raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
+
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).delete().eq("id", str(user_id)).execute
             )
-            # Check if deletion was successful (response.data might be empty on success)
-            if response.error:
-                 logger.error(f"Failed to delete user profile {user_id}: {response.error.message} {getattr(response, 'details', '')}")
-                 return False
-            logger.info(f"Successfully deleted user profile for ID: {user_id}. Status: {response.status_code}")
+            self._handle_supabase_error(response, f"Failed to delete user profile {user_id}")
+            # Successful Supabase delete often returns an empty data list but no error.
+            # If response.data is not empty, it might contain the deleted record(s) depending on client/settings.
+            # The primary check is for absence of error.
+            logger.info(f"Successfully deleted user profile for ID: {user_id}.")
             return True
+        except (DatabaseError, ResourceNotFoundError):
+            raise
         except Exception as e:
-            logger.exception(f"Error deleting user profile {user_id}: {e}")
-            return False
+            logger.error(f"Unexpected error deleting user profile {user_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error deleting user profile {user_id}: {str(e)}")

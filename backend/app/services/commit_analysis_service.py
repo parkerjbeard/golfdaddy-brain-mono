@@ -20,6 +20,16 @@ from app.models.daily_report import DailyReport
 # TODO: Import DailyReportService if direct interaction is needed, or pass data through other means
 # from app.services.daily_report_service import DailyReportService 
 from app.config.settings import settings
+from app.core.exceptions import ( # New imports for context and future use
+    AppExceptionBase,
+    ResourceNotFoundError,
+    PermissionDeniedError,
+    AIIntegrationError,
+    DatabaseError,
+    ConfigurationError,
+    ExternalServiceError,
+    BadRequestError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +139,7 @@ class CommitAnalysisService:
                     else:
                         logger.warning(f"❌ Could not fetch diff from GitHub")
                 except Exception as github_err:
-                    logger.error(f"❌ GitHub error: {github_err}")
+                    logger.error(f"❌ GitHub error during diff fetch for commit {commit_hash} on repo {repository}: {github_err}", exc_info=True)
 
             # Prepare the diff content for AI analysis
             diff_content = ""
@@ -204,7 +214,7 @@ class CommitAnalysisService:
                     else:
                         logger.info(f"No EOD report found for user {author_id_for_eod} on {commit_timestamp_for_eod.date()}")
                 except Exception as e_eod:
-                    logger.error(f"Error fetching EOD report: {e_eod}")
+                    logger.error(f"Error fetching EOD report for user {author_id_for_eod} on {commit_timestamp_for_eod.date() if commit_timestamp_for_eod else 'N/A'}: {e_eod}", exc_info=True)
 
             # TODO: Pass commit diff and message to the new AI code quality analysis method.
             # Assuming ai_integration.analyze_commit_code_quality is an async method
@@ -223,7 +233,7 @@ class CommitAnalysisService:
 
 
             except Exception as e_cqa:
-                logger.error(f"Error during AI code quality analysis: {e_cqa}")
+                logger.error(f"Error during AI code quality analysis for commit {commit_hash}: {e_cqa}", exc_info=True)
                 code_quality_analysis = {"error": str(e_cqa)}
             
             # TODO: Compare commit analysis (lines, files, complexity from `analysis_result`) 
@@ -384,37 +394,62 @@ class CommitAnalysisService:
             self._log_separator(f"ERROR IN ANALYSIS: {commit_hash}")
             return None
     
-    def _map_commit_author(self, author_data: Optional[Dict[str, str]]) -> Optional[UUID]:
-        """Tries to map commit author info (email, name) to an internal user ID.
-        
+    async def _map_commit_author(self, author_data: Optional[Dict[str, Any]]) -> Optional[UUID]:
+        """Tries to map commit author info (GitHub username, email, name) to an internal user ID.
+        Prioritizes GitHub username, then email.
+        This method is more of a fallback and does NOT create new users.
         Args:
-            author_data: Dictionary containing author information
+            author_data: Dictionary containing author information (e.g., from commit_data.get("author"))
+                         Expected keys: 'login' (for github_username), 'email'.
             
         Returns:
-            The internal user ID or None if mapping fails
+            The internal user ID (UUID) or None if mapping fails.
         """
         if not author_data:
+            logger.debug("_map_commit_author: No author_data provided.")
             return None
+
+        user: Optional[User] = None
+
+        # 1. Try to map by GitHub username (author_data might contain 'login' from GitHub webhook)
+        github_username = author_data.get("login") or author_data.get("github_username")
+        if github_username:
+            try:
+                logger.info(f"_map_commit_author: Attempting to find user by GitHub username: {github_username}")
+                user = await self.user_repository.get_user_by_github_username(github_username)
+                if user:
+                    logger.info(f"_map_commit_author: Found user {user.id} by GitHub username: {github_username}")
+                    return user.id
+            except Exception as e:
+                logger.error(f"_map_commit_author: Error finding user by GitHub username '{github_username}': {e}", exc_info=True)
         
-        # Prioritize mapping by email if available
+        # 2. Try to map by email if not found by GitHub username
         email = author_data.get("email")
         if email:
-            # This requires the users table to store email, which wasn't in the final schema.
-            # Alternative: Map by Slack ID if GitHub email matches Slack email, or use name.
-            # For now, let's assume we can't map reliably by email.
-            pass 
-        
-        # Fallback: Map by name or other available identifiers (e.g., GitHub username if stored)
-        # This requires a robust mapping strategy, possibly involving fuzzy matching or a lookup table.
-        # Example placeholder: Lookup by Slack ID if available
-        slack_id = author_data.get("slack_id") # If available from GitHub event somehow
-        if slack_id:
-            user = self.user_repository.get_user_by_slack_id(slack_id)
-            if user:
-                return user.id
+            try:
+                logger.info(f"_map_commit_author: Attempting to find user by email: {email}")
+                user = await self.user_repository.get_user_by_email(email)
+                if user:
+                    logger.info(f"_map_commit_author: Found user {user.id} by email: {email}")
+                    # If found by email, and we have a github_username from author_data, 
+                    # consider updating the user record if its github_username is not set.
+                    if not user.github_username and github_username:
+                        logger.info(f"_map_commit_author: User {user.id} found by email, has no GitHub username. Updating with: {github_username}")
+                        await self.user_repository.update_user(user.id, {"github_username": github_username})
+                        # No need to re-fetch, just return the ID.
+                    return user.id
+            except Exception as e:
+                logger.error(f"_map_commit_author: Error finding user by email '{email}': {e}", exc_info=True)
 
-        logger.debug(f"Author mapping fallback needed for: {author_data}")
-        # Cannot map reliably with current info
+        # Fallback for other identifiers if necessary (e.g., Slack ID if it were present in author_data)
+        # slack_id = author_data.get("slack_id") 
+        # if slack_id:
+        #     user = await self.user_repository.get_user_by_slack_id(slack_id) # Note: get_user_by_slack_id is async
+        #     if user:
+        #         logger.info(f"_map_commit_author: Found user {user.id} by Slack ID: {slack_id}")
+        #         return user.id
+
+        logger.warning(f"_map_commit_author: Could not map author to internal user using provided data: {author_data}")
         return None
     
     async def batch_analyze_commits(self, commits_payload: List[Dict[str, Any]]) -> List[Optional[Commit]]:
@@ -449,47 +484,81 @@ class CommitAnalysisService:
         return results
 
     async def _find_user_for_commit(self, payload: CommitPayload) -> Optional[User]:
-        """Attempts to find the internal user associated with the commit author."""
-        # Prioritize finding by email, then by GitHub username if available
+        """Attempts to find the internal user associated with the commit author.
+        Prioritizes GitHub username, then email. If no user is found, creates a new one.
+        """
         user = None
         logger.info(f"Finding user for commit {payload.commit_hash}")
         logger.info(f"Author info: email={payload.author_email}, github_username={payload.author_github_username}")
+
+        # 1. Try to find user by GitHub username
+        if payload.author_github_username:
+            try:
+                logger.info(f"Searching for user by GitHub username: {payload.author_github_username}")
+                user = await self.user_repository.get_user_by_github_username(payload.author_github_username)
+                if user:
+                    logger.info(f"✓ Found user {user.id} by GitHub username {payload.author_github_username}")
+                    return user
+                else:
+                    logger.info(f"No user found with GitHub username {payload.author_github_username}")
+            except Exception as e:
+                logger.error(f"❌ Error finding user by GitHub username '{payload.author_github_username}': {e}", exc_info=True)
         
+        # 2. If not found by GitHub username, try by email
         if payload.author_email:
             try:
                 logger.info(f"Searching for user by email: {payload.author_email}")
                 user = await self.user_repository.get_user_by_email(payload.author_email)
                 if user:
-                    logger.info(f"✓ Found user: {user.id}")
-                    # Log user details for debugging (no sensitive data)
-                    user_info = {
-                        "id": str(user.id),
-                        "role": user.role,
-                        "team": user.team
-                    }
-                    logger.info(f"User details: {json.dumps(user_info, default=str)}")
+                    logger.info(f"✓ Found user {user.id} by email {payload.author_email}")
+                    # Optionally, update this user's github_username if it's empty and payload.author_github_username is available
+                    if not user.github_username and payload.author_github_username:
+                        logger.info(f"User {user.id} found by email, updating with GitHub username: {payload.author_github_username}")
+                        updated_user = await self.user_repository.update_user(user.id, {"github_username": payload.author_github_username})
+                        if updated_user:
+                            return updated_user
+                        else:
+                            logger.warning(f"Failed to update user {user.id} with GitHub username.")
                     return user
                 else:
                     logger.warning(f"⚠ No user found with email {payload.author_email}")
-            except AttributeError as ae:
-                logger.error(f"❌ User repository error: {ae}")
+            except AttributeError as ae: # Specific error for repository issues
+                logger.error(f"❌ User repository attribute error while searching by email '{payload.author_email}': {ae}", exc_info=True)
             except Exception as e:
-                logger.error(f"❌ Error finding user by email: {e}")
-        
-        # Add logic here to find user by GitHub username if email lookup fails and username is provided
-        # This might require a 'github_username' field on your User model
-        if payload.author_github_username:
-            logger.info(f"Trying GitHub username: {payload.author_github_username}")
-            # Currently commented out as feature may not be implemented
-            # try:
-            #     user = await self.user_repository.get_user_by_github_username(payload.author_github_username)
-            #     if user:
-            #         logger.info(f"Found user {user.id} by GitHub username {payload.author_github_username}...")
-            #         return user
-            # except Exception as e:
-            #     logger.error(f"Error finding user by GitHub username: {e}")
+                logger.error(f"❌ Error finding user by email '{payload.author_email}': {e}", exc_info=True)
 
-        logger.warning(f"⚠ Could not map commit author to internal user")
+        # 3. If no user is found by GitHub username or email, create a new user
+        # This part fulfills the requirement: "If a user with a github username is not registered, 
+        # it should show up as a new user in the user database..."
+        if payload.author_github_username: # Create user only if github_username is present
+            logger.info(f"No existing user found. Attempting to create a new user for GitHub username: {payload.author_github_username}")
+            try:
+                from uuid import uuid4 # For generating new user ID
+                from app.models.user import UserRole # For default role
+                
+                new_user_data = User(
+                    id=uuid4(), # Generate a new UUID for the user
+                    name=payload.author_name or payload.author_github_username, # Use provided name or fallback to username
+                    email=payload.author_email if payload.author_email else None,
+                    github_username=payload.author_github_username,
+                    role=UserRole.USER, # Default role for new users
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow(),
+                    is_active=True # New users are active by default
+                    # Other fields like avatar_url, team, etc., can be None or set to defaults
+                )
+                
+                created_user = await self.user_repository.create_user(new_user_data)
+                
+                if created_user:
+                    logger.info(f"✓ Successfully created new user {created_user.id} for GitHub username {created_user.github_username}")
+                    return created_user
+                else:
+                    logger.error(f"❌ Failed to create new user for GitHub username {payload.author_github_username}")
+            except Exception as e:
+                logger.exception(f"❌ Exception during new user creation for GitHub username {payload.author_github_username}: {e}")
+        
+        logger.warning(f"⚠ Could not map or create commit author to internal user for commit {payload.commit_hash}. GitHub username: {payload.author_github_username}, Email: {payload.author_email}")
         return None
     
     async def process_commit(self, commit_data_input: Union[CommitPayload, Dict[str, Any]], scan_docs: Optional[bool] = None) -> Optional[Commit]:
@@ -620,7 +689,7 @@ class CommitAnalysisService:
                 try:
                     self.docs_update_service = DocumentationUpdateService()
                 except Exception as e:
-                    logger.error(f"❌ Could not initialize DocumentationUpdateService: {e}")
+                    logger.error(f"❌ Could not initialize DocumentationUpdateService: {e}", exc_info=True)
                     return
             
             logger.info(f"Scanning documentation in {docs_repo} for potential updates...")

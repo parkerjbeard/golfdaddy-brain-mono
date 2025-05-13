@@ -2,6 +2,7 @@
 
 // Matches backend UserRole enum
 export enum UserRole {
+  USER = "USER",
   VIEWER = "VIEWER",
   DEVELOPER = "DEVELOPER",
   LEAD = "LEAD",
