@@ -8,6 +8,7 @@ from app.models.user import User, UserRole # Main User model
 from app.repositories.user_repository import UserRepository
 from app.auth.dependencies import get_admin_user, get_current_user # Assuming get_current_user might be needed for non-admin user info
 from pydantic import BaseModel, EmailStr, HttpUrl
+from app.core.exceptions import ResourceNotFoundError, BadRequestError, DatabaseError # New import
 
 router = APIRouter(
     prefix="/users",
@@ -96,11 +97,11 @@ async def update_user_admin(
     """Update a user's details. Admin access required."""
     existing_user = await user_repo.get_user_by_id(user_id)
     if not existing_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
 
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No update data provided")
+        raise BadRequestError(message="No update data provided")
 
     # Handle email update carefully: Supabase auth email is separate from public.users email.
     # Updating email here only updates public.users.email. 
@@ -116,7 +117,7 @@ async def update_user_admin(
         # Re-fetch to be sure or check repo logic for update_user return value
         updated_user = await user_repo.get_user_by_id(user_id) 
         if not updated_user:
-             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update user or re-fetch after update.")
+             raise DatabaseError(message="Failed to update user or re-fetch after update.")
 
     return UserResponse.model_validate(updated_user)
 

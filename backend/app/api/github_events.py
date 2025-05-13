@@ -9,6 +9,7 @@ from app.schemas.github_event import CommitPayload
 from app.services.commit_analysis_service import CommitAnalysisService
 from app.integrations.github_integration import GitHubIntegration
 from supabase import Client
+from app.core.exceptions import AuthenticationError, DatabaseError, ExternalServiceError, AIIntegrationError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/integrations/github", tags=["Integrations - GitHub"])
@@ -46,10 +47,7 @@ async def get_api_key(request: Request, api_key_header: str = Security(api_key_h
               return None # Indicate no key was validated but processing can continue
          else:
               logger.error(f"API key header '{actual_header_name}' is missing")
-              raise HTTPException(
-                  status_code=status.HTTP_401_UNAUTHORIZED,
-                  detail=f"API key header '{actual_header_name}' is missing",
-              )
+              raise AuthenticationError(message=f"API key header '{actual_header_name}' is missing")
 
     # Debug - encode both values for comparison
     received_encoded = base64.b64encode(received_value.encode()).decode() if received_value else None
@@ -65,10 +63,7 @@ async def get_api_key(request: Request, api_key_header: str = Security(api_key_h
         # Log safely - show only a few chars of the received incorrect key
         safe_received = received_value[:5] + '...' if received_value else 'None'
         logger.error(f"Invalid API key received. Value starting with: {safe_received}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key",
-        )
+        raise AuthenticationError(message="Invalid API Key")
 
 @router.post("/commit", status_code=status.HTTP_202_ACCEPTED)
 async def handle_commit_event(
@@ -97,13 +92,13 @@ async def handle_commit_event(
     # Check API key (already done by dependency, but ensures it was valid if required)
     if settings.enable_api_auth and api_key is None:
          # This case should ideally be caught by the dependency, but double-check
-         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+         raise AuthenticationError(message="Unauthorized")
 
     try:
         # Check if we got a valid session
         if db_session is None:
             logger.error("DB session is None from dependency.")
-            raise HTTPException(status_code=500, detail="Database session unavailable")
+            raise DatabaseError(message="Database session unavailable")
 
         # Initialize service with the obtained session
         commit_analysis_service = CommitAnalysisService(db_session)
@@ -119,14 +114,19 @@ async def handle_commit_event(
             logger.info(f"Successfully processed commit {payload.commit_hash}. AI analysis scheduled/completed.")
             return {"message": "Commit received and processing started/completed", "commit_hash": payload.commit_hash}
         else:
-            # Logged within the service, return a generic server error
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process commit")
+            # Logged within the service, return a more specific error
+            logger.error(f"process_commit returned falsy for commit {payload.commit_hash}. Indicates failure in service.")
+            raise AIIntegrationError(message="Failed to process commit due to an issue in the analysis service.")
     
-    except HTTPException as http_exc: # Re-raise HTTP exceptions
+    except HTTPException as http_exc: # Re-raise HTTP exceptions from FastAPI/dependencies
         raise http_exc
+    except AuthenticationError as auth_exc: # Re-raise our custom auth errors
+        raise auth_exc
+    except (DatabaseError, AIIntegrationError, ExternalServiceError) as app_exc: # Re-raise other known app errors
+        raise app_exc
     except Exception as e:
         logger.error(f"Unhandled exception processing commit {payload.commit_hash}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error processing commit: {e}")
+        raise AIIntegrationError(message=f"An unexpected error occurred while processing commit: {str(e)}")
 
 @router.get("/compare/{repository}/{base}/{head}", status_code=status.HTTP_200_OK)
 async def compare_commits(
@@ -151,7 +151,7 @@ async def compare_commits(
 
     # Check API key (already done by dependency, but ensures it was valid if required)
     if settings.enable_api_auth and api_key is None:
-         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+         raise AuthenticationError(message="Unauthorized")
 
     try:
         # Initialize GitHub integration
@@ -164,14 +164,14 @@ async def compare_commits(
             logger.info(f"Successfully compared commits {base}...{head}")
             return comparison_data
         else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to compare commits"
-            )
+            raise ExternalServiceError(service_name="GitHub", original_message="Failed to compare commits, the GitHub integration returned no data.")
     
+    except HTTPException as http_exc: # Re-raise HTTP exceptions
+        raise http_exc
+    except AuthenticationError as auth_exc: # Re-raise our custom auth errors
+        raise auth_exc
+    except ExternalServiceError as ext_exc: # Re-raise our custom external service errors
+        raise ext_exc        
     except Exception as e:
         logger.error(f"Error comparing commits {base}...{head}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error comparing commits: {str(e)}"
-        ) 
+        raise ExternalServiceError(service_name="GitHub", original_message=f"Error comparing commits: {str(e)}") 

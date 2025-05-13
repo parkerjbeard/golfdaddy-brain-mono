@@ -24,12 +24,20 @@ from app.services.notification_service import NotificationService
 from app.middleware.api_key_auth import ApiKeyMiddleware
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_metrics import RequestMetricsMiddleware
+from app.core.error_handlers import add_exception_handlers
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
 )
+root_logger = logging.getLogger()
+if not root_logger.handlers:
+    for handler in logging.getLogger("uvicorn.error").handlers:
+        root_logger.addHandler(handler)
+    root_logger.setLevel(logging.getLogger("uvicorn.error").level)
+
 logger = logging.getLogger(__name__)
 
 # Create app instance
@@ -72,14 +80,8 @@ app.include_router(github_router)
 app.include_router(daily_reports_router)
 app.include_router(api_v1_router, prefix="/api/v1")
 
-# Error handling
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request, exc):
-    logger.error(f"Validation error: {exc}")
-    return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": exc.errors()},
-    )
+# Register custom exception handlers
+add_exception_handlers(app)
 
 # Health check endpoint
 @app.get("/health", tags=["status"])

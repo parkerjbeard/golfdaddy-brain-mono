@@ -1,8 +1,9 @@
 import time
-from typing import Dict, Tuple, Callable, Optional
-from fastapi import Request, Response, HTTPException
+from typing import Dict, Tuple, Callable, Optional, List
+from fastapi import Request, Response, HTTPException, status
 import logging
 from starlette.middleware.base import BaseHTTPMiddleware
+from app.core.exceptions import RateLimitExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         rate_limit_per_minute: int = 60,
         api_key_header: str = "X-API-Key",
         api_keys: Optional[Dict[str, int]] = None,
-        exclude_paths: Optional[list] = None
+        exclude_paths: Optional[List[str]] = None
     ):
         super().__init__(app)
         self.rate_limit_per_minute = rate_limit_per_minute
@@ -57,12 +58,14 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         # If rate limit exceeded, return 429 with headers
         if not is_allowed:
             logger.warning(f"Rate limit exceeded for {identifier} on {request.url.path}")
-            error_response = Response(
-                content="Rate limit exceeded. Please try again later.",
-                status_code=429,
-                headers=headers
+            # Add rate limit headers to the exception context if needed by a specialized handler
+            # For now, the standard RateLimitExceededError will be raised.
+            # The headers will still be set on the *next* successful response if the client retries.
+            raise RateLimitExceededError(
+                message="Rate limit exceeded. Please try again later."
+                # Optionally, could add headers here if the exception/handler supported it:
+                # headers=headers 
             )
-            return error_response
             
         # Rate limit not exceeded, proceed with request
         response = await call_next(request)

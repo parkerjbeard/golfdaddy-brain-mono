@@ -5,6 +5,10 @@ from pydantic import BaseModel, Field
 from app.config.supabase_client import get_supabase_client
 from app.services.doc_generation_service import DocGenerationService
 from supabase import Client
+from app.core.exceptions import AIIntegrationError, ExternalServiceError, ResourceNotFoundError, DatabaseError
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/docs", tags=["documentation"])
 
@@ -56,7 +60,8 @@ def generate_documentation(
     
     # Check for errors
     if "error" in generated_doc:
-        raise HTTPException(status_code=500, detail=generated_doc["error"])
+        logger.error(f"AI documentation generation failed for task {request.related_task_id}: {generated_doc['error']}")
+        raise AIIntegrationError(message=generated_doc["error"])
     
     # Save to Git repository if requested
     git_url = None
@@ -86,7 +91,9 @@ def generate_documentation(
                 
         except Exception as e:
             # Log the error but continue - we still have the generated doc
-            print(f"Error saving to Git repository: {str(e)}")
+            logger.error(f"Error saving documentation {generated_doc.get('doc_id')} to Git repository {request.git_repo_name}/{request.git_path}: {str(e)}", exc_info=True)
+            # Optionally, could raise ExternalServiceError here if Git save is critical
+            # raise ExternalServiceError(service_name="Git", original_message=f"Failed to save to {request.git_repo_name}/{request.git_path}: {str(e)}")
     
     # Return response
     return {
@@ -110,12 +117,27 @@ def iterate_documentation(
     # Initialize service
     doc_service = DocGenerationService(supabase)
     
+    # First, try to fetch the existing document to ensure it exists
+    existing_doc = doc_service.get_documentation_by_id(request.doc_id)
+    if not existing_doc:
+        logger.warning(f"Attempted to iterate on non-existent document ID: {request.doc_id}")
+        raise ResourceNotFoundError(resource_name="Document", resource_id=request.doc_id)
+
     # Handle iteration
-    updated_doc = doc_service.handle_iteration(
-        doc_id=request.doc_id,
-        feedback=request.feedback
-    )
-    
+    try:
+        updated_doc = doc_service.handle_iteration(
+            doc_id=request.doc_id,
+            feedback=request.feedback
+        )
+        if "error" in updated_doc:
+            logger.error(f"AI documentation iteration failed for doc {request.doc_id}: {updated_doc['error']}")
+            raise AIIntegrationError(message=updated_doc["error"])
+
+    except Exception as e:
+        logger.exception(f"Unexpected error during documentation iteration for doc {request.doc_id}: {str(e)}")
+        # This could be a more specific error from the service, or a generic one if not caught by service
+        raise AIIntegrationError(message=f"Failed to iterate on document: {str(e)}")
+
     # Prepare response
     return {
         "doc_id": updated_doc.get("doc_id"),
@@ -137,10 +159,12 @@ def get_documentation(
     In the current implementation, this is a placeholder.
     """
     # This would typically fetch from a database
-    # For now, return a placeholder
-    return {
-        "doc_id": doc_id,
-        "title": "Requested Documentation",
-        "content": "This is a placeholder. In a real implementation, this would fetch the document from storage.",
-        "generated_at": "2023-01-01T00:00:00Z"
-    }
+    doc_service = DocGenerationService(supabase)
+    document = doc_service.get_documentation_by_id(doc_id)
+    
+    if not document:
+        logger.warning(f"Document with ID {doc_id} not found.")
+        raise ResourceNotFoundError(resource_name="Document", resource_id=doc_id)
+
+    # Assuming document is a dictionary or Pydantic model that can be returned
+    return document

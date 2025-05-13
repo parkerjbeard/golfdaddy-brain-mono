@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone # Ensure timezone is im
 from app.services.kpi_service import KpiService
 from app.models.user import User, UserRole # For dependency injection and auth roles
 # from app.services.auth_service import get_current_active_user # Placeholder for auth
+from app.core.exceptions import PermissionDeniedError, BadRequestError, ResourceNotFoundError, DatabaseError # New import
 import logging # For logging
 
 logger = logging.getLogger(__name__) # For logging
@@ -31,10 +32,10 @@ async def get_user_kpi_summary(
     # Authorization check placeholder:
     # Example: Assuming current_user has roles and a way to check team membership
     # if not current_user or (current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]):
-    #     raise HTTPException(status_code=403, detail="Not authorized to view this KPI summary")
+    #     raise PermissionDeniedError(message="Not authorized to view this KPI summary")
     # if current_user.role == UserRole.MANAGER and not kpi_service.is_user_in_manager_team(current_user.id, user_id):
     #     # (Requires KpiService or another service to have such a method)
-    #     raise HTTPException(status_code=403, detail="Not authorized: user is not in your team")
+    #     raise PermissionDeniedError(message="Not authorized: user is not in your team")
 
     try:
         # The KpiService.get_user_performance_summary expects period_days.
@@ -46,43 +47,39 @@ async def get_user_kpi_summary(
         if startDate:
             summary_end_date_naive = endDate if endDate else datetime.now(timezone.utc).date()
             if startDate > summary_end_date_naive:
-                raise HTTPException(status_code=400, detail="Start date cannot be after end date.")
+                raise BadRequestError(message="Start date cannot be after end date.")
             
             actual_period_days = (summary_end_date_naive - startDate).days + 1
             if actual_period_days <= 0:
-                 raise HTTPException(status_code=400, detail="Invalid date range resulting in non-positive period days.")
+                 raise BadRequestError(message="Invalid date range resulting in non-positive period days.")
         elif periodDays:
             actual_period_days = periodDays
         else:
             # This case should be prevented by FastAPI/Pydantic if periodDays has a default and is required.
             # However, if periodDays was Optional without a default, this would be necessary.
             logger.error("KPI user-summary endpoint called without periodDays or startDate.")
-            raise HTTPException(status_code=400, detail="You must provide either periodDays or startDate.")
+            raise BadRequestError(message="You must provide either periodDays or startDate.")
 
         logger.info(f"Fetching KPI summary for user {user_id} for {actual_period_days} days.")
         summary_data = await kpi_service.get_user_performance_summary(user_id, period_days=actual_period_days)
 
-        if not summary_data:
-            # KpiService.get_user_performance_summary currently always returns a dict,
-            # but this handles if it were to change to return None (e.g., if user doesn't exist in underlying calls).
-            logger.warning(f"No KPI summary data found for user {user_id} for the period.")
-            # Depending on desired behavior, could return 404 or an empty summary structure.
-            # For now, let service return its structure; if it means "user not found", service should handle that.
-            # This endpoint should ideally return 404 if the user_id itself is invalid/not found by kpi_service.
-            # Let's assume kpi_service would raise an error or return specific structure for not found.            
-            # For now, if it's empty but valid, it will pass through.
-            pass # Allow empty but valid structure through
+        if summary_data is None: # Assuming service returns None if user_id not found or no data
+            logger.warning(f"No KPI summary data found for user {user_id} for the period. User might not exist or has no data.")
+            # This could indicate the user_id itself was not found by the service.
+            raise ResourceNotFoundError(resource_name="User KPI Summary", resource_id=str(user_id))
             
         return summary_data
         
-    except HTTPException: # Re-raise HTTPExceptions from our logic or underlying services
+    except HTTPException: # Re-raise HTTPExceptions from FastAPI/Pydantic or explicitly raised custom ones that inherit from it.
         raise
-    except ValueError as ve: # Catch specific errors like date parsing or bad values
-        logger.warning(f"ValueError during KPI summary for user {user_id}: {ve}")
-        raise HTTPException(status_code=400, detail=str(ve))
+    except (ResourceNotFoundError, BadRequestError, PermissionDeniedError) as app_base_exc: # Re-raise our known app exceptions
+        raise app_base_exc        
+    except ValueError as ve: # Catch specific errors like date parsing or bad values from service if not caught by Pydantic
+        logger.warning(f"ValueError during KPI summary for user {user_id}: {ve}", exc_info=True)
+        raise BadRequestError(message=f"Invalid input or data for KPI summary: {str(ve)}")
     except Exception as e:
         logger.error(f"Unexpected error fetching KPI summary for user {user_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred.")
+        raise DatabaseError(message=f"An unexpected error occurred while fetching KPI summary.")
 
 # TODO: Consider adding a main router in backend/app/api/v1/api.py to include this kpi_router
 # e.g.:

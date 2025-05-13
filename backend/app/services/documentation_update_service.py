@@ -4,12 +4,18 @@ import json
 import os
 from datetime import datetime
 
-from openai import OpenAI
-from github import Github
+from openai import OpenAI, APIError as OpenAIAPIError
+from github import Github, GithubException
 from github.Repository import Repository
 from github.ContentFile import ContentFile
 
 from app.config.settings import settings
+from app.core.exceptions import (
+    ConfigurationError,
+    ExternalServiceError,
+    AIIntegrationError,
+    AppExceptionBase
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,16 +26,21 @@ class DocumentationUpdateService:
         """Initialize the documentation update service."""
         self.github_token = settings.GITHUB_TOKEN
         self.openai_api_key = settings.OPENAI_API_KEY
-        self.openai_client = OpenAI(api_key=self.openai_api_key)
-        self.openai_model = settings.DOCUMENTATION_OPENAI_MODEL
         
         if not self.github_token:
-            raise ValueError("GitHub token not configured in settings")
+            raise ConfigurationError("GitHub token not configured in settings. Documentation features will be disabled.")
         
         if not self.openai_api_key:
-            raise ValueError("OpenAI API key not configured in settings")
+            raise ConfigurationError("OpenAI API key not configured in settings. Documentation features will be disabled.")
         
-        self.github_client = Github(self.github_token)
+        try:
+            self.openai_client = OpenAI(api_key=self.openai_api_key)
+            self.github_client = Github(self.github_token)
+        except Exception as e:
+            logger.error(f"Failed to initialize clients for DocumentationUpdateService: {e}", exc_info=True)
+            raise ConfigurationError(f"Failed to initialize clients: {e}")
+
+        self.openai_model = settings.DOCUMENTATION_OPENAI_MODEL
     
     def _log_separator(self, message="", char="=", length=80):
         """Print a separator line with optional message for visual log grouping."""
@@ -89,9 +100,12 @@ class DocumentationUpdateService:
             logger.info(f"Found {len(markdown_files)} markdown files in repository")
             return markdown_files
         
+        except GithubException as e:
+            logger.error(f"GitHub API error fetching repository content for {repo_name}/{path}: {e.status} {e.data}", exc_info=True)
+            raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to fetch content from {repo_name}: {e.data.get('message', str(e))}")
         except Exception as e:
-            logger.exception(f"Error fetching repository content: {e}")
-            return []
+            logger.error(f"Unexpected error fetching repository content for {repo_name}/{path}: {e}", exc_info=True)
+            raise AppExceptionBase(f"Unexpected error fetching repository content from {repo_name}: {str(e)}")
     
     def analyze_documentation(self, 
                              docs_repo_name: str, 
@@ -117,7 +131,7 @@ class DocumentationUpdateService:
             docs_files = self.get_repository_content(docs_repo_name)
             
             if not docs_files:
-                logger.warning(f"No documentation files found in {docs_repo_name}")
+                logger.warning(f"No documentation files found in {docs_repo_name}. Skipping analysis.")
                 return {
                     "status": "no_files_found",
                     "message": f"No documentation files found in {docs_repo_name}",
@@ -170,15 +184,14 @@ class DocumentationUpdateService:
             self._log_separator(f"END DOCUMENTATION ANALYSIS", "=")
             return analysis_result
             
+        except OpenAIAPIError as e:
+            logger.error(f"OpenAI API error during documentation analysis: {e.status_code} {e.response}", exc_info=True)
+            raise AIIntegrationError(f"OpenAI service error: {e.message or str(e)}")
+        except (ExternalServiceError, AppExceptionBase) as e:
+            raise e
         except Exception as e:
-            logger.exception(f"Error analyzing documentation: {e}")
-            return {
-                "status": "error",
-                "message": f"Error analyzing documentation: {str(e)}",
-                "error": str(e),
-                "changes_needed": False,
-                "analyzed_at": datetime.now().isoformat()
-            }
+            logger.error(f"Error analyzing documentation for {docs_repo_name}: {e}", exc_info=True)
+            raise AIIntegrationError(f"Failed to analyze documentation due to an unexpected error: {str(e)}")
     
     def _create_analysis_prompt(self, 
                               docs_content: str, 
@@ -353,8 +366,17 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                     
                     logger.info(f"Updated file {file_path} in branch {branch_name}")
                     
-                except Exception as e:
-                    logger.error(f"Error updating file {file_path}: {e}")
+                except GithubException as e_git_file:
+                    logger.error(f"GitHub error updating file {file_path} in {branch_name}: {e_git_file.status} {e_git_file.data}", exc_info=True)
+                    change['error'] = f"Failed to update file on GitHub: {e_git_file.data.get('message', str(e_git_file))}"
+                    continue
+                except OpenAIAPIError as e_openai_file:
+                    logger.error(f"OpenAI error generating content for file {file_path}: {e_openai_file.status_code} {e_openai_file.response}", exc_info=True)
+                    change['error'] = f"Failed to generate updated content with OpenAI: {e_openai_file.message or str(e_openai_file)}"
+                    continue
+                except Exception as e_file:
+                    logger.error(f"Error processing file {file_path} for PR in {branch_name}: {e_file}", exc_info=True)
+                    change['error'] = f"Unexpected error processing file: {str(e_file)}"
                     continue
             
             # Create a pull request
@@ -388,13 +410,15 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 "branch_name": branch_name
             }
             
+        except GithubException as e:
+            logger.error(f"GitHub API error creating pull request for {docs_repo_name}: {e.status} {e.data}", exc_info=True)
+            raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to create PR for {docs_repo_name}: {e.data.get('message', str(e))}")
+        except OpenAIAPIError as e:
+            logger.error(f"OpenAI API error during PR creation process for {docs_repo_name}: {e.status_code} {e.response}", exc_info=True)
+            raise AIIntegrationError(f"OpenAI service error during PR creation: {e.message or str(e)}")
         except Exception as e:
-            logger.exception(f"Error creating pull request: {e}")
-            return {
-                "status": "error",
-                "message": f"Error creating pull request: {str(e)}",
-                "error": str(e)
-            }
+            logger.error(f"Error creating pull request for {docs_repo_name}: {e}", exc_info=True)
+            raise AppExceptionBase(f"Unexpected error creating pull request for {docs_repo_name}: {str(e)}")
 
     def save_to_git_repository(self, repo_name: str, file_path: str, content: str, 
                              title: str, commit_message: Optional[str] = None) -> Dict[str, Any]:
@@ -469,10 +493,9 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 "commit_sha": result["commit"].sha if isinstance(result, dict) and "commit" in result else None
             }
         
+        except GithubException as e:
+            logger.error(f"GitHub API error saving to repository {repo_name}/{file_path}: {e.status} {e.data}", exc_info=True)
+            raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to save to Git repo {repo_name}: {e.data.get('message', str(e))}")
         except Exception as e:
-            logger.exception(f"Error saving to Git repository: {e}")
-            return {
-                "status": "error",
-                "message": f"Error saving to Git repository: {str(e)}",
-                "error": str(e)
-            } 
+            logger.error(f"Error saving to Git repository {repo_name}/{file_path}: {e}", exc_info=True)
+            raise AppExceptionBase(f"Unexpected error saving to Git repository {repo_name}: {str(e)}") 

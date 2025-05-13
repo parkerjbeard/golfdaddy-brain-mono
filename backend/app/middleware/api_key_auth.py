@@ -1,7 +1,8 @@
 from typing import Dict, Optional, Callable, List
-from fastapi import Request, Response, HTTPException
+from fastapi import Request, Response, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
+from app.core.exceptions import AuthenticationError
 
 logger = logging.getLogger(__name__)
 
@@ -54,28 +55,24 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         # Check if API key is provided and valid
         if not api_key:
             logger.warning(f"No API key provided for {request.url.path}")
-            return Response(
-                content="API key required",
-                status_code=401,
-                headers={"WWW-Authenticate": "ApiKey"}
-            )
+            # Return a custom error response through the exception handling system
+            raise AuthenticationError(message="API key required")
             
         # Validate API key
         if api_key not in self.api_keys:
             logger.warning(f"Invalid API key provided for {request.url.path}")
-            # Debug - more detailed logging
             logger.error(f"Received key: '{api_key[:5]}...' (length: {len(api_key)})")
             logger.error(f"Expected one of these keys (first 5 chars): {[k[:5] + '...' for k in self.api_keys.keys()]}")
             
-            # Try to identify character encoding or whitespace issues
             import base64
             encoded_received = base64.b64encode(api_key.encode()).decode()
             logger.error(f"Received API key (base64): {encoded_received}")
             
-            return Response(
-                content="Invalid API key",
-                status_code=403
-            )
+            # Using AuthenticationError, which defaults to 401.
+            # If 403 is specifically needed for an invalid key vs missing key:
+            # raise PermissionDeniedError(message="Invalid API key")
+            # Or, AuthenticationError(message="Invalid API key", status_code=status.HTTP_403_FORBIDDEN)
+            raise AuthenticationError(message="Invalid API key")
             
         # Add API key info to request state for use in routes
         request.state.api_key_info = self.api_keys[api_key]

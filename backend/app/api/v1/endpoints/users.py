@@ -7,6 +7,7 @@ from app.repositories.user_repository import UserRepository
 # Removing this non-existent import
 # from app.services.auth_service import get_current_active_user
 from app.auth.dependencies import get_current_user
+from app.core.exceptions import ResourceNotFoundError, PermissionDeniedError # New import
 
 router = APIRouter()
 
@@ -28,7 +29,7 @@ async def list_users(
     or be restricted in other ways.
     """
     # if not current_user.role == UserRole.ADMIN and not current_user.role == UserRole.MANAGER:
-    #     raise HTTPException(status_code=403, detail="Not authorized to list users")
+    #     raise PermissionDeniedError(message="Not authorized to list users")
 
     if role:
         users = await user_repo.list_users_by_role(role)
@@ -65,5 +66,5 @@ async def read_user(
     # Add authorization checks if necessary, e.g., only admin or the user themselves can fetch
     db_user = await user_repo.get_user_by_id(user_id)
     if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
     return db_user 

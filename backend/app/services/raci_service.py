@@ -8,6 +8,7 @@ from app.models.task import Task, TaskStatus
 from app.models.user import User
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
+from app.core.exceptions import ResourceNotFoundError, DatabaseError, BadRequestError
 # from app.services.notification_service import NotificationService # Potential circular dependency, handle carefully
 
 logger = logging.getLogger(__name__)
@@ -36,49 +37,64 @@ class RaciService:
         """Validates RACI roles, creates a Task object, persists it, and returns task with warnings."""
         warnings = []
 
-        # Defaulting logic (example)
+        # Validate critical user IDs first
+        creator = await self.user_repo.get_user_by_id(creator_id)
+        if not creator:
+            raise ResourceNotFoundError(resource_name="Creator User", resource_id=str(creator_id))
+        
+        assignee = await self.user_repo.get_user_by_id(assignee_id)
+        if not assignee:
+            raise ResourceNotFoundError(resource_name="Assignee User", resource_id=str(assignee_id))
+
+        # Defaulting logic for responsible and accountable
         if not responsible_id:
             responsible_id = assignee_id
             warnings.append(f"Responsible ID not provided, defaulted to assignee ID: {assignee_id}")
+        else:
+            responsible_user = await self.user_repo.get_user_by_id(responsible_id)
+            if not responsible_user:
+                raise ResourceNotFoundError(resource_name="Responsible User", resource_id=str(responsible_id))
         
         if not accountable_id:
-            # Accountable might be more complex, e.g., assignee's manager or a project lead
-            # For now, let's say it's required or also defaults to assignee for simplicity here, but flag it.
             accountable_id = assignee_id # Example, might need better logic
             warnings.append(f"Accountable ID not provided, defaulted to assignee ID: {assignee_id}. Review required.")
+        else:
+            accountable_user = await self.user_repo.get_user_by_id(accountable_id)
+            if not accountable_user:
+                raise ResourceNotFoundError(resource_name="Accountable User", resource_id=str(accountable_id))
 
-        # Basic validation: Ensure at least Responsible and Accountable are set after defaulting
-        if not responsible_id or not accountable_id:
-            logger.error("Critical RACI roles (Responsible, Accountable) are missing after defaulting.")
-            return None, warnings + ["Responsible and Accountable roles are mandatory."]
+        # Validate non-critical user IDs (consulted, informed) and collect warnings
+        valid_consulted_ids = []
+        if consulted_ids:
+            for user_id_to_check in consulted_ids:
+                user = await self.user_repo.get_user_by_id(user_id_to_check)
+                if not user:
+                    warn_msg = f"Consulted user ID {user_id_to_check} not found and will be omitted."
+                    logger.warning(warn_msg)
+                    warnings.append(warn_msg)
+                else:
+                    valid_consulted_ids.append(user_id_to_check)
         
-        # Validate user IDs exist (optional, adds overhead but good for data integrity)
-        user_ids_to_check = {assignee_id, responsible_id, accountable_id, creator_id}
-        if consulted_ids: user_ids_to_check.update(consulted_ids)
-        if informed_ids: user_ids_to_check.update(informed_ids)
-        
-        for user_id_to_check in filter(None, user_ids_to_check):
-            user = await self.user_repo.get_user_by_id(user_id_to_check)
-            if not user:
-                error_msg = f"Invalid user ID {user_id_to_check} found in RACI assignment."
-                logger.error(error_msg)
-                warnings.append(error_msg)
-                # Depending on strictness, might return None here
-                # return None, warnings
-        
-        if any("Invalid user ID" in w for w in warnings):
-             logger.warning(f"Task creation halted due to invalid user IDs in RACI: {warnings}")
-             return None, warnings # Stop if critical user IDs are invalid
+        valid_informed_ids = []
+        if informed_ids:
+            for user_id_to_check in informed_ids:
+                user = await self.user_repo.get_user_by_id(user_id_to_check)
+                if not user:
+                    warn_msg = f"Informed user ID {user_id_to_check} not found and will be omitted."
+                    logger.warning(warn_msg)
+                    warnings.append(warn_msg)
+                else:
+                    valid_informed_ids.append(user_id_to_check)
 
         # Construct the Task Pydantic model
         task_data = Task(
             description=description,
             assignee_id=assignee_id,
-            responsible_id=responsible_id,
-            accountable_id=accountable_id,
-            consulted_ids=consulted_ids or [],
-            informed_ids=informed_ids or [],
-            creator_id=creator_id,
+            responsible_id=responsible_id, # Already validated or defaulted from validated assignee
+            accountable_id=accountable_id, # Already validated or defaulted from validated assignee
+            consulted_ids=valid_consulted_ids, # Use validated list
+            informed_ids=valid_informed_ids,   # Use validated list
+            creator_id=creator_id, # Validated
             due_date=due_date,
             status=TaskStatus.ASSIGNED # Default status
             # id, created_at, updated_at will be set by DB or repo
@@ -88,11 +104,10 @@ class RaciService:
         created_task = await self.task_repo.create_task(task_data)
         
         if not created_task:
-            logger.error("Task persistence failed after RACI assignment.")
-            warnings.append("Failed to save the task to the database.")
-            return None, warnings
+            logger.error(f"Task persistence failed after RACI assignment for description: {description[:50]}...")
+            raise DatabaseError("Failed to save the task to the database after RACI assignment.")
                 
-        logger.info(f"RACI roles assigned and task {created_task.id} created successfully.")
+        logger.info(f"RACI roles assigned and task {created_task.id} created successfully with {len(warnings)} warnings.")
         return created_task, warnings
     
     async def raci_validation(self, task_id: UUID) -> Tuple[bool, List[str]]:
@@ -136,15 +151,18 @@ class RaciService:
         accountable_user: Optional[User] = None
         if task.accountable_id:
             accountable_user = await self.user_repo.get_user_by_id(task.accountable_id)
+            if not accountable_user:
+                # If accountable user is critical for escalation, this could be an error
+                logger.error(f"Accountable user {task.accountable_id} not found for escalating task {task.id}. Escalation cannot proceed.")
+                # Consider raising ResourceNotFoundError or handling as a critical failure of escalation
+                # For now, just logging and returning, as per original logic of not doing much more.
+                return 
 
-        if accountable_user:
+        if accountable_user: # This check is now more robust
             logger.info(f"Escalating blocked task {task.id} to Accountable user {accountable_user.id} (Slack: {getattr(accountable_user, 'slack_id', 'N/A')})")
             # TODO: Integrate with NotificationService.blocked_task_alert or a specific escalation notification
             # This would require NotificationService to be injectable or accessible here.
             # Example: await self.notification_service.notify_escalation(task, accountable_user, reason="Task Blocked")
             pass 
-        else:
-            logger.error(f"Could not find Accountable user ({task.accountable_id}) for escalating blocked task {task.id}")
-            # TODO: Add fallback escalation (e.g., notify a default admin/manager)
 
     # Add other RACI related business logic methods here

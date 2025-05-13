@@ -10,6 +10,7 @@ from app.models.user import User, UserRole
 from app.repositories.user_repository import UserRepository
 from uuid import UUID
 from app.auth.dependencies import get_current_user as get_current_user_dependency
+from app.core.exceptions import AuthenticationError, ExternalServiceError, BadRequestError
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 logger = logging.getLogger(__name__)
@@ -54,27 +55,17 @@ async def login_user(
             )
         else:
             logger.error(f"Supabase login response missing session/token for {request.email}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Login failed due to unexpected authentication server response."
-            )
+            raise ExternalServiceError(service_name="Supabase Auth", original_message="Login response missing session/token")
             
     except Exception as e:
         # Handle Supabase auth errors
         error_message = str(e)
         if "invalid login credentials" in error_message.lower():
             logger.warning(f"Invalid login credentials for {request.email}: {error_message}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise AuthenticationError(message="Incorrect email or password")
         else:
             logger.exception(f"Unexpected error during login for {request.email}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Login failed: {error_message}",
-            )
+            raise ExternalServiceError(service_name="Supabase Auth", original_message=f"Login failed: {error_message}")
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
@@ -95,16 +86,9 @@ async def refresh_token(
                 expires_in=response.session.expires_in
             )
         else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Token refresh failed."
-            )
+            raise ExternalServiceError(service_name="Supabase Auth", original_message="Token refresh response missing session/token")
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token refresh failed: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise AuthenticationError(message=f"Token refresh failed: {str(e)}")
 
 @router.get("/me", response_model=User)
 async def get_current_user_endpoint(
@@ -129,11 +113,7 @@ async def logout(
     Invalidates the access token.
     """
     if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise AuthenticationError(message="Invalid authentication credentials")
     
     token = authorization.replace("Bearer ", "")
     
@@ -143,7 +123,4 @@ async def logout(
         
         return {"message": "Successfully logged out"}
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout failed: {str(e)}"
-        ) 
+        raise ExternalServiceError(service_name="Supabase Auth", original_message=f"Logout failed: {str(e)}") 

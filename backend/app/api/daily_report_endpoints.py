@@ -8,6 +8,7 @@ from app.models.daily_report import DailyReport, DailyReportCreate, DailyReportU
 from app.services.daily_report_service import DailyReportService
 from app.models.user import User, UserRole # Assuming you have a User model for current_user
 from app.auth.dependencies import get_current_user # Import the standardized dependency
+from app.core.exceptions import ResourceNotFoundError, PermissionDeniedError, BadRequestError, DatabaseError # New import
 
 # Placeholder for FastAPI's Depends for current user - replace with your actual dependency
 async def get_current_active_user() -> User: 
@@ -46,9 +47,12 @@ async def submit_eod_report(
         # The service's submit_daily_report is designed to take current_user_id explicitly.
         created_report = await report_service.submit_daily_report(report_in, current_user_id=current_user.id)
         return created_report
-    except Exception as e:
+    except ValueError as ve: # Example: If report_in has bad data not caught by Pydantic but by service logic
+        logger.error(f"Validation error submitting EOD report: {ve}", exc_info=True)
+        raise BadRequestError(message=str(ve))
+    except Exception as e: # General catch for other unexpected service errors
         logger.error(f"Error submitting EOD report: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise DatabaseError(message=f"An unexpected error occurred while submitting the report: {str(e)}")
 
 @router.get("/me", response_model=List[DailyReport])
 async def get_my_daily_reports(
@@ -68,8 +72,13 @@ async def get_my_daily_report_for_date(
     try:
         report_date = datetime.strptime(report_date_str, "%Y-%m-%d")
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format. Use YYYY-MM-DD.")
-    return await report_service.get_user_report_for_date(current_user.id, report_date)
+        raise BadRequestError(message="Invalid date format. Use YYYY-MM-DD.")
+    
+    report = await report_service.get_user_report_for_date(current_user.id, report_date)
+    if report is None: # Explicitly check if service returns None for not found
+        # Service could also raise ResourceNotFoundError directly
+        raise ResourceNotFoundError(resource_name=f"Daily report for user {current_user.id}", resource_id=report_date_str)
+    return report
 
 @router.get("/{report_id}", response_model=DailyReport)
 async def get_daily_report(
@@ -80,7 +89,7 @@ async def get_daily_report(
     """Get a specific EOD report by its ID."""
     report = await report_service.get_report_by_id(report_id)
     if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+        raise ResourceNotFoundError(resource_name="Daily Report", resource_id=str(report_id))
 
     # Authorization logic
     # Replace with actual role-based access control if applicable
@@ -88,7 +97,7 @@ async def get_daily_report(
     # is_manager = # Placeholder: Implement logic to check if current_user is a manager
     # For now, only owners can access. Add manager logic when roles are defined.
     if not is_owner: # and not is_manager: # Add is_manager check when implemented
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this report")
+        raise PermissionDeniedError(message="Not authorized to access this report")
 
     return report
 
@@ -102,7 +111,7 @@ async def get_all_daily_reports_admin(
     # Placeholder for admin check
     # Replace with actual admin role check
     if current_user.role != UserRole.ADMIN: # Assumes an is_admin attribute on User model
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have admin privileges")
+        raise PermissionDeniedError(message="User does not have admin privileges")
     return await report_service.get_all_reports()
 
 @router.put("/{report_id}", response_model=DailyReport)
@@ -115,17 +124,24 @@ async def update_my_daily_report(
     """Update an EOD report owned by the current user."""
     report = await report_service.get_report_by_id(report_id)
     if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+        raise ResourceNotFoundError(resource_name="Daily Report", resource_id=str(report_id))
 
     if report.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this report")
+        raise PermissionDeniedError(message="Not authorized to update this report")
 
-    updated_report = await report_service.update_daily_report(report_id, report_update, current_user.id)
-    if not updated_report:
-        # This case might occur if the update fails for some reason, or if the report_id was valid but no longer exists
-        # Or if the service layer itself handles the user_id check and returns None if not authorized.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found or update failed")
-    return updated_report
+    try:
+        updated_report = await report_service.update_daily_report(report_id, report_update, current_user.id)
+        if not updated_report:
+            # This case might occur if the update fails for some reason after initial checks
+            logger.error(f"Update for report {report_id} by user {current_user.id} returned no object despite passing checks.")
+            raise DatabaseError(message="Report update failed or report became unavailable after authorization.")
+        return updated_report
+    except ValueError as ve: # E.g. if report_update contains invalid data for the service
+        logger.error(f"Validation error updating report {report_id}: {ve}", exc_info=True)
+        raise BadRequestError(message=str(ve))
+    except Exception as e: # Catch-all for other service layer issues
+        logger.error(f"Unexpected error updating report {report_id}: {e}", exc_info=True)
+        raise DatabaseError(message=f"An unexpected error occurred while updating the report: {str(e)}")
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_my_daily_report(
@@ -138,16 +154,21 @@ async def delete_my_daily_report(
     if not report:
         # Allowing idempotent deletes, so not finding it could be considered success by some.
         # However, for clarity and to prevent accidental calls to non-existent IDs, we'll raise 404.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+        raise ResourceNotFoundError(resource_name="Daily Report", resource_id=str(report_id))
 
     if report.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this report")
+        raise PermissionDeniedError(message="Not authorized to delete this report")
 
-    success = await report_service.delete_daily_report(report_id, current_user.id)
-    if not success:
-        # This could mean the report was not found (race condition) or delete failed for other reasons
-        # despite passing earlier checks.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found or delete failed")
+    try:
+        success = await report_service.delete_daily_report(report_id, current_user.id)
+        if not success:
+            # This could mean the report was not found (race condition) or delete failed for other reasons
+            # despite passing earlier checks.
+            logger.error(f"Deletion of report {report_id} by user {current_user.id} failed after passing checks.")
+            raise DatabaseError(message="Report deletion failed or report became unavailable after authorization.")
+    except Exception as e:
+        logger.error(f"Unexpected error deleting report {report_id}: {e}", exc_info=True)
+        raise DatabaseError(message=f"An unexpected error occurred while deleting the report: {str(e)}")
     # No content to return on successful delete, per HTTP 204
     return
 

@@ -6,6 +6,13 @@ import logging
 from app.models.daily_report import DailyReport, DailyReportCreate, DailyReportUpdate, AiAnalysis, ClarificationRequest
 from app.repositories.daily_report_repository import DailyReportRepository
 from app.integrations.ai_integration import AIIntegration # Added
+from app.core.exceptions import (
+    DatabaseError, # For repository/DB issues
+    AIIntegrationError, # If AI service fails explicitly
+    ResourceNotFoundError, # If a report/user is not found when expected
+    PermissionDeniedError, # For auth issues (though mostly handled by API layer)
+    BadRequestError # For bad input data if not caught by Pydantic
+) # New imports
 # from app.services.user_service import UserService # Assuming a user service exists to validate user_id
 
 logger = logging.getLogger(__name__)
@@ -39,7 +46,8 @@ class DailyReportService:
             update_payload = DailyReportUpdate(raw_text_input=report_data.raw_text_input)
             updated_report = await self.report_repository.update_daily_report(existing_report.id, update_payload)
             if not updated_report: # Should not happen with in-memory repo if get succeeded
-                 raise Exception("Failed to update existing report") # Or a more specific HTTP error
+                 logger.error(f"Failed to update existing report {existing_report.id} for user {current_user_id} which was previously found.")
+                 raise DatabaseError(f"Failed to update existing report {existing_report.id} after it was found.")
             new_report = updated_report
         else:
             new_report = await self.report_repository.create_daily_report(report_create_with_user)
@@ -66,7 +74,7 @@ class DailyReportService:
                     try:
                         parsed_clarification_requests.append(ClarificationRequest(**req_data))
                     except Exception as p_err:
-                        logger.warning(f"Could not parse clarification request item: {req_data}. Error: {p_err}")
+                        logger.warning(f"Could not parse clarification request item for report {new_report.id}: {req_data}. Error: {p_err}", exc_info=True)
                 
                 ai_analysis_obj = AiAnalysis(
                     estimated_hours=ai_analysis_dict.get('estimated_hours', 0.0),
@@ -91,7 +99,7 @@ class DailyReportService:
                 logger.info(f"Successfully processed and updated EOD report {new_report.id} with AI analysis.")
                 return processed_report
             else: 
-                logger.error(f"Failed to update report {new_report.id} with AI data after successful AI analysis.")
+                logger.error(f"Failed to update report {new_report.id} with AI data after successful AI analysis. Returning report without this AI update.", exc_info=True)
                 # Fallback: return the report as it was before this update attempt, but with AI data attached if possible
                 # This situation implies a repository save error, so the original new_report is more accurate to DB state.
                 # However, the AI analysis *was* done. For now, log and return original to reflect DB.

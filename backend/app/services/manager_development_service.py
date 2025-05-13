@@ -12,6 +12,13 @@ from app.services.notification_service import NotificationService
 from app.services.raci_service import RACIService
 from app.config.settings import settings
 from app.integrations.ai_integration import AIIntegration
+from app.core.exceptions import (
+    ResourceNotFoundError,
+    AIIntegrationError,
+    DatabaseError,
+    BadRequestError,
+    AppExceptionBase
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,26 +94,26 @@ class ManagerDevelopmentService:
         """
         # Validate inputs
         if task_type not in TASK_TYPES:
-            raise ValueError(f"Invalid task type. Must be one of: {', '.join(TASK_TYPES.keys())}")
+            raise BadRequestError(f"Invalid task type: {task_type}. Must be one of: {', '.join(TASK_TYPES.keys())}")
             
         if development_area not in DEVELOPMENT_AREAS:
-            raise ValueError(f"Invalid development area. Must be one of: {', '.join(DEVELOPMENT_AREAS)}")
+            raise BadRequestError(f"Invalid development area: {development_area}. Must be one of: {', '.join(DEVELOPMENT_AREAS)}")
         
         # Look up the manager to get their details
         manager = await self.user_repository.get_user_by_id(manager_id)
         if not manager:
-            raise ValueError(f"Manager with ID {manager_id} not found")
+            raise ResourceNotFoundError(resource_name="Manager", resource_id=manager_id)
         
         # Get or find the director
         if director_id:
             director = await self.user_repository.get_user_by_id(director_id)
             if not director:
-                raise ValueError(f"Director with ID {director_id} not found")
+                raise ResourceNotFoundError(resource_name="Director", resource_id=director_id)
         else:
             # Try to find the manager's director
             director = await self.user_repository.get_director_for_manager(manager_id)
             if not director:
-                raise ValueError("No director found for manager and none provided")
+                raise ResourceNotFoundError(resource_name=f"Director for manager {manager_id}", resource_id="associated director")
         
         # Set default due date if not provided
         if not due_date:
@@ -159,6 +166,9 @@ class ManagerDevelopmentService:
         
         # Save task to the database
         created_task = await self.task_repository.create_task(task_data)
+        if not created_task:
+            logger.error(f"Failed to create development task in repository for manager {manager_id}, area {development_area}.")
+            raise DatabaseError("Failed to save development task.")
         
         # Send notifications to all RACI roles
         await self._notify_stakeholders(task_type, created_task)
@@ -184,12 +194,12 @@ class ManagerDevelopmentService:
             List of created tasks forming the development plan
         """
         if not development_areas:
-            raise ValueError("At least one development area must be provided")
+            raise BadRequestError("At least one development area must be provided")
             
         # Validate all areas
         for area in development_areas:
             if area not in DEVELOPMENT_AREAS:
-                raise ValueError(f"Invalid development area: {area}")
+                raise BadRequestError(f"Invalid development area: {area}")
         
         created_tasks = []
         
@@ -271,16 +281,16 @@ class ManagerDevelopmentService:
         """
         # Validate input
         if not 0 <= progress <= 100:
-            raise ValueError("Progress must be between 0 and 100")
+            raise BadRequestError("Progress must be between 0 and 100")
             
         # Retrieve the task
         task = await self.task_repository.get_task_by_id(task_id)
         if not task:
-            raise ValueError(f"Task with ID {task_id} not found")
+            raise ResourceNotFoundError(resource_name="Task", resource_id=task_id)
             
         # Check that it's a development task
         if "task_type" not in task or not task["task_type"] in TASK_TYPES:
-            raise ValueError("Not a valid development task")
+            raise BadRequestError(f"Task {task_id} is not a valid development task.")
             
         # Update progress
         update_data = {
@@ -299,6 +309,9 @@ class ManagerDevelopmentService:
             
         # Update the task
         updated_task = await self.task_repository.update_task(task_id, update_data)
+        if not updated_task:
+            logger.error(f"Failed to update task {task_id} progress in repository.")
+            raise DatabaseError(f"Failed to update task {task_id}.")
         
         # Notify relevant stakeholders based on RACI
         if progress == 100:
@@ -341,7 +354,7 @@ class ManagerDevelopmentService:
         # Get manager data
         manager = await self.user_repository.get_user_by_id(manager_id)
         if not manager:
-            raise ValueError(f"Manager with ID {manager_id} not found")
+            raise ResourceNotFoundError(resource_name="Manager", resource_id=manager_id)
             
         # Get manager's recent tasks in this area
         recent_tasks = await self.task_repository.get_tasks_by_user_and_area(
@@ -365,19 +378,20 @@ class ManagerDevelopmentService:
         )
         
         # Call the AI to generate feedback
-        ai_response = await self.ai_integration.generate_text(prompt)
+        try:
+            ai_response = await self.ai_integration.generate_text(prompt)
+        except Exception as ai_exc:
+            logger.error(f"AI integration error generating feedback for manager {manager_id}: {ai_exc}", exc_info=True)
+            raise AIIntegrationError(f"Failed to generate feedback due to AI service error: {str(ai_exc)}")
         
         # Process and structure the response
         try:
             feedback = self._process_feedback_response(ai_response, development_area)
-            
-            # Log the successful feedback generation
             logger.info(f"Generated feedback for manager {manager_id} in area: {development_area}")
-            
             return feedback
-        except Exception as e:
-            logger.error(f"Failed to process AI feedback response: {str(e)}")
-            raise ValueError("Failed to generate structured feedback")
+        except ValueError as ve:
+            logger.error(f"Failed to process AI feedback response for manager {manager_id}: {ve}", exc_info=True)
+            raise AIIntegrationError(f"Failed to structure AI feedback: {str(ve)}")
     
     async def get_manager_development_summary(
         self, 
@@ -395,7 +409,7 @@ class ManagerDevelopmentService:
         # Get manager data
         manager = await self.user_repository.get_user_by_id(manager_id)
         if not manager:
-            raise ValueError(f"Manager with ID {manager_id} not found")
+            raise ResourceNotFoundError(resource_name="Manager", resource_id=manager_id)
             
         # Get all tasks for the manager
         all_tasks = await self.task_repository.get_tasks_for_user(manager_id)
@@ -494,7 +508,11 @@ class ManagerDevelopmentService:
             """
         
         # Call the AI integration
-        ai_response = await self.ai_integration.generate_text(prompt)
+        try:
+            ai_response = await self.ai_integration.generate_text(prompt)
+        except Exception as e_ai:
+            logger.error(f"AI integration error generating task content for type {task_type}, area {development_area}: {e_ai}", exc_info=True)
+            raise AIIntegrationError(f"Failed to generate task content due to AI service error: {str(e_ai)}")
         
         # Parse the response
         try:
@@ -504,20 +522,16 @@ class ManagerDevelopmentService:
             # Validate response has required fields
             for field in required_fields:
                 if field not in content:
+                    logger.warning(f"AI response for task content generation (type: {task_type}, area: {development_area}) missing field: {field}. Raw: {ai_response[:200]}")
                     raise ValueError(f"AI response missing required field: {field}")
                     
             return content
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(f"AI response for task content (type: {task_type}, area: {development_area}) was not valid JSON: {ai_response[:200]}. Error: {e}", exc_info=True)
             # Fallback content if AI doesn't return valid JSON
-            return {
-                "title": f"{task_type.capitalize()} for {area_display}",
-                "description": f"Complete a {task_type} task related to {area_display} management skills.",
-                "completion_criteria": [
-                    f"Complete {area_display} assessment",
-                    "Document progress and outcomes",
-                    "Review with stakeholders"
-                ]
-            }
+            raise AIIntegrationError(f"AI response was not valid JSON for task content generation.")
+        except ValueError as ve:
+            raise AIIntegrationError(f"AI response structure error for task content: {str(ve)}")
     
     async def _create_raci_assignments(
         self,
@@ -752,6 +766,7 @@ class ManagerDevelopmentService:
             required_fields = ["strengths", "improvement_areas", "suggestions", "timeline"]
             for field in required_fields:
                 if field not in feedback_data:
+                    logger.warning(f"AI feedback response for area {development_area} missing field: {field}. Raw: {ai_response[:200]}")
                     raise ValueError(f"AI response missing required field: {field}")
             
             # Add metadata
@@ -762,19 +777,7 @@ class ManagerDevelopmentService:
             
         except (json.JSONDecodeError, ValueError) as e:
             # If not valid JSON, attempt to structure it
-            logger.warning(f"AI didn't return valid JSON: {str(e)}. Attempting to structure response.")
-            
+            logger.warning(f"AI feedback response for {development_area} not valid JSON or missing fields: {str(e)}. Raw: {ai_response[:200]}", exc_info=True)
             # Simple fallback to structured format
-            return {
-                "strengths": ["The manager shows potential in this area"],
-                "improvement_areas": ["Needs more structured development"],
-                "suggestions": [
-                    "Implement a regular practice routine",
-                    "Seek feedback from team members",
-                    "Study examples of excellence in this area"
-                ],
-                "timeline": "Implement over the next 30 days with weekly check-ins",
-                "generated_at": datetime.now().isoformat(),
-                "development_area": development_area,
-                "raw_response": ai_response
-            } 
+            # Instead of fallback, raise an error so caller knows AI failed to give structured response
+            raise AIIntegrationError(f"AI response for feedback was not valid JSON or had missing fields.") 

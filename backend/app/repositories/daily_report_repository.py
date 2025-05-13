@@ -1,12 +1,13 @@
 from typing import List, Dict, Optional, Union, Any
 from uuid import UUID
 from datetime import datetime, timezone
-from supabase import Client
+from supabase import Client, PostgrestAPIResponse
 from app.config.supabase_client import get_supabase_client_safe
 from app.models.daily_report import DailyReport, DailyReportCreate, DailyReportUpdate, AiAnalysis, ClarificationRequest
 import logging
 import json
 import asyncio
+from app.core.exceptions import DatabaseError, ResourceNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,12 @@ class DailyReportRepository:
     def __init__(self, client: Client = None):
         self._client = client if client is not None else get_supabase_client_safe()
         self._table_name = "daily_reports"
+
+    def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
+        """Helper to log and raise DatabaseError from Supabase errors."""
+        if response and hasattr(response, 'error') and response.error:
+            logger.error(f"{context_message}: Supabase error code {response.error.code if hasattr(response.error, 'code') else 'N/A'} - {response.error.message}", exc_info=True)
+            raise DatabaseError(f"{context_message}: {response.error.message}")
 
     def _db_to_model(self, db_data: Dict[str, Any]) -> DailyReport:
         """Converts database row (dict) to DailyReport Pydantic model."""
@@ -28,7 +35,7 @@ class DailyReportRepository:
                             try:
                                 parsed_reqs.append(ClarificationRequest(**req_item))
                             except Exception as e_parse_req:
-                                logger.warning(f"Could not parse clarification_request item {req_item}: {e_parse_req}")
+                                logger.warning(f"Could not parse clarification_request item {req_item}: {e_parse_req}", exc_info=True)
                         else:
                              parsed_reqs.append(req_item) # If already model instance (unlikely from DB directly)
                     ai_analysis_dict['clarification_requests'] = parsed_reqs
@@ -47,13 +54,13 @@ class DailyReportRepository:
                             try:
                                 parsed_reqs.append(ClarificationRequest(**req_item))
                             except Exception as e_parse_req:
-                                logger.warning(f"Could not parse clarification_request item from dict: {req_item}: {e_parse_req}")
+                                logger.warning(f"Could not parse clarification_request item from dict: {req_item}: {e_parse_req}", exc_info=True)
                         else:
                             parsed_reqs.append(req_item)
                     db_data['ai_analysis']['clarification_requests'] = parsed_reqs
                 db_data['ai_analysis'] = AiAnalysis(**db_data['ai_analysis'])
             except Exception as e_dict_parse:
-                logger.error(f"Error parsing ai_analysis dict to model: {e_dict_parse} for report ID {db_data.get('id')}")
+                logger.error(f"Error parsing ai_analysis dict to model: {e_dict_parse} for report ID {db_data.get('id')}", exc_info=True)
                 db_data['ai_analysis'] = None
         
         # Ensure linked_commit_ids is a list (it's text[] in DB)
@@ -111,69 +118,87 @@ class DailyReportRepository:
         # report_dict['updated_at'] = report_dict.get('updated_at', datetime.now(timezone.utc).isoformat())
         if 'user_id' not in report_dict or not report_dict['user_id']:
              logger.error("Cannot create daily report without user_id")
-             return None
+             raise DatabaseError("Cannot create daily report without user_id")
 
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).insert(report_dict).execute
             )
+            self._handle_supabase_error(response, "Failed to create daily report")
             if response.data:
                 logger.info(f"Successfully created daily report: {response.data[0]['id']}")
                 return self._db_to_model(response.data[0])
             else:
-                logger.error(f"Failed to create daily report: {response.error.message if response.error else 'Unknown error'}")
-                return None
+                logger.error(f"Failed to create daily report: No data returned and no Supabase error object.")
+                raise DatabaseError("Failed to create daily report: No data returned.")
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Exception creating daily report: {e}")
-            return None
+            logger.error(f"Unexpected error creating daily report: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error creating daily report: {str(e)}")
 
     async def get_daily_report_by_id(self, report_id: UUID) -> Optional[DailyReport]:
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).select("*").eq("id", str(report_id)).maybe_single().execute
             )
             if response.data:
                 return self._db_to_model(response.data)
-            return None
+            elif response.status_code == 406 or (not response.data and not response.error):
+                logger.info(f"Daily report with ID {report_id} not found.")
+                return None
+            else:
+                self._handle_supabase_error(response, f"Error fetching daily report by ID {report_id}")
+                raise DatabaseError(f"Failed to fetch daily report by ID {report_id} for unknown reason.")
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Exception getting daily report by ID {report_id}: {e}")
-            return None
+            logger.error(f"Unexpected error getting daily report by ID {report_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting daily report by ID {report_id}: {str(e)}")
 
     async def get_daily_reports_by_user_id(self, user_id: UUID) -> List[DailyReport]:
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).select("*").eq("user_id", str(user_id)).order("report_date", desc=True).execute
             )
-            if response.data:
-                return [self._db_to_model(row) for row in response.data]
-            return []
+            self._handle_supabase_error(response, f"Error fetching daily reports for user {user_id}")
+            return [self._db_to_model(row) for row in response.data] if response.data else []
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Exception getting daily reports for user {user_id}: {e}")
-            return []
+            logger.error(f"Unexpected error getting daily reports for user {user_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting daily reports for user {user_id}: {str(e)}")
     
     async def get_daily_reports_by_user_and_date(
         self, user_id: UUID, report_date: datetime
     ) -> Optional[DailyReport]:
         report_date_str = report_date.strftime('%Y-%m-%d')
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table_name)
                 .select("*")
                 .eq("user_id", str(user_id))
-                .eq("report_date", report_date_str) # Querying by date part
+                .eq("report_date", report_date_str) 
                 .maybe_single()
                 .execute
             )
             if response and response.data:
                 return self._db_to_model(response.data)
-            elif response and response.error:
-                logger.error(f"Error fetching daily report for user {user_id} on date {report_date_str}: {response.error.message}")
-            elif response is None:
+            elif response and (response.status_code == 406 or (not response.data and not response.error)):
+                logger.info(f"Daily report for user {user_id} on date {report_date_str} not found.")
+                return None
+            elif response: # An error occurred if it's not data and not a clear not-found
+                self._handle_supabase_error(response, f"Error fetching daily report for user {user_id} on date {report_date_str}")
+                # _handle_supabase_error will raise, but as a fallback:
+                raise DatabaseError(f"Failed to fetch daily report for user {user_id}, date {report_date_str} for unknown reason.")
+            else: # response is None, which is unexpected
                 logger.error(f"Received None response from Supabase for user {user_id} on date {report_date_str}")
-            return None
+                raise DatabaseError(f"Received None response from Supabase for daily report query.")
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Exception getting daily report for user {user_id} on date {report_date_str}: {e}")
-            return None
+            logger.error(f"Unexpected error getting daily report for user {user_id} on date {report_date_str}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting daily report for user {user_id}, date {report_date_str}: {str(e)}")
 
     async def get_reports_by_user_and_date_range(
         self, user_id: UUID, start_date: datetime, end_date: datetime
@@ -181,7 +206,7 @@ class DailyReportRepository:
         start_date_iso = start_date.isoformat()
         end_date_iso = end_date.isoformat()
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table_name)
                 .select("*")
                 .eq("user_id", str(user_id))
@@ -190,12 +215,13 @@ class DailyReportRepository:
                 .order("report_date", desc=True)
                 .execute
             )
-            if response.data:
-                return [self._db_to_model(row) for row in response.data]
-            return []
+            self._handle_supabase_error(response, f"Error getting reports for user {user_id} in range {start_date_iso} - {end_date_iso}")
+            return [self._db_to_model(row) for row in response.data] if response.data else []
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Exception getting reports for user {user_id} in range {start_date_iso} - {end_date_iso}: {e}")
-            return []
+            logger.error(f"Unexpected error getting reports for user {user_id} in range {start_date_iso} - {end_date_iso}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting reports for user {user_id} in range {start_date_iso} - {end_date_iso}: {str(e)}")
 
     async def update_daily_report(self, report_id: UUID, report_update: DailyReportUpdate) -> Optional[DailyReport]:
         update_dict = self._model_to_db_dict(report_update)
@@ -209,44 +235,56 @@ class DailyReportRepository:
         update_dict['updated_at'] = datetime.now(timezone.utc).isoformat()
 
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).update(update_dict).eq("id", str(report_id)).execute
             )
             if response.data:
                 logger.info(f"Successfully updated daily report: {report_id}")
                 return self._db_to_model(response.data[0])
             else:
-                logger.error(f"Failed to update daily report {report_id}: {response.error.message if response.error else 'Unknown error or report not found'}")
-                return None
+                existing_report = await self.get_daily_report_by_id(report_id)
+                if not existing_report:
+                    logger.error(f"Failed to update daily report: Report with ID {report_id} not found.")
+                    raise ResourceNotFoundError(resource_name="DailyReport", resource_id=str(report_id))
+                
+                self._handle_supabase_error(response, f"Failed to update daily report {report_id}")
+                logger.error(f"Failed to update daily report {report_id}: No data returned and no Supabase error. Report might exist but update failed.")
+                raise DatabaseError(f"Failed to update daily report {report_id}: Update operation returned no data.")
+        except (DatabaseError, ResourceNotFoundError):
+            raise
         except Exception as e:
-            logger.exception(f"Exception updating daily report {report_id}: {e}")
-            return None
+            logger.error(f"Unexpected error updating daily report {report_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error updating daily report {report_id}: {str(e)}")
 
     async def delete_daily_report(self, report_id: UUID) -> bool:
         try:
-            response = await asyncio.to_thread(
+            existing_report = await self.get_daily_report_by_id(report_id)
+            if not existing_report:
+                logger.warning(f"Attempted to delete non-existent daily report with ID {report_id}")
+                raise ResourceNotFoundError(resource_name="DailyReport", resource_id=str(report_id))
+
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).delete().eq("id", str(report_id)).execute
             )
-            # Delete often returns no data on success, check for error
-            if response.error:
-                logger.error(f"Failed to delete daily report {report_id}: {response.error.message}")
-                return False
-            # Consider if response.count > 0 check is needed/reliable for delete
+            self._handle_supabase_error(response, f"Failed to delete daily report {report_id}")
             logger.info(f"Successfully initiated delete for daily report: {report_id}")
             return True
+        except (DatabaseError, ResourceNotFoundError):
+            raise
         except Exception as e:
-            logger.exception(f"Exception deleting daily report {report_id}: {e}")
-            return False
+            logger.error(f"Unexpected error deleting daily report {report_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error deleting daily report {report_id}: {str(e)}")
 
     async def get_all_daily_reports(self, limit: int = 100, offset: int = 0) -> List[DailyReport]:
         """Retrieves all daily reports with pagination (for admin/debugging)."""
         try:
-            response = await asyncio.to_thread(
+            response: PostgrestAPIResponse = await asyncio.to_thread(
                  self._client.table(self._table_name).select("*").order("report_date", desc=True).range(offset, offset + limit - 1).execute
             )
-            if response.data:
-                return [self._db_to_model(row) for row in response.data]
-            return []
+            self._handle_supabase_error(response, "Error fetching all daily reports")
+            return [self._db_to_model(row) for row in response.data] if response.data else []
+        except DatabaseError:
+            raise
         except Exception as e:
-            logger.exception(f"Exception getting all daily reports: {e}")
-            return [] 
+            logger.error(f"Unexpected error getting all daily reports: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting all daily reports: {str(e)}") 

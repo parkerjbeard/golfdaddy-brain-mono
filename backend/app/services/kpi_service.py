@@ -10,6 +10,7 @@ from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.commit_repository import CommitRepository
 from app.repositories.daily_report_repository import DailyReportRepository
+from app.core.exceptions import ResourceNotFoundError, DatabaseError
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,13 @@ class KpiService:
     
     async def get_user_performance_summary(self, user_id: UUID, period_days: int = 7) -> Dict[str, Any]:
         """Generates a performance summary for a user over a specified period."""
+        
+        # Check if user exists first
+        user = await self.user_repo.get_user_by_id(user_id)
+        if not user:
+            logger.warning(f"User with ID {user_id} not found. Cannot generate KPI summary.")
+            raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
+            
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=period_days)
         

@@ -12,6 +12,7 @@ from app.services.notification_service import NotificationService
 from app.models.task import TaskStatus, Task
 from app.auth.dependencies import get_current_user as get_current_user_profile
 from app.models.user import User, UserRole
+from app.core.exceptions import ResourceNotFoundError, PermissionDeniedError, BadRequestError, DatabaseError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -104,9 +105,9 @@ async def create_task(
         # could return (None, warnings) for pure validation failures not resulting in a created task.
         # Raising an HTTPException might be more appropriate if no task is created due to such validation.
         if warnings:
-             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Task creation failed due to RACI validation: {warnings}")
+             raise BadRequestError(message=f"Task creation failed due to RACI validation: {warnings}")
         else:
-             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Task creation failed and RACI assignment returned no task object.")
+             raise DatabaseError(message="Task creation failed and RACI assignment returned no task object.")
 
     logger.info(f"Task {created_task.id} created successfully by user {current_user.id}")
     
@@ -228,7 +229,7 @@ async def get_task(
     task = await task_repo.get_task_by_id(task_id)
     
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise ResourceNotFoundError(resource_name="Task", resource_id=str(task_id))
     
     current_user_id_str = str(current_user.id)
     if not (
@@ -240,7 +241,7 @@ async def get_task(
         (task.creator_id and str(task.creator_id) == current_user_id_str)
     ):
         logger.warning(f"User {current_user.id} does not have permission to view task {task_id}.")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not authorized to view this task")
+        raise PermissionDeniedError(message="User not authorized to view this task")
 
     return task.to_dict()
 
@@ -259,7 +260,7 @@ async def update_task(
     logger.info(f"User {current_user.id} attempting to update task {task_id}")
     existing_task = await task_repo.get_task_by_id(task_id)
     if not existing_task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise ResourceNotFoundError(resource_name="Task", resource_id=str(task_id))
 
     current_user_id_str = str(current_user.id)
     can_update = False
@@ -272,7 +273,7 @@ async def update_task(
 
     if not can_update:
         logger.warning(f"User {current_user.id} does not have permission to update task {task_id}.")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not authorized to update this task")
+        raise PermissionDeniedError(message="User not authorized to update this task")
 
     update_data = task_update.dict(exclude_unset=True)
     final_update_payload = {}
@@ -304,7 +305,7 @@ async def update_task(
                 final_update_payload['blocked_reason'] = None
 
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {task_update.status}")
+            raise BadRequestError(message=f"Invalid status: {task_update.status}")
     
     if not final_update_payload:
         logger.info(f"No update data provided for task {task_id}")
@@ -312,7 +313,7 @@ async def update_task(
 
     updated_task = await task_repo.update_task(task_id, final_update_payload)
     if not updated_task:
-        raise HTTPException(status_code=500, detail="Failed to update task")
+        raise DatabaseError(message="Failed to update task")
     
     return updated_task.to_dict()
 
@@ -328,7 +329,7 @@ async def delete_task(
     logger.info(f"User {current_user.id} (Role: {current_user.role}) attempting to delete task {task_id}")
     existing_task = await task_repo.get_task_by_id(task_id)
     if not existing_task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise ResourceNotFoundError(resource_name="Task", resource_id=str(task_id))
     
     can_delete = False
     # ADMINs can delete any task
@@ -344,11 +345,11 @@ async def delete_task(
     
     if not can_delete:
         logger.warning(f"User {current_user.id} does not have permission to delete task {task_id}. Accountable: {existing_task.accountable_id}, Creator: {existing_task.creator_id}, User Role: {current_user.role}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not authorized to delete this task")
+        raise PermissionDeniedError(message="User not authorized to delete this task")
     
     deleted = await task_repo.delete_task(task_id)
     if not deleted:
-        raise HTTPException(status_code=500, detail="Failed to delete task")
+        raise DatabaseError(message="Failed to delete task")
     
     logger.info(f"Task {task_id} deleted successfully by user {current_user.id}")
     return
