@@ -29,13 +29,15 @@ def app_config():
 def set_test_mode():
     """Set up test mode with Supabase settings."""
     # Save original settings
-    original_mode = settings.testing_mode
+    original_mode = settings.TESTING_MODE
     
     # Set test mode
-    settings.testing_mode = True
+    settings.TESTING_MODE = True
     
     # Make sure Supabase URL and key are properly set for testing
-    if not settings.SUPABASE_URL or "your-project-ref" in settings.SUPABASE_URL:
+    # Convert HttpUrl to string for the 'in' check
+    supabase_url_str = str(settings.SUPABASE_URL) 
+    if not supabase_url_str or "your-project-ref" in supabase_url_str:
         raise ValueError(
             "SUPABASE_URL must be set to a valid Supabase URL. "
             "Check your environment variables or .env file."
@@ -50,7 +52,7 @@ def set_test_mode():
     yield
     
     # Restore original settings
-    settings.testing_mode = original_mode
+    settings.TESTING_MODE = original_mode
 
 @pytest.fixture(scope="function")
 def mock_supabase_client():

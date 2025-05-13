@@ -15,6 +15,7 @@ from uuid import UUID
 import schedule
 import time
 from threading import Thread
+import asyncio # Added import
 
 from app.config.settings import settings # Import settings to get webhook URLs
 
@@ -30,14 +31,15 @@ class NotificationService:
         Initialize the NotificationService.
         A Supabase client is needed for working with repositories.
         """
-        self.supabase = supabase
+        # self.supabase = supabase # Supabase client is passed to repositories directly
         self.session = requests.Session() # Use a session for potential performance benefits
-        # Slack integration removed
-        self.task_repo = TaskRepository(supabase) if supabase else TaskRepository()
-        self.user_repo = UserRepository(supabase) if supabase else UserRepository()
+        # Repositories should be injected or instantiated with a passed Supabase client if needed
+        # For now, assume they handle their own Supabase client through get_supabase_client()
+        self.task_repo = TaskRepository() # Will become async
+        self.user_repo = UserRepository() # Will become async
         # ... (scheduler parts omitted for brevity) ...
 
-    def _send_webhook(self, webhook_url: str, payload: Dict[str, Any]) -> bool:
+    async def _send_webhook(self, webhook_url: str, payload: Dict[str, Any]) -> bool: # Made async
         """Helper method to send data to a Make.com webhook."""
         if not webhook_url or "YOUR_MAKE_" in webhook_url or "https://hook.make.com/your-" in webhook_url: # Added check for placeholder
             logger.warning(f"Make.com webhook URL is not configured or is a placeholder: {webhook_url}")
@@ -45,7 +47,15 @@ class NotificationService:
         try:
             headers = {'Content-Type': 'application/json'}
             # Use json.dumps with default=str to handle potential non-serializable types like UUID/datetime
-            response = self.session.post(webhook_url, headers=headers, data=json.dumps(payload, default=str), timeout=10)
+            
+            # Wrap blocking HTTP call in asyncio.to_thread
+            response = await asyncio.to_thread(
+                self.session.post,
+                webhook_url, 
+                headers=headers, 
+                data=json.dumps(payload, default=str), 
+                timeout=10
+            )
             response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
             logger.info(f"Successfully triggered Make.com webhook: {webhook_url}")
             return True
@@ -58,21 +68,21 @@ class NotificationService:
             logger.error(f"An unexpected error occurred while sending webhook to {webhook_url}: {e}")
             return False
 
-    def notify_task_created(self, task: Task, creator: Optional[User] = None):
+    async def notify_task_created(self, task: Task, creator: Optional[User] = None): # Made async
         """Trigger Make.com scenario for a new task notification."""
         if not task or not task.assignee_id: # Ensure task and assignee exist
             logger.warning("Task creation notification skipped: Task or assignee ID missing.")
             return
 
         # Fetch assignee details if needed
-        assignee = self.user_repo.get_user_by_id(task.assignee_id)
+        assignee = await self.user_repo.get_user_by_id(task.assignee_id) # Made await
         if not assignee:
             logger.warning(f"Cannot find assignee user with ID {task.assignee_id}")
             return
 
         # Fetch optional user details
-        responsible = self.user_repo.get_user_by_id(task.responsible_id) if task.responsible_id else None
-        accountable = self.user_repo.get_user_by_id(task.accountable_id) if task.accountable_id else None
+        responsible = await self.user_repo.get_user_by_id(task.responsible_id) if task.responsible_id else None # Made await
+        accountable = await self.user_repo.get_user_by_id(task.accountable_id) if task.accountable_id else None # Made await
 
         # Prepare payload with Slack IDs
         payload = {
@@ -89,9 +99,9 @@ class NotificationService:
         }
         logger.info(f"Sending task created payload for task {task.id} to Make.com...")
         # Send to the specific Make.com webhook URL from settings
-        self._send_webhook(settings.MAKE_WEBHOOK_TASK_CREATED, payload)
+        await self._send_webhook(settings.MAKE_WEBHOOK_TASK_CREATED, payload) # Made await
 
-    def notify_milestone_tracking(self, manager: User, milestone: Dict[str, Any]):
+    async def notify_milestone_tracking(self, manager: User, milestone: Dict[str, Any]): # Made async
         """
         Trigger Make.com scenario for milestone tracking with managers.
         Milestones are manually defined monthly goals that are tracked via check-ins.
@@ -116,9 +126,9 @@ class NotificationService:
         
         logger.info(f"Sending milestone tracking for manager {manager.id} to Make.com...")
         # Send to the milestone webhook URL from settings
-        self._send_webhook(settings.MAKE_WEBHOOK_MASTERY_REMINDER, payload)
+        await self._send_webhook(settings.MAKE_WEBHOOK_MASTERY_REMINDER, payload) # Made await
 
-    def notify_task_achievement(self, manager: User, achievement: Dict[str, Any]):
+    async def notify_task_achievement(self, manager: User, achievement: Dict[str, Any]): # Made async
         """
         Trigger Make.com scenario for task achievement notifications.
         Provides contextual information about completed tasks/features
@@ -145,9 +155,9 @@ class NotificationService:
         
         logger.info(f"Sending task achievement notification for manager {manager.id} to Make.com...")
         # Send to the mastery webhook URL from settings
-        self._send_webhook(settings.MAKE_WEBHOOK_MASTERY_REMINDER, payload)
+        await self._send_webhook(settings.MAKE_WEBHOOK_MASTERY_REMINDER, payload) # Made await
 
-    def notify_manager_mastery_feedback(self, manager: User, feedback: Dict[str, Any]):
+    async def notify_manager_mastery_feedback(self, manager: User, feedback: Dict[str, Any]): # Made async
         """
         Trigger Make.com scenario for personal mastery feedback to managers.
         This is for improvement categories that Daniel inputs for managers.
@@ -172,9 +182,9 @@ class NotificationService:
         
         logger.info(f"Sending manager mastery feedback for manager {manager.id} to Make.com...")
         # Send to the mastery webhook URL from settings
-        self._send_webhook(settings.MAKE_WEBHOOK_MASTERY_REMINDER, payload)
+        await self._send_webhook(settings.MAKE_WEBHOOK_MASTERY_REMINDER, payload) # Made await
 
-    def notify_daily_task_followup(self, manager: User, task: Dict[str, Any]):
+    async def notify_daily_task_followup(self, manager: User, task: Dict[str, Any]): # Made async
         """
         Trigger Make.com scenario for EOD follow-up on manager's daily tasks.
         Checks if manually inputted "must-do" tasks got completed.
@@ -199,67 +209,109 @@ class NotificationService:
         
         logger.info(f"Sending daily task follow-up for manager {manager.id} to Make.com...")
         # Send to the EOD reminder webhook URL from settings
-        self._send_webhook(settings.MAKE_WEBHOOK_EOD_REMINDER, payload)
+        await self._send_webhook(settings.MAKE_WEBHOOK_EOD_REMINDER, payload) # Made await
 
     # --- Other notification methods (notify_task_blocked, etc.) would follow a similar pattern ---
 
-    def task_created_notification(self, task_id: UUID):
+    async def task_created_notification(self, task_id: UUID, creator_id: Optional[UUID] = None): # Made async, added creator_id
          """Shorthand method called by other services to notify about a new task."""
          # This method now correctly fetches the full task needed by notify_task_created
          try:
-             task = self.task_repo.get_task_by_id(task_id)
+             task = await self.task_repo.get_task_by_id(task_id) # Made await
              if task:
-                 # Potentially fetch creator info if needed/available
                  creator = None
+                 if creator_id:
+                     creator = await self.user_repo.get_user_by_id(creator_id) # Made await
                  # Pass the full Task object
-                 self.notify_task_created(task, creator)
+                 await self.notify_task_created(task, creator) # Made await
              else:
                  logger.warning(f"Cannot send task created notification: Task {task_id} not found")
          except Exception as e:
              logger.error(f"Error sending task created notification for task {task_id}: {e}", exc_info=True)
     
-    def milestone_tracking_notification(self, manager_id: UUID, milestone_data: Dict[str, Any]):
+    async def milestone_tracking_notification(self, manager_id: UUID, milestone_data: Dict[str, Any]): # Made async
         """Shorthand method called by other services to notify about milestone tracking."""
         try:
-            manager = self.user_repo.get_user_by_id(manager_id)
+            manager = await self.user_repo.get_user_by_id(manager_id) # Made await
             if manager:
-                self.notify_milestone_tracking(manager, milestone_data)
+                await self.notify_milestone_tracking(manager, milestone_data) # Made await
             else:
                 logger.warning(f"Cannot send milestone tracking notification: Manager {manager_id} not found")
         except Exception as e:
             logger.error(f"Error sending milestone tracking notification for manager {manager_id}: {e}", exc_info=True)
             
-    def task_achievement_notification(self, manager_id: UUID, achievement_data: Dict[str, Any]):
+    async def task_achievement_notification(self, manager_id: UUID, achievement_data: Dict[str, Any]): # Made async
         """Shorthand method called by other services to notify about task achievements."""
         try:
-            manager = self.user_repo.get_user_by_id(manager_id)
+            manager = await self.user_repo.get_user_by_id(manager_id) # Made await
             if manager:
-                self.notify_task_achievement(manager, achievement_data)
+                await self.notify_task_achievement(manager, achievement_data) # Made await
             else:
                 logger.warning(f"Cannot send task achievement notification: Manager {manager_id} not found")
         except Exception as e:
             logger.error(f"Error sending task achievement notification for manager {manager_id}: {e}", exc_info=True)
             
-    def manager_mastery_feedback_notification(self, manager_id: UUID, feedback_data: Dict[str, Any]):
+    async def manager_mastery_feedback_notification(self, manager_id: UUID, feedback_data: Dict[str, Any]): # Made async
         """Shorthand method called by other services to send mastery feedback to managers."""
         try:
-            manager = self.user_repo.get_user_by_id(manager_id)
+            manager = await self.user_repo.get_user_by_id(manager_id) # Made await
             if manager:
-                self.notify_manager_mastery_feedback(manager, feedback_data)
+                await self.notify_manager_mastery_feedback(manager, feedback_data) # Made await
             else:
                 logger.warning(f"Cannot send manager mastery feedback: Manager {manager_id} not found")
         except Exception as e:
             logger.error(f"Error sending manager mastery feedback for manager {manager_id}: {e}", exc_info=True)
             
-    def daily_task_followup_notification(self, manager_id: UUID, task_data: Dict[str, Any]):
+    async def daily_task_followup_notification(self, manager_id: UUID, task_data: Dict[str, Any]): # Made async
         """Shorthand method called by other services to send EOD follow-ups on daily tasks."""
         try:
-            manager = self.user_repo.get_user_by_id(manager_id)
+            manager = await self.user_repo.get_user_by_id(manager_id) # Made await
             if manager:
-                self.notify_daily_task_followup(manager, task_data)
+                await self.notify_daily_task_followup(manager, task_data) # Made await
             else:
                 logger.warning(f"Cannot send daily task follow-up: Manager {manager_id} not found")
         except Exception as e:
             logger.error(f"Error sending daily task follow-up for manager {manager_id}: {e}", exc_info=True)
+
+    async def blocked_task_alert(self, task_id: UUID, reason: str, blocking_user: Optional[User] = None):
+        """Trigger Make.com scenario for a blocked task notification."""
+        logger.info(f"Preparing blocked task alert for task ID: {task_id}")
+        task = await self.task_repo.get_task_by_id(task_id) # Made await
+        if not task:
+            logger.warning(f"Blocked task alert skipped: Task {task_id} not found.")
+            return
+
+        accountable_user = None
+        if task.accountable_id:
+            accountable_user = await self.user_repo.get_user_by_id(task.accountable_id) # Made await
+            if not accountable_user:
+                logger.warning(f"Accountable user {task.accountable_id} not found for task {task_id}")
+        
+        assignee_user = None
+        if task.assignee_id:
+            assignee_user = await self.user_repo.get_user_by_id(task.assignee_id) # Made await
+            if not assignee_user:
+                 logger.warning(f"Assignee user {task.assignee_id} not found for task {task_id}")
+
+        payload = {
+            "task_id": str(task.id),
+            "task_description": task.description,
+            "blocked_reason": reason,
+            "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+            "assignee_id": str(task.assignee_id) if task.assignee_id else None,
+            "assignee_name": getattr(assignee_user, 'name', None) if assignee_user else None,
+            "assignee_slack_id": getattr(assignee_user, 'slack_id', None) if assignee_user else None,
+            "accountable_id": str(task.accountable_id) if task.accountable_id else None,
+            "accountable_name": getattr(accountable_user, 'name', None) if accountable_user else None,
+            "accountable_slack_id": getattr(accountable_user, 'slack_id', None) if accountable_user else None,
+            "blocked_by_user_id": str(blocking_user.id) if blocking_user else None,
+            "blocked_by_user_name": getattr(blocking_user, 'name', None) if blocking_user else None,
+            "blocked_by_user_slack_id": getattr(blocking_user, 'slack_id', None) if blocking_user else None,
+            "timestamp": time.time()
+        }
+
+        webhook_url = settings.MAKE_WEBHOOK_TASK_BLOCKED
+        logger.info(f"Sending task blocked alert payload for task {task.id} to Make.com webhook: {webhook_url}")
+        await self._send_webhook(webhook_url, payload) # Made await
 
     # --- (send_task_reminders, trigger_eod_reminder etc. also use _send_webhook) ---

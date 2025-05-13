@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from supabase import Client
-from app.config.supabase_client import get_supabase_client
+from app.config.supabase_client import get_supabase_client_safe
 from app.models.task import Task, TaskStatus # Pydantic model
 from app.models.user import User # Assuming this is needed for creator/user context eventually
 import logging
@@ -12,8 +12,8 @@ from decimal import Decimal # Ensure Decimal is imported
 logger = logging.getLogger(__name__)
 
 class TaskRepository:
-    def __init__(self, client: Client = get_supabase_client()):
-        self._client = client
+    def __init__(self, client: Client = None):
+        self._client = client if client is not None else get_supabase_client_safe()
         self._table = "tasks"
 
     def _process_dict_for_supabase(self, data_dict: Dict[str, Any]) -> Dict[str, Any]:
