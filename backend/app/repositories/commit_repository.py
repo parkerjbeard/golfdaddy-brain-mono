@@ -8,6 +8,7 @@ from app.models.commit import Commit # Pydantic model
 import logging
 import json
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
+import asyncio
 
 logger = logging.getLogger(__name__)
 
