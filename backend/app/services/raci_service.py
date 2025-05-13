@@ -23,8 +23,9 @@ class RaciService:
         self.user_repo = UserRepository()
         # self.notification_service = NotificationService() # Be careful with circular dependencies
     
-    async def assign_raci(
+    async def register_raci_assignments(
         self,
+        title: str,
         description: str,
         assignee_id: UUID,
         creator_id: UUID,
@@ -33,8 +34,10 @@ class RaciService:
         consulted_ids: Optional[List[UUID]] = None,
         informed_ids: Optional[List[UUID]] = None,
         due_date: Optional[datetime] = None,
+        task_type: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Optional[Task], List[str]]:
-        """Validates RACI roles, creates a Task object, persists it, and returns task with warnings."""
+        """Validates RACI roles, creates a Task object with all details, persists it, and returns task with warnings."""
         warnings = []
 
         # Validate critical user IDs first
@@ -88,6 +91,7 @@ class RaciService:
 
         # Construct the Task Pydantic model
         task_data = Task(
+            title=title,
             description=description,
             assignee_id=assignee_id,
             responsible_id=responsible_id, # Already validated or defaulted from validated assignee
@@ -96,7 +100,9 @@ class RaciService:
             informed_ids=valid_informed_ids,   # Use validated list
             creator_id=creator_id, # Validated
             due_date=due_date,
-            status=TaskStatus.ASSIGNED # Default status
+            status=TaskStatus.ASSIGNED, # Default status
+            task_type=task_type,
+            metadata=metadata if metadata else {},
             # id, created_at, updated_at will be set by DB or repo
         )
         

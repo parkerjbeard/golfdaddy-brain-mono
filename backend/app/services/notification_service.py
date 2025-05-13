@@ -86,7 +86,9 @@ class NotificationService:
 
             payload = {
                 "task_id": str(task.id),
+                "task_title": task.title, # Added title
                 "task_description": task.description,
+                "task_type": task.task_type, # Added task_type
                 "assignee_slack_id": assignee.slack_id,
                 "assignee_name": getattr(assignee, 'name', None),
                 "responsible_slack_id": responsible.slack_id if responsible else None,
@@ -95,8 +97,16 @@ class NotificationService:
                 "due_date": task.due_date.isoformat() if task.due_date else None,
                 "creator_slack_id": creator.slack_id if creator else None,
                 "creator_name": getattr(creator, 'name', None) if creator else None,
+                "notification_type": "task_created" # Added notification type for Make.com routing
             }
-            logger.info(f"Sending task created payload for task {task.id} to Make.com...")
+            
+            # Add development-specific fields if it's a manager development task
+            if task.task_type == "manager_development" and task.metadata:
+                payload["development_area"] = task.metadata.get("development_area")
+                payload["learning_objectives"] = task.metadata.get("learning_objectives")
+                # Potentially add other metadata fields relevant to the notification
+
+            logger.info(f"Sending task created payload for task {task.id} (type: {task.task_type}) to Make.com...")
             await self._send_webhook(settings.MAKE_WEBHOOK_TASK_CREATED, payload)
         except (ConfigurationError, ExternalServiceError, AppExceptionBase) as e_webhook:
             logger.error(f"Webhook error during task created notification for task {task.id}: {e_webhook}", exc_info=True)
@@ -244,18 +254,62 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Unexpected error in blocked_task_alert for task {task_id}: {e}", exc_info=True)
 
+    async def send_development_plan_notification(
+        self, 
+        manager_user_id: UUID, # Changed from manager_slack_id to user_id for consistency
+        development_areas: List[str], 
+        num_tasks_created: int,
+        plan_link: Optional[str] = None # Optional link to view the plan
+    ):
+        """Trigger Make.com scenario for a new development plan notification."""
+        if not manager_user_id:
+            logger.warning("Development plan notification skipped: Manager User ID missing.")
+            return
+
+        try:
+            manager = await self.user_repo.get_user_by_id(manager_user_id)
+            if not manager or not manager.slack_id:
+                logger.warning(f"Cannot send development plan notification: Manager {manager_user_id} not found or Slack ID missing.")
+                return
+
+            payload = {
+                "manager_user_id": str(manager.id),
+                "manager_slack_id": manager.slack_id,
+                "manager_name": getattr(manager, 'name', 'Manager'),
+                "development_areas": development_areas,
+                "num_tasks_created": num_tasks_created,
+                "plan_link": plan_link,
+                "notification_type": "development_plan_created"
+            }
+            webhook_url = settings.MAKE_WEBHOOK_DEV_PLAN_CREATED
+            if not webhook_url or "YOUR_MAKE_" in webhook_url:
+                logger.error(f"Make.com webhook URL for development plan creation is not configured: {webhook_url}")
+                # Depending on policy, either raise ConfigurationError or log and skip
+                # For now, logging and skipping to avoid breaking flow if webhook is optional/not yet set up
+                return 
+
+            logger.info(f"Sending development plan created payload for manager {manager.id} to {webhook_url}...")
+            await self._send_webhook(webhook_url, payload)
+
+        except (ConfigurationError, ExternalServiceError, AppExceptionBase) as e_webhook:
+            logger.error(f"Webhook error during development plan notification for manager {manager_user_id}: {e_webhook}", exc_info=True)
+        except ResourceNotFoundError as e_res:
+            logger.warning(f"Resource not found (manager) during development plan notification for manager {manager_user_id}: {e_res}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Unexpected error in send_development_plan_notification for manager {manager_user_id}: {e}", exc_info=True)
+
     # --- Shorthand methods call the above specific notification handlers ---
     # These already have try-except Exception which will catch the more specific ones now.
-    async def task_created_notification(self, task_id: UUID, creator_id: Optional[UUID] = None):
+    async def task_created_notification(self, task: Task, creator_id: Optional[UUID] = None):
          try:
-             task = await self.task_repo.get_task_by_id(task_id)
+             # Task object is now passed directly, no need to fetch it again
              if task:
                  creator = await self.user_repo.get_user_by_id(creator_id) if creator_id else None
-                 await self.notify_task_created(task, creator)
+                 await self.notify_task_created(task, creator) # Pass the full Task object
              else:
-                 logger.warning(f"Cannot send task created notification: Task {task_id} not found")
+                 logger.warning(f"Cannot send task created notification: Task object is None")
          except Exception as e:
-             logger.error(f"Error sending task created notification for task {task_id}: {e}", exc_info=True)
+             logger.error(f"Error sending task created notification for task {task.id if task else 'Unknown'}: {e}", exc_info=True)
     
     async def milestone_tracking_notification(self, manager_id: UUID, milestone_data: Dict[str, Any]):
         try:

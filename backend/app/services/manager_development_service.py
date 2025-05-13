@@ -6,12 +6,15 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import asyncio
 
+from app.models.task import Task
 from app.repositories.user_repository import UserRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.notification_service import NotificationService
 from app.services.raci_service import RACIService
 from app.config.settings import settings
 from app.integrations.ai_integration import AIIntegration
+from app.models.user import User as UserModel
+
 from app.core.exceptions import (
     ResourceNotFoundError,
     AIIntegrationError,
@@ -36,11 +39,13 @@ DEVELOPMENT_AREAS = [
     "change_management"
 ]
 
-# Task types
-TASK_TYPES = {
+# Task types specific to manager development
+MANAGER_DEV_TASK_TYPE_KEY = "manager_development"
+
+TASK_SUB_TYPES = {
     "milestone": "Assessment and goal-setting tasks",
-    "development": "Skill practice and implementation tasks",
-    "feedback": "Observation and coaching tasks"
+    "skill_practice": "Skill practice and implementation tasks",
+    "feedback_coaching": "Observation and coaching tasks"
 }
 
 class ManagerDevelopmentService:
@@ -67,273 +72,335 @@ class ManagerDevelopmentService:
         self.raci_service = raci_service
         self.ai_integration = ai_integration
     
-    async def create_development_task(
+    async def _generate_task_content_from_ai(
         self,
-        task_type: str,
+        manager_name: str,
         development_area: str,
-        manager_id: str,
-        title: Optional[str] = None,
-        description: Optional[str] = None,
-        due_date: Optional[datetime] = None,
-        director_id: Optional[str] = None
+        task_sub_type: str
     ) -> Dict[str, Any]:
         """
-        Creates a single management development task with appropriate RACI assignments.
-        
-        Args:
-            task_type: Type of task ("milestone", "development", or "feedback")
-            development_area: Area of management development
-            manager_id: UUID of the manager
-            title: Optional custom title for the task
-            description: Optional custom description for the task
-            due_date: Optional due date (defaults to 1 week)
-            director_id: Optional director ID (will be looked up if not provided)
-            
-        Returns:
-            Dict containing the created task details
+        Generates task content (title, description, and metadata) using AI.
+        Metadata includes learning_objectives, suggested_resources, success_metrics.
         """
-        # Validate inputs
-        if task_type not in TASK_TYPES:
-            raise BadRequestError(f"Invalid task type: {task_type}. Must be one of: {', '.join(TASK_TYPES.keys())}")
-            
-        if development_area not in DEVELOPMENT_AREAS:
-            raise BadRequestError(f"Invalid development area: {development_area}. Must be one of: {', '.join(DEVELOPMENT_AREAS)}")
-        
-        # Look up the manager to get their details
-        manager = await self.user_repository.get_user_by_id(manager_id)
-        if not manager:
-            raise ResourceNotFoundError(resource_name="Manager", resource_id=manager_id)
-        
-        # Get or find the director
-        if director_id:
-            director = await self.user_repository.get_user_by_id(director_id)
-            if not director:
-                raise ResourceNotFoundError(resource_name="Director", resource_id=director_id)
-        else:
-            # Try to find the manager's director
-            director = await self.user_repository.get_director_for_manager(manager_id)
-            if not director:
-                raise ResourceNotFoundError(resource_name=f"Director for manager {manager_id}", resource_id="associated director")
-        
-        # Set default due date if not provided
-        if not due_date:
-            due_date = datetime.now() + timedelta(days=7)
-        
-        # Generate task details using AI if not provided
-        if not title or not description:
-            ai_generated_content = await self._generate_task_content(
-                task_type, 
-                development_area,
-                manager["name"] if "name" in manager else "the manager"
+        try:
+            logger.info(f"Generating AI content for manager {manager_name}, area: {development_area}, type: {task_sub_type}")
+            ai_content = await self.ai_integration.generate_development_task_content(
+                manager_name=manager_name,
+                development_area=development_area,
+                task_type=task_sub_type,
             )
             
-            if not title:
-                title = ai_generated_content["title"]
+            title = f"{development_area.replace('_', ' ').title()} - {task_sub_type.replace('_', ' ').title()}"
             
-            if not description:
-                description = ai_generated_content["description"]
-                
-            completion_criteria = ai_generated_content["completion_criteria"]
-        else:
-            # Default completion criteria if not generated by AI
-            completion_criteria = [
-                f"Complete {development_area.replace('_', ' ')} assessment",
-                "Document progress and outcomes",
-                "Review with stakeholders"
-            ]
+            if not ai_content.get("description"):
+                 logger.warning(f"AI did not return a description for {development_area} - {task_sub_type}. Using a placeholder.")
+                 ai_content["description"] = f"Placeholder task for {development_area} ({task_sub_type}). Please define clear objectives and actions."
+
+            task_metadata = {
+                "development_area": development_area,
+                "task_sub_type": task_sub_type,
+                "learning_objectives": ai_content.get("learning_objectives", ["Define specific learning objectives."]),
+                "suggested_resources": ai_content.get("suggested_resources", ["Identify relevant resources."]),
+                "success_metrics": ai_content.get("success_metrics", ["Define clear success metrics."])
+            }
             
-        # Create the task
-        task_id = f"mgmt-dev-{uuid.uuid4().hex[:8]}"
+            return {
+                "title": title,
+                "description": ai_content["description"],
+                "metadata": task_metadata
+            }
+            
+        except Exception as e:
+            logger.error(f"AI content generation failed for {development_area} ({task_sub_type}): {e}", exc_info=True)
+            default_title = f"{development_area.replace('_', ' ').title()} - {task_sub_type.replace('_', ' ').title()} (Error)"
+            return {
+                "title": default_title,
+                "description": f"Error generating AI content. Please manually define this {task_sub_type} task for the {development_area} development area.",
+                "metadata": {
+                    "development_area": development_area,
+                    "task_sub_type": task_sub_type,
+                    "learning_objectives": ["Error: Define objectives"],
+                    "suggested_resources": ["Error: Define resources"],
+                    "success_metrics": ["Error: Define metrics"],
+                    "ai_error": str(e)
+                }
+            }
+
+    async def _determine_raci_user_ids(
+        self,
+        task_sub_type: str, 
+        manager: UserModel, 
+        director: UserModel,
+    ) -> Dict[str, Any]:
+        """
+        Determines the User IDs for R, A, C, I roles based on task type and hierarchy.
+        Returns a dictionary with keys: responsible_id, accountable_id, consulted_ids, informed_ids.
+        """
+        manager_id = manager.id
+        director_id = director.id
         
-        # Set up different RACI assignments based on task type
-        raci_assignments = await self._create_raci_assignments(
-            task_type, manager, director, task_id
+        direct_reports_users = await self.user_repository.get_direct_reports(manager_id)
+        peer_users = await self.user_repository.get_peers(manager_id)
+        
+        direct_report_ids = [u.id for u in direct_reports_users]
+        peer_ids = [u.id for u in peer_users][:2]
+
+        raci_user_ids = {
+            "responsible_id": None, "accountable_id": None,
+            "consulted_ids": [], "informed_ids": []
+        }
+
+        if task_sub_type == "milestone":
+            raci_user_ids["responsible_id"] = manager_id
+            raci_user_ids["accountable_id"] = director_id
+            raci_user_ids["consulted_ids"] = peer_ids
+            raci_user_ids["informed_ids"] = direct_report_ids[:3] 
+        elif task_sub_type == "skill_practice":
+            raci_user_ids["responsible_id"] = manager_id
+            raci_user_ids["accountable_id"] = manager_id 
+            raci_user_ids["consulted_ids"] = [director_id] + peer_ids
+            raci_user_ids["informed_ids"] = direct_report_ids[:3]
+        elif task_sub_type == "feedback_coaching":
+            raci_user_ids["responsible_id"] = director_id
+            raci_user_ids["accountable_id"] = director_id
+            raci_user_ids["consulted_ids"] = [manager_id]
+            raci_user_ids["informed_ids"] = peer_ids 
+        else:
+            logger.warning(f"Unknown task sub-type '{task_sub_type}' for RACI determination. Defaulting R&A to manager.")
+            raci_user_ids["responsible_id"] = manager_id
+            raci_user_ids["accountable_id"] = manager_id
+
+        return raci_user_ids
+
+    async def create_development_task(
+        self,
+        task_sub_type: str,
+        development_area: str,
+        manager_user_id: uuid.UUID,
+        creator_user_id: uuid.UUID,
+        custom_title: Optional[str] = None,
+        custom_description: Optional[str] = None,
+        due_date: Optional[datetime] = None,
+        director_user_id: Optional[uuid.UUID] = None
+    ) -> Task:
+        """
+        Creates a single management development task.
+        """
+        logger.info(f"Creating development task: Area='{development_area}', SubType='{task_sub_type}' for Manager ID {manager_user_id}")
+
+        if task_sub_type not in TASK_SUB_TYPES:
+            raise BadRequestError(f"Invalid task sub_type: {task_sub_type}. Must be one of: {', '.join(TASK_SUB_TYPES.keys())}")
+        if development_area not in DEVELOPMENT_AREAS:
+            raise BadRequestError(f"Invalid development area: {development_area}.")
+
+        manager = await self.user_repository.get_user_by_id(manager_user_id)
+        if not manager:
+            raise ResourceNotFoundError(resource_name="Manager", resource_id=str(manager_user_id))
+
+        creator = await self.user_repository.get_user_by_id(creator_user_id)
+        if not creator:
+            raise ResourceNotFoundError(resource_name="Creator", resource_id=str(creator_user_id))
+
+        if director_user_id:
+            director = await self.user_repository.get_user_by_id(director_user_id)
+            if not director:
+                raise ResourceNotFoundError(resource_name="Director", resource_id=str(director_user_id))
+        else:
+            director = await self.user_repository.get_director_for_manager(manager_user_id)
+            if not director:
+                 logger.warning(f"No director ID provided and director not found for manager {manager_user_id}. Plan creation will proceed.")
+        
+        if custom_title and custom_description:
+            title = custom_title
+            description = custom_description
+            metadata = {
+                "development_area": development_area,
+                "task_sub_type": task_sub_type,
+                "learning_objectives": ["Manually defined objectives if any"],
+                "suggested_resources": ["Manually defined resources if any"],
+                "success_metrics": ["Manually defined success metrics if any"]
+            }
+        else:
+            generated_content = await self._generate_task_content_from_ai(
+                manager_name=getattr(manager, 'name', 'The Manager'), 
+                development_area=development_area,
+                task_sub_type=task_sub_type
+            )
+            title = custom_title or generated_content["title"]
+            description = custom_description or generated_content["description"]
+            metadata = generated_content["metadata"]
+        
+        if not due_date:
+            due_date = datetime.now() + timedelta(weeks=1)
+
+        raci_user_ids = await self._determine_raci_user_ids(
+            task_sub_type, manager, director if director else manager
         )
         
-        # Prepare task data
-        task_data = {
-            "task_id": task_id,
-            "task_type": task_type,
-            "development_area": development_area,
-            "title": title,
-            "description": description,
-            "due_date": due_date.isoformat(),
-            "status": "created",
-            "completion_criteria": completion_criteria,
-            "progress": 0,
-            **raci_assignments
-        }
+        created_task_tuple = await self.raci_service.register_raci_assignments(
+            title=title,
+            description=description,
+            assignee_id=manager.id,
+            creator_id=creator.id,
+            responsible_id=raci_user_ids["responsible_id"],
+            accountable_id=raci_user_ids["accountable_id"],
+            consulted_ids=raci_user_ids["consulted_ids"],
+            informed_ids=raci_user_ids["informed_ids"],
+            due_date=due_date,
+            task_type=MANAGER_DEV_TASK_TYPE_KEY,
+            metadata=metadata
+        )
         
-        # Save task to the database
-        created_task = await self.task_repository.create_task(task_data)
+        created_task = created_task_tuple[0]
+        warnings = created_task_tuple[1]
+
         if not created_task:
-            logger.error(f"Failed to create development task in repository for manager {manager_id}, area {development_area}.")
-            raise DatabaseError("Failed to save development task.")
+            logger.error(f"Failed to create development task via RACI service for manager {manager_user_id}, area {development_area}.")
+            raise DatabaseError("Failed to save development task via RACI service.")
         
-        # Send notifications to all RACI roles
-        await self._notify_stakeholders(task_type, created_task)
+        if warnings:
+            logger.warning(f"Task {created_task.id} created with warnings: {warnings}")
+
+        await self.notification_service.task_created_notification(created_task, creator_id=creator.id)
         
+        logger.info(f"Successfully created development task {created_task.id} for manager {manager.id}")
         return created_task
-        
+
     async def create_development_plan(
         self,
-        manager_id: str,
+        manager_user_id: uuid.UUID,
+        creator_user_id: uuid.UUID,
         development_areas: List[str],
-        director_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        director_user_id: Optional[uuid.UUID] = None
+    ) -> List[Task]:
         """
-        Creates a complete development plan with multiple focus areas.
-        Each area includes milestone, development, and feedback tasks.
+        Creates a development plan consisting of multiple tasks for a manager.
+        """
+        logger.info(f"Creating development plan for Manager ID {manager_user_id} in areas: {', '.join(development_areas)}")
+        manager = await self.user_repository.get_user_by_id(manager_user_id)
+        if not manager:
+            raise ResourceNotFoundError(resource_name="Manager", resource_id=str(manager_user_id))
         
-        Args:
-            manager_id: UUID of the manager
-            development_areas: List of development areas to focus on
-            director_id: Optional director ID
-            
-        Returns:
-            List of created tasks forming the development plan
-        """
-        if not development_areas:
-            raise BadRequestError("At least one development area must be provided")
-            
-        # Validate all areas
-        for area in development_areas:
+        creator = await self.user_repository.get_user_by_id(creator_user_id)
+        if not creator:
+            raise ResourceNotFoundError(resource_name="Creator", resource_id=str(creator_user_id))
+
+        director = None
+        if director_user_id:
+            director = await self.user_repository.get_user_by_id(director_user_id)
+            if not director:
+                logger.warning(f"Director with ID {director_user_id} not found. Plan creation will proceed, RACI might be affected for some tasks.")
+        else:
+            director = await self.user_repository.get_director_for_manager(manager_user_id)
+            if not director:
+                 logger.warning(f"No director ID provided and director not found for manager {manager_user_id}. Plan creation will proceed.")
+        
+        created_tasks: List[Task] = []
+        base_due_date = datetime.now()
+
+        for i, area in enumerate(development_areas):
             if area not in DEVELOPMENT_AREAS:
-                raise BadRequestError(f"Invalid development area: {area}")
-        
-        created_tasks = []
-        
-        # Create a set of tasks for each development area
-        for area in development_areas:
-            # Stagger due dates
-            milestone_due = datetime.now() + timedelta(days=7)
-            development_due = datetime.now() + timedelta(days=14)
-            feedback_due = datetime.now() + timedelta(days=21)
+                logger.warning(f"Skipping invalid development area '{area}' in plan for manager {manager_user_id}")
+                continue
             
-            # Create milestone task (assessment)
-            milestone_task = await self.create_development_task(
-                "milestone", 
-                area, 
-                manager_id, 
-                due_date=milestone_due,
-                director_id=director_id
-            )
-            created_tasks.append(milestone_task)
-            
-            # Create development task (practice)
-            development_task = await self.create_development_task(
-                "development", 
-                area, 
-                manager_id, 
-                due_date=development_due,
-                director_id=director_id
-            )
-            created_tasks.append(development_task)
-            
-            # Create feedback task (evaluation)
-            feedback_task = await self.create_development_task(
-                "feedback", 
-                area, 
-                manager_id, 
-                due_date=feedback_due,
-                director_id=director_id
-            )
-            created_tasks.append(feedback_task)
+            for j, (sub_type_key, sub_type_desc) in enumerate(TASK_SUB_TYPES.items()):
+                task_due_date = base_due_date + timedelta(weeks=(i * len(TASK_SUB_TYPES)) + j + 1) 
+                
+                try:
+                    task = await self.create_development_task(
+                        task_sub_type=sub_type_key,
+                        development_area=area,
+                        manager_user_id=manager.id,
+                        creator_user_id=creator.id,
+                        due_date=task_due_date,
+                        director_user_id=director.id if director else None
+                    )
+                    created_tasks.append(task)
+                except Exception as e:
+                    logger.error(f"Failed to create task for area '{area}', sub-type '{sub_type_key}' for manager {manager_user_id}: {e}", exc_info=True)
+
+        if not created_tasks:
+            logger.warning(f"No tasks were created for the development plan for manager {manager_user_id}.")
+            return []
+
+        logger.info(f"Created development plan with {len(created_tasks)} tasks for manager {manager.id}")
         
-        # Create an overall plan summary
-        plan_summary = {
-            "manager_id": manager_id,
-            "development_areas": development_areas,
-            "task_count": len(created_tasks),
-            "created_at": datetime.now().isoformat(),
-            "tasks": [task["task_id"] for task in created_tasks]
-        }
-        
-        logger.info(f"Created development plan with {len(created_tasks)} tasks for manager {manager_id}")
-        
-        # Notify the manager about their complete development plan
-        manager = await self.user_repository.get_user_by_id(manager_id)
-        if manager and "slack_id" in manager:
-            await self.notification_service.send_development_plan_notification(
-                manager["slack_id"], 
-                development_areas, 
-                len(created_tasks)
-            )
+        plan_link_placeholder = f"/user/{manager.id}/development-plan/{datetime.now().strftime('%Y%m%d')}" 
+        await self.notification_service.send_development_plan_notification(
+            manager_user_id=manager.id, 
+            development_areas=development_areas,
+            num_tasks_created=len(created_tasks),
+            plan_link=plan_link_placeholder 
+        )
         
         return created_tasks
     
     async def update_task_progress(
         self,
-        task_id: str,
+        task_id: uuid.UUID,
         progress: int,
+        updater_user_id: uuid.UUID,
         update_notes: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> Task:
         """
         Updates the progress of a development task.
-        
-        Args:
-            task_id: ID of the task to update
-            progress: New progress value (0-100)
-            update_notes: Optional notes about the progress update
-            
-        Returns:
-            Updated task data
         """
-        # Validate input
+        logger.info(f"Updating progress for task {task_id} to {progress}% by user {updater_user_id}")
         if not 0 <= progress <= 100:
             raise BadRequestError("Progress must be between 0 and 100")
             
-        # Retrieve the task
-        task = await self.task_repository.get_task_by_id(task_id)
-        if not task:
-            raise ResourceNotFoundError(resource_name="Task", resource_id=task_id)
+        task_to_update = await self.task_repository.get_task_by_id(task_id)
+        if not task_to_update:
+            raise ResourceNotFoundError(resource_name="Task", resource_id=str(task_id))
             
-        # Check that it's a development task
-        if "task_type" not in task or not task["task_type"] in TASK_TYPES:
-            raise BadRequestError(f"Task {task_id} is not a valid development task.")
+        if task_to_update.task_type != MANAGER_DEV_TASK_TYPE_KEY:
+            raise BadRequestError(f"Task {task_id} is not a manager development task. Current type: {task_to_update.task_type}")
             
-        # Update progress
-        update_data = {
-            "progress": progress,
-            "last_updated": datetime.now().isoformat()
-        }
+        updater = await self.user_repository.get_user_by_id(updater_user_id)
+        if not updater:
+            raise ResourceNotFoundError(resource_name="Updater User", resource_id=str(updater_user_id))
+
+        update_payload: Dict[str, Any] = {"metadata": task_to_update.metadata.copy() if task_to_update.metadata else {}}
         
+        update_payload["metadata"]["progress"] = progress 
+        update_payload["metadata"]["last_progress_update_by"] = str(updater.id)
+        update_payload["metadata"]["last_progress_update_at"] = datetime.now().isoformat()
+
         if update_notes:
-            update_data["update_notes"] = update_notes
-            
-        # Update status based on progress
+            if "progress_notes" not in update_payload["metadata"]:
+                update_payload["metadata"]["progress_notes"] = []
+            update_payload["metadata"]["progress_notes"].append({
+                "note": update_notes,
+                "updated_by": str(updater.id),
+                "updated_at": datetime.now().isoformat()
+            })
+        
         if progress == 100:
-            update_data["status"] = "completed"
-        elif progress > 0:
-            update_data["status"] = "in_progress"
-            
-        # Update the task
-        updated_task = await self.task_repository.update_task(task_id, update_data)
+            update_payload["status"] = "completed"
+        elif progress > 0 and task_to_update.status.value == "assigned":
+             update_payload["status"] = "in_progress"
+
+        updated_task = await self.task_repository.update_task(task_id, update_payload)
         if not updated_task:
             logger.error(f"Failed to update task {task_id} progress in repository.")
-            raise DatabaseError(f"Failed to update task {task_id}.")
+            raise DatabaseError(f"Failed to update task {task_id} progress in repository.")
         
-        # Notify relevant stakeholders based on RACI
-        if progress == 100:
-            # Task completed - notify accountable person
-            if "accountable_slack_id" in task:
-                await self.notification_service.send_task_completion_notification(
-                    task["accountable_slack_id"],
-                    task["title"],
-                    task["task_id"]
-                )
-                
-            # Also notify informed stakeholders
-            if "informed_slack_ids" in task and task["informed_slack_ids"]:
-                for slack_id in task["informed_slack_ids"]:
-                    await self.notification_service.send_task_completion_notification(
-                        slack_id,
-                        task["title"],
-                        task["task_id"]
-                    )
+        logger.info(f"Task {updated_task.id} progress updated to {progress}%. Status: {updated_task.status.value}")
+
+        if updated_task.status.value == "completed":
+            if updated_task.accountable_id:
+                accountable_user = await self.user_repository.get_user_by_id(updated_task.accountable_id)
+                if accountable_user and accountable_user.slack_id:
+                    logger.info(f"Placeholder: Notifying accountable user {accountable_user.id} about task {updated_task.id} completion.")
+
+            if updated_task.informed_ids:
+                for informed_id in updated_task.informed_ids:
+                    informed_user = await self.user_repository.get_user_by_id(informed_id)
+                    if informed_user and informed_user.slack_id:
+                        logger.info(f"Placeholder: Notifying informed user {informed_user.id} about task {updated_task.id} completion.")
         
         return updated_task
-    
+
     async def generate_feedback(
         self,
         manager_id: str,
@@ -351,23 +418,19 @@ class ManagerDevelopmentService:
         Returns:
             Dictionary containing structured feedback
         """
-        # Get manager data
         manager = await self.user_repository.get_user_by_id(manager_id)
         if not manager:
             raise ResourceNotFoundError(resource_name="Manager", resource_id=manager_id)
             
-        # Get manager's recent tasks in this area
         recent_tasks = await self.task_repository.get_tasks_by_user_and_area(
             manager_id, development_area, limit=5
         )
         
-        # Prepare context for AI
         manager_name = manager.get("name", "the manager")
         manager_role = manager.get("role", "manager")
         recent_task_titles = [task.get("title", "") for task in recent_tasks]
         recent_progress = [task.get("progress", 0) for task in recent_tasks]
         
-        # Generate a detailed feedback prompt
         prompt = self._create_feedback_prompt(
             manager_name,
             manager_role,
@@ -377,14 +440,12 @@ class ManagerDevelopmentService:
             context_notes
         )
         
-        # Call the AI to generate feedback
         try:
             ai_response = await self.ai_integration.generate_text(prompt)
         except Exception as ai_exc:
             logger.error(f"AI integration error generating feedback for manager {manager_id}: {ai_exc}", exc_info=True)
             raise AIIntegrationError(f"Failed to generate feedback due to AI service error: {str(ai_exc)}")
         
-        # Process and structure the response
         try:
             feedback = self._process_feedback_response(ai_response, development_area)
             logger.info(f"Generated feedback for manager {manager_id} in area: {development_area}")
@@ -406,15 +467,12 @@ class ManagerDevelopmentService:
         Returns:
             Summary of development progress
         """
-        # Get manager data
         manager = await self.user_repository.get_user_by_id(manager_id)
         if not manager:
             raise ResourceNotFoundError(resource_name="Manager", resource_id=manager_id)
             
-        # Get all tasks for the manager
         all_tasks = await self.task_repository.get_tasks_for_user(manager_id)
         
-        # Organize tasks by development area
         tasks_by_area = {}
         for area in DEVELOPMENT_AREAS:
             tasks_by_area[area] = []
@@ -423,7 +481,6 @@ class ManagerDevelopmentService:
             if "development_area" in task and task["development_area"] in DEVELOPMENT_AREAS:
                 tasks_by_area[task["development_area"]].append(task)
         
-        # Calculate progress for each area
         area_progress = {}
         for area, tasks in tasks_by_area.items():
             if not tasks:
@@ -432,15 +489,12 @@ class ManagerDevelopmentService:
                 total_progress = sum(task.get("progress", 0) for task in tasks)
                 area_progress[area] = total_progress / (len(tasks) * 100) * 100 if tasks else 0
         
-        # Calculate overall progress
         total_progress = sum(area_progress.values())
         overall_progress = total_progress / len(DEVELOPMENT_AREAS) if DEVELOPMENT_AREAS else 0
         
-        # Find strengths and areas for improvement
         strengths = sorted(area_progress.items(), key=lambda x: x[1], reverse=True)[:3]
         weaknesses = sorted(area_progress.items(), key=lambda x: x[1])[:3]
         
-        # Create summary
         summary = {
             "manager_id": manager_id,
             "manager_name": manager.get("name", ""),
@@ -456,250 +510,6 @@ class ManagerDevelopmentService:
         
         return summary
     
-    # --- Helper methods ---
-    
-    async def _generate_task_content(
-        self,
-        task_type: str,
-        development_area: str,
-        manager_name: str
-    ) -> Dict[str, Any]:
-        """
-        Uses AI to generate task title, description, and completion criteria.
-        """
-        # Create prompt based on task type and development area
-        area_display = development_area.replace("_", " ")
-        
-        if task_type == "milestone":
-            prompt = f"""
-            Create a milestone assessment task for {manager_name} focused on '{area_display}' management skills.
-            The task should help the manager assess their current capabilities and set goals.
-            
-            Provide:
-            1. A short, specific task title
-            2. A detailed description of what the manager needs to do
-            3. 3-5 specific completion criteria that will indicate the milestone is complete
-            
-            Format the response as JSON with title, description, and completion_criteria (an array) fields.
-            """
-        elif task_type == "development":
-            prompt = f"""
-            Create a skill development task for {manager_name} to improve '{area_display}' management capabilities.
-            The task should involve actively practicing and implementing new techniques.
-            
-            Provide:
-            1. A short, specific task title
-            2. A detailed description of the development activity
-            3. 3-5 specific completion criteria that will indicate the development activity is complete
-            
-            Format the response as JSON with title, description, and completion_criteria (an array) fields.
-            """
-        else:  # feedback
-            prompt = f"""
-            Create a feedback task related to {manager_name}'s '{area_display}' management capabilities.
-            This task will be assigned to the manager's director or supervisor to provide structured feedback.
-            
-            Provide:
-            1. A short, specific task title
-            2. A detailed description of how the feedback should be gathered and delivered
-            3. 3-5 specific completion criteria for giving effective feedback
-            
-            Format the response as JSON with title, description, and completion_criteria (an array) fields.
-            """
-        
-        # Call the AI integration
-        try:
-            ai_response = await self.ai_integration.generate_text(prompt)
-        except Exception as e_ai:
-            logger.error(f"AI integration error generating task content for type {task_type}, area {development_area}: {e_ai}", exc_info=True)
-            raise AIIntegrationError(f"Failed to generate task content due to AI service error: {str(e_ai)}")
-        
-        # Parse the response
-        try:
-            content = json.loads(ai_response)
-            required_fields = ["title", "description", "completion_criteria"]
-            
-            # Validate response has required fields
-            for field in required_fields:
-                if field not in content:
-                    logger.warning(f"AI response for task content generation (type: {task_type}, area: {development_area}) missing field: {field}. Raw: {ai_response[:200]}")
-                    raise ValueError(f"AI response missing required field: {field}")
-                    
-            return content
-        except json.JSONDecodeError as e:
-            logger.warning(f"AI response for task content (type: {task_type}, area: {development_area}) was not valid JSON: {ai_response[:200]}. Error: {e}", exc_info=True)
-            # Fallback content if AI doesn't return valid JSON
-            raise AIIntegrationError(f"AI response was not valid JSON for task content generation.")
-        except ValueError as ve:
-            raise AIIntegrationError(f"AI response structure error for task content: {str(ve)}")
-    
-    async def _create_raci_assignments(
-        self,
-        task_type: str,
-        manager: Dict[str, Any],
-        director: Dict[str, Any],
-        task_id: str
-    ) -> Dict[str, Any]:
-        """
-        Creates appropriate RACI role assignments based on task type.
-        """
-        # Get team members and peers for consulted/informed roles
-        direct_reports = await self.user_repository.get_direct_reports(manager["id"])
-        peers = await self.user_repository.get_peers(manager["id"])
-        
-        # Extract just the IDs and names
-        direct_report_ids = [user["id"] for user in direct_reports]
-        direct_report_slack_ids = [user.get("slack_id", "") for user in direct_reports]
-        direct_report_names = [user.get("name", f"Employee {i+1}") for i, user in enumerate(direct_reports)]
-        
-        peer_ids = [user["id"] for user in peers][:2]  # Limit to 2 peers
-        peer_slack_ids = [user.get("slack_id", "") for user in peers][:2]
-        peer_names = [user.get("name", f"Peer {i+1}") for i, user in enumerate(peers)][:2]
-        
-        # Base RACI structure
-        raci = {
-            "responsible_id": "",
-            "responsible_slack_id": "",
-            "responsible_name": "",
-            
-            "accountable_id": "",
-            "accountable_slack_id": "",
-            "accountable_name": "",
-            
-            "consulted_ids": [],
-            "consulted_slack_ids": [],
-            "consulted_names": [],
-            
-            "informed_ids": [],
-            "informed_slack_ids": [],
-            "informed_names": []
-        }
-        
-        # Assign different RACI roles based on task type
-        if task_type == "milestone":
-            # Manager is responsible, director is accountable
-            raci["responsible_id"] = manager["id"]
-            raci["responsible_slack_id"] = manager.get("slack_id", "")
-            raci["responsible_name"] = manager.get("name", "Manager")
-            
-            raci["accountable_id"] = director["id"]
-            raci["accountable_slack_id"] = director.get("slack_id", "")
-            raci["accountable_name"] = director.get("name", "Director")
-            
-            # Peers are consulted
-            raci["consulted_ids"] = peer_ids
-            raci["consulted_slack_ids"] = peer_slack_ids
-            raci["consulted_names"] = peer_names
-            
-            # Direct reports are informed
-            raci["informed_ids"] = direct_report_ids[:3]  # Limit to 3
-            raci["informed_slack_ids"] = direct_report_slack_ids[:3]
-            raci["informed_names"] = direct_report_names[:3]
-            
-        elif task_type == "development":
-            # Manager is both responsible and accountable
-            raci["responsible_id"] = manager["id"]
-            raci["responsible_slack_id"] = manager.get("slack_id", "")
-            raci["responsible_name"] = manager.get("name", "Manager")
-            
-            raci["accountable_id"] = manager["id"]
-            raci["accountable_slack_id"] = manager.get("slack_id", "")
-            raci["accountable_name"] = manager.get("name", "Manager")
-            
-            # Director and peers are consulted
-            consulted_ids = [director["id"]] + peer_ids
-            consulted_slack_ids = [director.get("slack_id", "")] + peer_slack_ids
-            consulted_names = [director.get("name", "Director")] + peer_names
-            
-            raci["consulted_ids"] = consulted_ids
-            raci["consulted_slack_ids"] = consulted_slack_ids
-            raci["consulted_names"] = consulted_names
-            
-            # Direct reports are informed
-            raci["informed_ids"] = direct_report_ids[:3]
-            raci["informed_slack_ids"] = direct_report_slack_ids[:3]
-            raci["informed_names"] = direct_report_names[:3]
-            
-        else:  # feedback task
-            # Director is responsible and accountable
-            raci["responsible_id"] = director["id"]
-            raci["responsible_slack_id"] = director.get("slack_id", "")
-            raci["responsible_name"] = director.get("name", "Director")
-            
-            raci["accountable_id"] = director["id"]
-            raci["accountable_slack_id"] = director.get("slack_id", "")
-            raci["accountable_name"] = director.get("name", "Director")
-            
-            # Manager is consulted
-            raci["consulted_ids"] = [manager["id"]]
-            raci["consulted_slack_ids"] = [manager.get("slack_id", "")]
-            raci["consulted_names"] = [manager.get("name", "Manager")]
-            
-            # HR or peers might be informed
-            raci["informed_ids"] = peer_ids[:2]
-            raci["informed_slack_ids"] = peer_slack_ids[:2]
-            raci["informed_names"] = peer_names[:2]
-        
-        # Register with RACI service
-        await self.raci_service.register_raci_assignments(task_id, raci)
-        
-        return raci
-    
-    async def _notify_stakeholders(
-        self,
-        task_type: str,
-        task: Dict[str, Any]
-    ) -> None:
-        """
-        Sends appropriate notifications to stakeholders based on RACI roles.
-        """
-        # Notify the responsible person
-        if "responsible_slack_id" in task and task["responsible_slack_id"]:
-            await self.notification_service.send_task_creation_notification(
-                task["responsible_slack_id"],
-                "responsible",
-                task["title"],
-                task["task_id"],
-                task["due_date"]
-            )
-        
-        # Notify the accountable person (if different from responsible)
-        if (
-            "accountable_slack_id" in task and 
-            task["accountable_slack_id"] and
-            task["accountable_slack_id"] != task.get("responsible_slack_id", "")
-        ):
-            await self.notification_service.send_task_creation_notification(
-                task["accountable_slack_id"],
-                "accountable",
-                task["title"],
-                task["task_id"],
-                task["due_date"]
-            )
-        
-        # Notify consulted people (batch for efficiency)
-        if "consulted_slack_ids" in task and task["consulted_slack_ids"]:
-            for slack_id in task["consulted_slack_ids"]:
-                if slack_id:  # Only if valid slack ID
-                    await self.notification_service.send_task_creation_notification(
-                        slack_id,
-                        "consulted",
-                        task["title"],
-                        task["task_id"],
-                        task["due_date"]
-                    )
-        
-        # Informed people just get a simpler notification
-        if "informed_slack_ids" in task and task["informed_slack_ids"]:
-            for slack_id in task["informed_slack_ids"]:
-                if slack_id:  # Only if valid slack ID
-                    await self.notification_service.send_task_info_notification(
-                        slack_id,
-                        task["title"],
-                        task["responsible_name"],
-                        task["task_id"]
-                    )
-                    
     def _create_feedback_prompt(
         self,
         manager_name: str,
@@ -714,19 +524,16 @@ class ManagerDevelopmentService:
         """
         area_display = development_area.replace("_", " ")
         
-        # Build the context section
         context = f"The manager has recently worked on: {', '.join(recent_task_titles)}" if recent_task_titles else ""
         
         if context_notes:
             context += f"\n\nAdditional context: {context_notes}"
         
-        # Average progress if available
         progress_info = ""
         if recent_progress:
             avg_progress = sum(recent_progress) / len(recent_progress)
             progress_info = f"The manager has made approximately {avg_progress:.1f}% progress on recent tasks."
         
-        # Create the full prompt
         prompt = f"""
         Generate professional feedback for {manager_name}, who is in a {manager_role} role.
         Focus specifically on their '{area_display}' capabilities.
@@ -759,25 +566,19 @@ class ManagerDevelopmentService:
         Processes AI response into structured feedback.
         """
         try:
-            # Try to parse as JSON first
             feedback_data = json.loads(ai_response)
             
-            # Ensure required fields exist
             required_fields = ["strengths", "improvement_areas", "suggestions", "timeline"]
             for field in required_fields:
                 if field not in feedback_data:
                     logger.warning(f"AI feedback response for area {development_area} missing field: {field}. Raw: {ai_response[:200]}")
                     raise ValueError(f"AI response missing required field: {field}")
             
-            # Add metadata
             feedback_data["generated_at"] = datetime.now().isoformat()
             feedback_data["development_area"] = development_area
             
             return feedback_data
             
         except (json.JSONDecodeError, ValueError) as e:
-            # If not valid JSON, attempt to structure it
             logger.warning(f"AI feedback response for {development_area} not valid JSON or missing fields: {str(e)}. Raw: {ai_response[:200]}", exc_info=True)
-            # Simple fallback to structured format
-            # Instead of fallback, raise an error so caller knows AI failed to give structured response
             raise AIIntegrationError(f"AI response for feedback was not valid JSON or had missing fields.") 

@@ -19,6 +19,7 @@ class Task(BaseModel):
     assignee_id: Optional[UUID] = None
     status: TaskStatus = TaskStatus.ASSIGNED
     priority: Optional[str] = "MEDIUM"
+    task_type: Optional[str] = Field(None, description="Type of task, e.g., 'general', 'manager_development'")
     # RACI roles
     responsible_id: Optional[UUID] = None
     accountable_id: Optional[UUID] = None

@@ -255,3 +255,59 @@ class UserRepository:
         except Exception as e:
             logger.error(f"Unexpected error deleting user profile {user_id}: {e}", exc_info=True)
             raise DatabaseError(f"Unexpected error deleting user profile {user_id}: {str(e)}")
+
+    async def get_director_for_manager(self, manager_id: UUID) -> Optional[User]:
+        """Retrieves the director of a given manager."""
+        try:
+            manager = await self.get_user_by_id(manager_id)
+            if not manager or not manager.reports_to_id:
+                logger.info(f"Manager with ID {manager_id} not found or does not report to anyone.")
+                return None
+            
+            director = await self.get_user_by_id(manager.reports_to_id)
+            if not director:
+                logger.warning(f"Director with ID {manager.reports_to_id} (for manager {manager_id}) not found, though reports_to_id was set.")
+            return director
+        except DatabaseError: # Re-raise specific errors
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error getting director for manager {manager_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting director for manager {manager_id}: {str(e)}")
+
+    async def get_direct_reports(self, manager_id: UUID) -> List[User]:
+        """Retrieves all direct reports for a given manager."""
+        try:
+            response: PostgrestAPIResponse = await asyncio.to_thread(
+                self._client.table(self._table).select("*").eq("reports_to_id", str(manager_id)).execute
+            )
+            self._handle_supabase_error(response, f"Error finding direct reports for manager {manager_id}")
+            return [User(**item) for item in response.data] if response.data else []
+        except DatabaseError:
+            raise
+        except Exception as e:
+            logger.error(f"Error finding direct reports for manager {manager_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Error finding direct reports for manager {manager_id}: {str(e)}")
+
+    async def get_peers(self, user_id: UUID) -> List[User]:
+        """Retrieves peers for a given user (users reporting to the same manager, excluding the user themselves)."""
+        try:
+            user = await self.get_user_by_id(user_id)
+            if not user or not user.reports_to_id:
+                logger.info(f"User {user_id} not found or does not report to anyone, so no peers can be determined.")
+                return []
+
+            manager_id = user.reports_to_id
+            response: PostgrestAPIResponse = await asyncio.to_thread(
+                self._client.table(self._table)
+                .select("*")
+                .eq("reports_to_id", str(manager_id))
+                .neq("id", str(user_id)) # Exclude the user themselves
+                .execute
+            )
+            self._handle_supabase_error(response, f"Error finding peers for user {user_id} (manager: {manager_id})")
+            return [User(**item) for item in response.data] if response.data else []
+        except DatabaseError:
+            raise
+        except Exception as e:
+            logger.error(f"Error finding peers for user {user_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Error finding peers for user {user_id}: {str(e)}")

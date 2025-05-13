@@ -20,6 +20,7 @@ class User(BaseModel):
     role: UserRole = UserRole.USER
     team: Optional[str] = None
     team_id: Optional[UUID] = None # Foreign key to Team model
+    reports_to_id: Optional[UUID] = Field(None, description="ID of the user this user reports to")
     # personal_mastery field seems specific, maps to metadata or a separate feature.
     # For generic metadata from DB:
     metadata: Optional[Dict[str, Any]] = Field(None, description="Arbitrary user metadata from DB")
