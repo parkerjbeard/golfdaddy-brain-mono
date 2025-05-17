@@ -90,12 +90,22 @@ export const getDeveloperDailySummary = async (
 // Placeholder function to get users - replace with actual API call
 // In a real app, this would likely fetch from a /users endpoint
 export const getUsers = async (token?: string): Promise<{ id: string; name: string }[]> => {
-    // TODO: Replace with actual API call to fetch users
-    console.warn("Using placeholder user data. Implement API call to fetch users.");
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate network delay
-    return [
-        { id: "d8a4b7a0-9b1e-4a8e-8b4a-5c6d7e8f9a0b", name: "Alice Smith" },
-        { id: "f4b5c6d7-e8f9-4a0b-8b1e-9a8e7d6c5b4a", name: "Bob Johnson" },
-        // Add more users as needed, ensure IDs are valid UUIDs if testing against backend
-    ];
-}; 
+  const url = `${API_BASE_URL}/users`;
+
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch users (${response.status})`);
+  }
+
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Unexpected response format when fetching users');
+  }
+
+  return data.map((u: any) => ({ id: u.id, name: u.name ?? u.email ?? u.id }));
+};
