@@ -7,8 +7,12 @@ from decimal import Decimal
 
 from app.models.commit import Commit # Assuming Commit model exists
 from app.models.daily_report import DailyReport, AiAnalysis # Assuming DailyReport model exists
-from app.models.user import User # Assuming User model exists
-from app.dependencies import get_current_user, get_commit_repository, get_daily_report_repository
+from app.models.user import User, UserRole  # Assuming User model exists
+from app.dependencies import (
+    get_current_user,
+    get_commit_repository,
+    get_daily_report_repository,
+)
 from app.repositories.commit_repository import CommitRepository
 from app.repositories.daily_report_repository import DailyReportRepository
 from pydantic import BaseModel, Field
@@ -69,13 +73,12 @@ async def get_developer_daily_summary(
     Calculates and returns a daily summary for a developer, combining commit analysis
     and EOD report data.
     """
-    # Authorization check: Ensure the current user is the requested user or an admin/manager
-    # TODO: Implement proper role-based access control
-    if current_user.id != user_id and current_user.role not in ["admin", "manager"]:
-         raise HTTPException(
-             status_code=status.HTTP_403_FORBIDDEN,
-             detail="Not authorized to view this user's summary."
-         )
+    # Authorization: allow viewing own data or users with ADMIN/MANAGER role
+    if current_user.id != user_id and current_user.role not in {UserRole.ADMIN, UserRole.MANAGER}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this user's summary."
+        )
 
     try:
         report_date = datetime.strptime(report_date_str, "%Y-%m-%d").date()
@@ -89,12 +92,18 @@ async def get_developer_daily_summary(
     
     logger.info(f"Fetching data for user {user_id} on {report_date_str} ({start_datetime} to {end_datetime})")
 
-    # 1. Fetch Commits for the user and date range
-    commits: List[Commit] = await commit_repo.get_commits_by_user_and_date_range(user_id, start_datetime, end_datetime)
-    
-    # 2. Fetch EOD Report for the user and date
-    # Assuming get_daily_reports_by_user_and_date expects a datetime object for the specific day
-    eod_report: Optional[DailyReport] = await report_repo.get_daily_reports_by_user_and_date(user_id, start_datetime) 
+    # 1. Fetch Commits and EOD report data
+    try:
+        commits: List[Commit] = await commit_repo.get_commits_by_user_and_date_range(
+            user_id, start_datetime, end_datetime
+        )
+        # Assuming get_daily_reports_by_user_and_date expects a datetime object for the specific day
+        eod_report: Optional[DailyReport] = await report_repo.get_daily_reports_by_user_and_date(
+            user_id, start_datetime
+        )
+    except Exception as db_exc:
+        logger.error(f"Error fetching insights data: {db_exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Data retrieval failed")
     
     # --- Calculations ---
     commit_hours = Decimal(0.0)
@@ -143,5 +152,4 @@ async def get_developer_daily_summary(
 
     return summary
 
-# TODO: Add this router to the main FastAPI app (e.g., in main.py or api/v1/api.py)
-# Example: app.include_router(developer_insights_endpoints.router, prefix="/api/v1/insights", tags=["Developer Insights"]) 
+# The router is included in api_v1_router with prefix "/insights"
