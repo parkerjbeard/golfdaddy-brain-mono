@@ -1,48 +1,34 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import TeamList from '@/components/TeamList';
 import AddTeamModal from '@/components/AddTeamModal';
-import { mockTeams, mockUsers } from '@/data/mockData'; // Import mock data
-import { Team, User } from '@/types';
+import { mockTeams, mockUsers } from '@/data/mockData';
+import { useAppStore } from '@/store/useAppStore';
 
 const TeamManagementPage: React.FC = () => {
-  const [teams, setTeams] = React.useState<Team[]>(mockTeams);
-  const [users, setUsers] = React.useState<User[]>(mockUsers);
+  const {
+    teams,
+    users,
+    setTeams,
+    setUsers,
+    addTeam,
+    assignUserToTeam,
+  } = useAppStore();
   const [isAddModalOpen, setIsAddModalOpen] = React.useState(false);
 
+  // initialize mock data once
+  useEffect(() => {
+    if (teams.length === 0 && users.length === 0) {
+      setTeams(mockTeams);
+      setUsers(mockUsers);
+    }
+  }, [teams.length, users.length, setTeams, setUsers]);
+
   const handleAddTeam = (teamName: string) => {
-    const newTeam: Team = {
-      id: String(Date.now()), // Simple ID generation
-      name: teamName,
-      members: [],
-    };
-    setTeams(prevTeams => [...prevTeams, newTeam]);
+    addTeam(teamName)
   };
 
   const handleAssignUserToTeam = (userId: string, teamId: string | null) => {
-    // Update user's teamId
-    setUsers(prevUsers =>
-      prevUsers.map(user =>
-        user.id === userId ? { ...user, teamId: teamId ?? undefined } : user
-      )
-    );
-
-    // Update team members
-    setTeams(prevTeams =>
-      prevTeams.map(team => {
-        const userToMove = users.find(u => u.id === userId);
-        if (!userToMove) return team;
-
-        // Add to new team if this is the target team
-        if (team.id === teamId && !team.members.some(m => m.id === userId)) {
-          return { ...team, members: [...team.members, userToMove] };
-        }
-        // Remove from this team if it's not the target team but contains the user
-        if (team.id !== teamId && team.members.some(m => m.id === userId)) {
-          return { ...team, members: team.members.filter(member => member.id !== userId) };
-        }
-        return team;
-      })
-    );
+    assignUserToTeam(userId, teamId)
   };
 
   const handleAddTeamMember = (teamId: string, userId: string) => {
