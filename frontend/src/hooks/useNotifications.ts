@@ -1,7 +1,6 @@
-
-import { useState, useEffect, useCallback } from 'react';
-import { Notification } from '@/types/notifications';
-import { toast } from "@/hooks/use-toast";
+import { Notification } from '@/types/notifications'
+import { create } from 'zustand'
+import { toast } from '@/hooks/use-toast'
 
 // Mock notifications for demo purposes
 const mockNotifications: Notification[] = [
@@ -26,77 +25,63 @@ const mockNotifications: Notification[] = [
     createdAt: new Date(Date.now() - 172800000).toISOString(),
     read: true,
   },
-];
+]
 
-export const useNotifications = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+interface NotificationState {
+  notifications: Notification[]
+  unreadCount: number
+  markAsRead: (id: string) => void
+  markAllAsRead: () => void
+  dismissNotification: (id: string) => void
+  addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void
+}
 
-  // Load notifications (in a real app, this would fetch from an API)
-  useEffect(() => {
-    setNotifications(mockNotifications);
-    setUnreadCount(mockNotifications.filter(notif => !notif.read).length);
-  }, []);
-
-  // Mark a notification as read
-  const markAsRead = useCallback((id: string) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
+export const useNotifications = create<NotificationState>((set, get) => ({
+  notifications: mockNotifications,
+  unreadCount: mockNotifications.filter((n) => !n.read).length,
+  markAsRead: (id) =>
+    set((state) => {
+      const notifications = state.notifications.map((n) =>
+        n.id === id ? { ...n, read: true } : n
       )
-    );
-    
-    // Update unread count
-    setUnreadCount(prev => Math.max(0, prev - 1));
-  }, []);
-
-  // Mark all notifications as read
-  const markAllAsRead = useCallback(() => {
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, read: true }))
-    );
-    setUnreadCount(0);
-  }, []);
-
-  // Dismiss a notification
-  const dismissNotification = useCallback((id: string) => {
-    const notification = notifications.find(n => n.id === id);
-    setNotifications(prev => prev.filter(notif => notif.id !== id));
-    
-    // If we're removing an unread notification, update count
-    if (notification && !notification.read) {
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    }
-
-    toast({
-      title: "Notification dismissed",
-      description: "The notification has been removed.",
-    });
-  }, [notifications]);
-
-  // Get a new notification (simulated)
-  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'createdAt'>) => {
-    const newNotification: Notification = {
-      ...notification,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-    };
-    
-    setNotifications(prev => [newNotification, ...prev]);
-    setUnreadCount(prev => prev + 1);
-    
-    toast({
-      title: "New notification",
-      description: notification.title,
-    });
-  }, []);
-
-  return {
-    notifications,
-    unreadCount,
-    markAsRead,
-    markAllAsRead,
-    dismissNotification,
-    addNotification,
-  };
-};
+      return {
+        notifications,
+        unreadCount: notifications.filter((n) => !n.read).length,
+      }
+    }),
+  markAllAsRead: () =>
+    set((state) => ({
+      notifications: state.notifications.map((n) => ({ ...n, read: true })),
+      unreadCount: 0,
+    })),
+  dismissNotification: (id) =>
+    set((state) => {
+      const notification = state.notifications.find((n) => n.id === id)
+      const notifications = state.notifications.filter((n) => n.id !== id)
+      const unreadCount = notifications.filter((n) => !n.read).length
+      if (notification) {
+        toast({
+          title: 'Notification dismissed',
+          description: 'The notification has been removed.',
+        })
+      }
+      return { notifications, unreadCount }
+    }),
+  addNotification: (notification) =>
+    set((state) => {
+      const newNotification: Notification = {
+        ...notification,
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
+        read: false,
+      }
+      toast({
+        title: 'New notification',
+        description: notification.title,
+      })
+      return {
+        notifications: [newNotification, ...state.notifications],
+        unreadCount: state.unreadCount + 1,
+      }
+    }),
+}))
