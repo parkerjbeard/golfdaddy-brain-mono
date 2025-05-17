@@ -4,7 +4,10 @@ import {
   BarChart, 
   FileText, 
   Home,
-  ClipboardList
+  ClipboardList,
+  ClipboardPlus,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 import {
   Sidebar,
@@ -13,42 +16,43 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-export function AppSidebar() {
-  const { user } = useAuth();
+interface AppSidebarProps {
+  collapsible?: "offcanvas" | "icon" | "none";
+}
+
+export function AppSidebar({ collapsible }: AppSidebarProps) {
+  const { user, logout } = useAuth();
   const location = useLocation();
 
   const isActive = (path: string) => {
-    return location.pathname === path;
+    return location.pathname === path || (path === '/tasks' && location.pathname.startsWith('/tasks'));
+  };
+
+  const handleSignOut = () => {
+    logout();
   };
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b">
-        <div className="flex h-16 items-center px-4">
-          <Link to="/" className="flex items-center gap-2">
-            <svg 
-              viewBox="0 0 24 24" 
-              className="h-6 w-6 text-primary" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2"
-              strokeLinecap="round" 
-              strokeLinejoin="round"
-            >
-              <rect width="20" height="14" x="2" y="5" rx="2" />
-              <path d="M2 10h20" />
-            </svg>
-            <span className="font-semibold">ExecutivePulse</span>
-          </Link>
-        </div>
-      </SidebarHeader>
+    <Sidebar collapsible={collapsible}>
+      {/* <SidebarHeader className="h-16">
+        // This header was acting as a spacer for the Navbar, now removed
+      </SidebarHeader> */}
 
       <SidebarContent>
         <SidebarGroup>
@@ -93,6 +97,19 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={isActive('/create-raci-task')}
+                  asChild
+                  tooltip="Create RACI Task"
+                >
+                  <Link to="/create-raci-task">
+                    <ClipboardPlus className="h-5 w-5" />
+                    <span>Create RACI Task</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -119,27 +136,36 @@ export function AppSidebar() {
       </SidebarContent>
 
       {user && (
-        <SidebarFooter className="border-t p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-              {user.avatar_url ? (
-                <img 
-                  src={user.avatar_url} 
-                  alt={user.name || 'User Avatar'} 
-                  className="h-8 w-8 rounded-full object-cover" 
-                />
-              ) : (
-                <span className="text-sm font-medium">{(user.name || 'U').charAt(0)}</span>
-              )}
-            </div>
-            <div className="flex-1 truncate">
-              <div className="text-sm font-medium">{user.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                {user.team && ` • ${user.team}`}
-              </div>
-            </div>
-          </div>
+        <SidebarFooter className="border-t p-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild className="w-full">
+              <Button variant="ghost" className="flex items-center justify-start gap-3 w-full h-auto px-2 py-2 text-left">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={user.avatar_url || undefined} alt={user.name || 'User'} />
+                  <AvatarFallback>
+                    {(user.name || "U").charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 truncate">
+                  <div className="text-sm font-medium">{user.name}</div>
+                  <p className="text-xs leading-none text-muted-foreground truncate">{user.email}</p>
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" side="top" className="mb-1 w-[calc(var(--sidebar-width)_-_1rem)]">
+              <DropdownMenuLabel>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user.name}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SidebarFooter>
       )}
       

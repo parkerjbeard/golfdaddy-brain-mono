@@ -1,10 +1,10 @@
-
-import { Navbar } from "./Navbar";
+// import { Navbar } from "./Navbar"; // Removed Navbar import
 import { AppSidebar } from "./AppSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
 import { ReactNode } from "react";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+// Removed SidebarTrigger from here as well, it was part of ui/sidebar, not Navbar itself
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 interface LayoutProps {
   children: ReactNode;
@@ -32,13 +32,12 @@ export function Layout({ children, requireAuth = true }: LayoutProps) {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full flex-col bg-background">
-        <Navbar>
-          <SidebarTrigger className="mr-2" />
-        </Navbar>
+        {/* <Navbar> Removed Navbar component usage
+        </Navbar> */}
         <div className="flex flex-1 w-full">
-          <AppSidebar />
+          <AppSidebar collapsible="none" />
           <SidebarInset className="animate-fade-in">
             <main className="flex-1 pt-6 px-4 md:px-6 pb-12">
               <div className="mx-auto max-w-7xl">

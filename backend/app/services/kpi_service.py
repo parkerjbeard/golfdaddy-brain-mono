@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from uuid import UUID
 import logging
 
@@ -12,16 +12,27 @@ from app.repositories.commit_repository import CommitRepository
 from app.repositories.daily_report_repository import DailyReportRepository
 from app.core.exceptions import ResourceNotFoundError, DatabaseError
 
+# Added for the new UserWidgetSummary model
+from pydantic import BaseModel
+
 logger = logging.getLogger(__name__)
+
+# New Pydantic Model for Widget Summary
+class UserWidgetSummary(BaseModel):
+    user_id: UUID
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    total_ai_estimated_commit_hours: float
 
 class KpiService:
     """Service for calculating performance metrics."""
     
     def __init__(self):
-        self.task_repo = TaskRepository()
+        self.task_repo = UserRepository()
         self.user_repo = UserRepository()
         self.commit_repo = CommitRepository()
         self.daily_report_repo = DailyReportRepository()
+        self.task_repo_for_tasks = TaskRepository()
     
     def calculate_commit_metrics_for_user(self, user_id: UUID, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
         """Calculates commit-based KPIs for a specific user in a date range."""
@@ -45,7 +56,7 @@ class KpiService:
         # This requires tasks to have completion dates or updated_at to be reliable for date range filtering
         # Supabase filtering might need adjustment based on actual schema for completion date
         # Assuming filtering on updated_at for completed tasks for now
-        tasks = self.task_repo.find_tasks_by_assignee(user_id)
+        tasks = self.task_repo_for_tasks.find_tasks_by_assignee(user_id)
         completed_tasks_in_range = [
             task for task in tasks 
             if task.status == TaskStatus.COMPLETED and 
@@ -156,4 +167,57 @@ class KpiService:
             # Could add task velocity here too if desired by calling self.calculate_task_velocity
         }
     
+    async def get_bulk_widget_summaries(self, start_date_dt: datetime, end_date_dt: datetime) -> List[UserWidgetSummary]:
+        """
+        Generates widget summaries (total AI estimated commit hours) for relevant users
+        within a specified date range.
+        """
+        # Fetch users (e.g., developers). Adjust role or fetching logic as needed.
+        # Consider if this should fetch users managed by a specific manager if auth context is available.
+        # For simplicity, fetching all users with DEVELOPER role.
+        try:
+            # Assuming user_repo is UserRepository instance
+            relevant_users: List[User] = await self.user_repo.list_users_by_role(UserRole.DEVELOPER)
+            if not relevant_users:
+                logger.info("No users found for bulk widget summaries.")
+                return []
+        except Exception as e:
+            logger.error(f"Error fetching users for bulk summaries: {e}", exc_info=True)
+            # Depending on desired behavior, could raise or return empty. Let's return empty.
+            return []
+
+        widget_summaries: List[UserWidgetSummary] = []
+        
+        # Convert datetimes to date objects for commit_repo if it expects dates
+        # The existing get_user_performance_summary passes .date() to commit_repo
+        query_start_date: date = start_date_dt.date()
+        query_end_date: date = end_date_dt.date()
+
+        for user in relevant_users:
+            try:
+                # Fetch commits for the user within the date range
+                # Assuming commit_repo.get_commits_by_user_in_range is synchronous
+                # If it becomes async, use 'await'
+                # If it's CPU-bound or blocking I/O, consider asyncio.to_thread
+                commits: List[Commit] = self.commit_repo.get_commits_by_user_in_range(user.id, query_start_date, query_end_date)
+                
+                total_hours = sum(float(c.ai_estimated_hours or 0.0) for c in commits)
+                
+                widget_summaries.append(
+                    UserWidgetSummary(
+                        user_id=user.id,
+                        name=user.name,
+                        avatar_url=user.avatar_url,
+                        total_ai_estimated_commit_hours=round(total_hours, 2)
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error processing widget summary for user {user.id}: {e}", exc_info=True)
+                # Optionally, append a summary with an error or default values, or skip this user
+                # For now, skipping the user if an error occurs for them.
+                continue # Skip to the next user
+        
+        logger.info(f"Generated {len(widget_summaries)} bulk widget summaries.")
+        return widget_summaries
+
     # Add methods for team KPIs, burndown charts, etc.

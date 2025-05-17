@@ -37,4 +37,12 @@ export interface PerformanceSummaryParams {
   periodDays?: number;
   startDate?: string;
   endDate?: string;
+}
+
+// New type for the bulk widget summaries
+export interface UserWidgetSummary {
+  user_id: string; 
+  name?: string | null;
+  avatar_url?: string | null;
+  total_ai_estimated_commit_hours: number;
 } 
