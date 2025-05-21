@@ -2,6 +2,8 @@ import os
 import subprocess
 import tempfile
 import logging
+import time
+import asyncio
 from typing import Optional, List, Dict, Any
 
 from github import Github
@@ -18,6 +20,64 @@ except ImportError: # Adjusted for clarity
     OpenAIError = None # type: ignore
 
 logger = logging.getLogger(__name__)
+
+
+def _retry(
+    func,
+    *args,
+    retries: int = 3,
+    initial_delay: float = 1.0,
+    backoff: int = 2,
+    exceptions: tuple[type[Exception], ...] = (Exception,),
+    **kwargs,
+) -> Any:
+    """Retry a synchronous function with exponential backoff."""
+    delay = initial_delay
+    for attempt in range(1, retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except exceptions as exc:  # pragma: no cover - simple retry logic
+            if attempt == retries:
+                raise
+            logger.warning(
+                "Attempt %s/%s failed for %s: %s. Retrying in %.1fs",
+                attempt,
+                retries,
+                getattr(func, "__name__", str(func)),
+                exc,
+                delay,
+            )
+            time.sleep(delay)
+            delay *= backoff
+
+
+async def _async_retry(
+    func,
+    *args,
+    retries: int = 3,
+    initial_delay: float = 1.0,
+    backoff: int = 2,
+    exceptions: tuple[type[Exception], ...] = (Exception,),
+    **kwargs,
+) -> Any:
+    """Retry an async function with exponential backoff."""
+    delay = initial_delay
+    for attempt in range(1, retries + 1):
+        try:
+            return await func(*args, **kwargs)
+        except exceptions as exc:  # pragma: no cover - simple retry logic
+            if attempt == retries:
+                raise
+            logger.warning(
+                "Attempt %s/%s failed for %s: %s. Retrying in %.1fs",
+                attempt,
+                retries,
+                getattr(func, "__name__", str(func)),
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            delay *= backoff
 
 # Default model if not specified
 # DEFAULT_DOC_AGENT_MODEL = "gpt-4.1-2025-04-14" # Example, align with your preferred default
@@ -54,7 +114,7 @@ class AutoDocClient:
         )
         return diff
 
-    async def analyze_diff(self, diff: str) -> str: # Changed to async
+    async def analyze_diff(self, diff: str) -> str:
         """Use OpenAI to generate a documentation patch from a commit diff."""
         if not self.openai_client:
             logger.warning("OpenAI client not available, returning empty string.")
@@ -67,24 +127,21 @@ class AutoDocClient:
 
         api_params: Dict[str, Any] = {
             "model": self.openai_model,
-            "messages": [{"role": "system", "content": prompt},
-                         {"role": "user", "content": diff}],
+            "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": diff}],
         }
 
+        async def _call_openai() -> Any:
+            return await self.openai_client.chat.completions.create(**api_params)
+
         try:
-            response = await self.openai_client.chat.completions.create(**api_params) # Changed to await
-            
+            response = await _async_retry(_call_openai, exceptions=(OpenAIError,))
             if response.choices and response.choices[0].message:
                 content = response.choices[0].message.content
-                return content.strip() if content else "" # Ensure stripping and handling None
-            else:
-                logger.error("OpenAI response did not contain expected content.")
-                return ""
-        except OpenAIError as e: # Catch specific OpenAI errors
-            logger.error(f"OpenAI API error during diff analysis: {e}")
+                return content.strip() if content else ""
+            logger.error("OpenAI response did not contain expected content.")
             return ""
-        except Exception as e: # Catch any other unexpected errors
-            logger.error(f"Unexpected error during diff analysis: {e}")
+        except Exception as exc:
+            logger.error("Failed to analyze diff with OpenAI: %s", exc)
             return ""
 
     def propose_via_slack(self, diff: str) -> bool:
@@ -106,28 +163,69 @@ class AutoDocClient:
         if not branch_name:
             branch_name = f"auto-docs-{commit_hash[:7]}"
 
+        logger.info(
+            "Applying patch for commit %s to repo %s on branch %s",
+            commit_hash,
+            self.docs_repo,
+            branch_name,
+        )
+
         repo = self.github.get_repo(self.docs_repo)
         base = repo.default_branch
 
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_url = f"https://{self.github_token}@github.com/{self.docs_repo}.git"
-            subprocess.check_call(["git", "clone", repo_url, tmpdir])
-            subprocess.check_call(["git", "-C", tmpdir, "checkout", "-b", branch_name])
+            try:
+                subprocess.check_call(["git", "clone", repo_url, tmpdir])
+            except subprocess.CalledProcessError as exc:
+                logger.error("Git clone failed: %s", exc)
+                if "authentication" in str(exc).lower() or "permission" in str(exc).lower():
+                    logger.error("Git authentication failed. Check GITHUB_TOKEN")
+                return None
+
+            try:
+                subprocess.check_call(["git", "-C", tmpdir, "checkout", "-b", branch_name])
+            except subprocess.CalledProcessError as exc:
+                logger.error("Failed to create branch %s: %s", branch_name, exc)
+                return None
+
             patch_file = os.path.join(tmpdir, "patch.diff")
             with open(patch_file, "w") as f:
                 f.write(diff)
+
+            try:
+                subprocess.check_call(["git", "-C", tmpdir, "apply", "--check", "patch.diff"], cwd=tmpdir)
+            except subprocess.CalledProcessError:
+                logger.error("Patch does not apply cleanly")
+                return None
+
             try:
                 subprocess.check_call(["git", "-C", tmpdir, "apply", "patch.diff"], cwd=tmpdir)
-            except subprocess.CalledProcessError:
-                logger.error("Failed to apply documentation patch")
+            except subprocess.CalledProcessError as exc:
+                logger.error("Failed to apply documentation patch: %s", exc)
                 return None
-            subprocess.check_call(["git", "-C", tmpdir, "commit", "-am", "Automated documentation update"])
-            subprocess.check_call(["git", "-C", tmpdir, "push", "origin", branch_name])
 
-        pr = repo.create_pull(
-            title=f"Automated docs update for {commit_hash}",
-            body="This PR contains automated documentation updates.",
-            head=branch_name,
-            base=base,
-        )
+            subprocess.check_call(["git", "-C", tmpdir, "commit", "-am", "Automated documentation update"])
+
+            try:
+                subprocess.check_call(["git", "-C", tmpdir, "push", "origin", branch_name])
+            except subprocess.CalledProcessError as exc:
+                logger.error("Git push failed for branch %s: %s", branch_name, exc)
+                return None
+
+        def _create_pull() -> Any:
+            return repo.create_pull(
+                title=f"Automated docs update for {commit_hash}",
+                body="This PR contains automated documentation updates.",
+                head=branch_name,
+                base=base,
+            )
+
+        try:
+            pr = _retry(_create_pull, exceptions=(GithubException,))
+        except Exception as exc:
+            logger.error("Failed to create pull request: %s", exc)
+            return None
+
+        logger.info("Created pull request %s for commit %s", pr.html_url, commit_hash)
         return pr.html_url
