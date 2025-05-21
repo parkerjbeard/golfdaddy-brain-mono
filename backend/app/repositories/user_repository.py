@@ -204,6 +204,18 @@ class UserRepository:
                 # Let's return the existing user if update_data is empty (treat as no-op).
                 return await self.get_user_by_id(user_id)
 
+            # If the email is being updated, reflect the change in auth.users
+            if "email" in update_data:
+                try:
+                    await asyncio.to_thread(
+                        self._client.auth.admin.update_user_by_id,
+                        str(user_id),
+                        {"email": update_data["email"]},
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update auth.users email for {user_id}: {e}", exc_info=True)
+                    raise DatabaseError("Error updating auth user email")
+
             processed_update_data = self._process_user_dict_for_supabase(update_data)
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).update(processed_update_data).eq("id", str(user_id)).execute
@@ -231,6 +243,33 @@ class UserRepository:
         except Exception as e:
             logger.error(f"Unexpected error updating user profile {user_id}: {e}", exc_info=True)
             raise DatabaseError(f"Unexpected error updating user profile {user_id}: {str(e)}")
+
+    async def sync_profile_from_auth(self, user_id: UUID) -> Optional[User]:
+        """Synchronize profile fields from auth.users into public.users."""
+        try:
+            auth_user = await asyncio.to_thread(
+                self._client.auth.admin.get_user_by_id,
+                str(user_id),
+            )
+            if not auth_user:
+                logger.warning(f"Auth user {user_id} not found during sync")
+                return None
+
+            update_data: Dict[str, Any] = {}
+            if getattr(auth_user, "email", None):
+                update_data["email"] = auth_user.email
+            metadata = getattr(auth_user, "user_metadata", {}) or {}
+            if metadata.get("name"):
+                update_data["name"] = metadata["name"]
+            if metadata.get("avatar_url"):
+                update_data["avatar_url"] = metadata["avatar_url"]
+
+            if update_data:
+                return await self.update_user(user_id, update_data)
+            return await self.get_user_by_id(user_id)
+        except Exception as e:
+            logger.error(f"Failed to sync profile from auth for {user_id}: {e}", exc_info=True)
+            raise DatabaseError("Error syncing profile from auth")
 
     async def delete_user(self, user_id: UUID) -> bool:
         """Deletes a user's profile record. Returns True if successful."""
