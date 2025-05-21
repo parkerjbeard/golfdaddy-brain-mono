@@ -205,3 +205,8 @@ API_KEYS={"api-key": {"owner": "name", "role": "role", "rate_limit": 100}}
 # Or path to a JSON file containing API keys (more secure)
 # API_KEYS_FILE=/path/to/api_keys.json
 ```
+## User Profile Email Source
+
+The authoritative record for a user's **email** lives in `auth.users`. A copy is stored in `public.users` for convenience when joining profile data. Whenever an email is changed via Supabase Auth, a trigger updates the value in `public.users` so the two tables remain consistent.
+
+Updates to name or `avatar_url` are stored in `public.users` and may optionally be synced back into the auth metadata using the service key.
