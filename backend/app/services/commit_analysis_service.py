@@ -6,6 +6,7 @@ import json
 import logging
 from uuid import UUID
 import requests
+import asyncio
 
 from app.repositories.commit_repository import CommitRepository
 from app.repositories.user_repository import UserRepository
@@ -377,7 +378,9 @@ class CommitAnalysisService:
 
             # 5. Save analysis results to DB (Upsert)
             logger.info(f"Saving commit analysis to database...")
-            saved_commit = self.commit_repository.save_commit(commit_to_save)
+            saved_commit = await asyncio.to_thread(
+                self.commit_repository.save_commit, commit_to_save
+            )
             
             if saved_commit:
                 logger.info(f"✓ Successfully saved commit analysis to database")
@@ -585,7 +588,7 @@ class CommitAnalysisService:
             logger.info(f"Commit metadata: {json.dumps(metadata)}")
             
             # 1. Check if commit is already in DB
-            existing_commit = self.commit_repository.get_commit_by_hash(commit_hash)
+            existing_commit = await self.commit_repository.get_commit_by_hash(commit_hash)
             if existing_commit:
                 logger.info(f"✓ Commit {commit_hash} already exists in database")
                 # If existing and has analysis, we could skip or perform re-analysis 

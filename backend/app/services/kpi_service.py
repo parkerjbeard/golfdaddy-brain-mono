@@ -137,7 +137,9 @@ class KpiService:
         # To call it, we need to pass datetime objects, not date objects if original method expects datetime.
         # The existing calculate_commit_metrics_for_user takes datetime. We have datetime for start_date and end_date.
         
-        commits_in_period = self.commit_repo.get_commits_by_user_in_range(user_id, start_date.date(), end_date.date())
+        commits_in_period = await self.commit_repo.get_commits_by_user_in_range(
+            user_id, start_date.date(), end_date.date()
+        )
         
         total_commit_ai_estimated_hours = sum(float(c.ai_estimated_hours or 0.0) for c in commits_in_period)
         total_commits = len(commits_in_period)
@@ -199,7 +201,9 @@ class KpiService:
                 # Assuming commit_repo.get_commits_by_user_in_range is synchronous
                 # If it becomes async, use 'await'
                 # If it's CPU-bound or blocking I/O, consider asyncio.to_thread
-                commits: List[Commit] = self.commit_repo.get_commits_by_user_in_range(user.id, query_start_date, query_end_date)
+                commits: List[Commit] = await self.commit_repo.get_commits_by_user_in_range(
+                    user.id, query_start_date, query_end_date
+                )
                 
                 total_hours = sum(float(c.ai_estimated_hours or 0.0) for c in commits)
                 
