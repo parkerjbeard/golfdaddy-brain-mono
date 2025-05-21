@@ -25,67 +25,83 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const MAX_FETCH_RETRIES = 5;
+const RETRY_DELAY_MS = 2000; // 2 seconds
+
+// Helper to introduce a delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Helper to fetch user profile from your backend
 async function fetchUserProfile(authToken: string): Promise<UserResponse | null> {
-  try {
-    console.log("[fetchUserProfile] Fetching user profile with token:", authToken.substring(0, 10) + '...');
-    
-    const headers: Record<string, string> = {
-      'Authorization': `Bearer ${authToken}`,
-      'Content-Type': 'application/json',
-    };
-    
-    // Only add API key if it exists
-    if (API_KEY) {
-      headers['X-API-Key'] = API_KEY;
-    }
+  console.log("[fetchUserProfile] Attempting to fetch user profile.");
+  for (let attempt = 1; attempt <= MAX_FETCH_RETRIES; attempt++) {
+    try {
+      console.log(`[fetchUserProfile] Fetch attempt ${attempt}/${MAX_FETCH_RETRIES} with token:`, authToken.substring(0, 10) + '...');
+      
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      };
+      
+      if (API_KEY) {
+        headers['X-API-Key'] = API_KEY;
+      }
 
-    console.log("[fetchUserProfile] Making request to:", `${API_BASE_URL}/users/me`);
-    const response = await fetch(`${API_BASE_URL}/users/me`, { 
-      headers,
-      method: 'GET',
-      credentials: 'include'
-    });
-    
-    console.log("[fetchUserProfile] Response status:", response.status);
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        // More detailed error handling for authentication issues
-        let errorText = '';
-        try {
-          errorText = await response.text();
-        } catch (e) {
-          console.error("Error reading error text:", e);
+      console.log("[fetchUserProfile] Making request to:", `${API_BASE_URL}/users/me`);
+      const response = await fetch(`${API_BASE_URL}/users/me`, { 
+        headers,
+        method: 'GET',
+        credentials: 'include' // Important for Supabase cookies if you evolve auth
+      });
+      
+      console.log("[fetchUserProfile] Response status:", response.status);
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          let errorText = '';
+          try { errorText = await response.text(); } catch (e) { /* ignore */ }
+          console.warn(`[fetchUserProfile] Failed to fetch user profile: Unauthorized (Attempt ${attempt}). ${errorText ? `Details: ${errorText}` : ''}`);
+          if (import.meta.env.DEV && !API_KEY && errorText.includes('API key')) {
+            console.warn('[fetchUserProfile] Authentication failed likely due to missing API key. Check environment variables.');
+          }
+          return null; // Non-retryable for 401
         }
-        
-        console.warn(`Failed to fetch user profile: Unauthorized. ${errorText ? `Details: ${errorText}` : ''}`);
-        
-        // If API key is missing, log a specific warning in development
-        if (import.meta.env.DEV && !API_KEY && errorText.includes('API key')) {
-          console.warn('Authentication failed likely due to missing API key. Check your environment variables.');
-        }
-        return null;
+        // For other non-ok statuses, treat as potentially retryable if network related, or break if server error
+        const errorData = await response.json().catch(() => ({ detail: `HTTP error ${response.status}` }));
+        throw new Error(errorData.detail || `Failed to fetch user profile with status ${response.status}`);
       }
       
-      let errorData = { detail: 'Network error or invalid JSON' };
-      try {
-        errorData = await response.json();
-      } catch (e) {
-        console.error("Error parsing error JSON:", e);
-      }
+      const userData = await response.json();
+      console.log("[fetchUserProfile] User data retrieved successfully.");
+      return userData;
+
+    } catch (error: any) {
+      console.error(`[fetchUserProfile] Error on attempt ${attempt}:`, error.message);
       
-      throw new Error(errorData.detail || 'Failed to fetch user profile');
+      // Check for specific retryable network error messages (case-insensitive)
+      const errorMessage = String(error.message).toLowerCase();
+      const isRetryableNetworkError = 
+        errorMessage.includes('failed to fetch') || // Generic browser network error
+        errorMessage.includes('connectionrefused') ||
+        errorMessage.includes('connection refused') ||
+        errorMessage.includes('failedtoopensocket') ||
+        errorMessage.includes('unable to connect');
+
+      if (isRetryableNetworkError && attempt < MAX_FETCH_RETRIES) {
+        console.log(`[fetchUserProfile] Retryable network error. Retrying in ${RETRY_DELAY_MS / 1000}s...`);
+        await delay(RETRY_DELAY_MS);
+      } else if (isRetryableNetworkError && attempt === MAX_FETCH_RETRIES) {
+        console.error("[fetchUserProfile] Max retries reached for network error. Giving up.");
+        return null; // Give up after max retries for network issues
+      } else {
+        // Non-retryable error (e.g., JSON parsing error, server-side error not caught above, or programmatic error)
+        console.error("[fetchUserProfile] Non-retryable error or max retries reached for other errors. Giving up.");
+        return null; // Give up for non-network errors or if it's a non-retryable network error
+      }
     }
-    
-    const userData = await response.json();
-    console.log("[fetchUserProfile] User data retrieved successfully");
-    return userData;
-  } catch (error) {
-    console.error("Error fetching user profile:", error);
-    // Return null instead of throwing to prevent disrupting the auth flow
-    return null;
   }
+  console.warn("[fetchUserProfile] Exhausted all attempts to fetch user profile or encountered non-retryable error.");
+  return null; // Fallback, should ideally be handled within the loop
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

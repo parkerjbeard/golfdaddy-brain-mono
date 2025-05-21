@@ -16,7 +16,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { User } from "@/types/entities";
-import { getUsers as fetchUsers } from "@/lib/apiService";
 
 interface UserSelectorProps {
   selectedUser?: User | null;
@@ -25,6 +24,9 @@ interface UserSelectorProps {
   disabled?: boolean;
   className?: string;
   id?: string;
+  allUsersList: User[];
+  isLoading: boolean;
+  error: string | null;
 }
 
 export function UserSelector({
@@ -33,36 +35,29 @@ export function UserSelector({
   placeholder = "Select user...",
   disabled = false,
   className,
-  id
+  id,
+  allUsersList,
+  isLoading,
+  error,
 }: UserSelectorProps) {
   const [open, setOpen] = React.useState(false);
-  const [users, setUsers] = React.useState<User[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    async function loadUsers() {
-      setLoading(true);
-      setError(null);
-      try {
-        const fetchedUsers = await fetchUsers(null);
-        setUsers(fetchedUsers);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load users");
-        console.error("UserSelector error:", err);
-      }
-      setLoading(false);
-    }
-    loadUsers();
-  }, []);
 
   const handleSelect = (currentValue: string) => {
-    const user = users.find(
+    const user = allUsersList.find(
       (u) => u.name.toLowerCase() === currentValue.toLowerCase()
     );
     onSelectUser(user || null);
     setOpen(false);
   };
+
+  let buttonText = placeholder;
+  if (isLoading) {
+    buttonText = "Loading users...";
+  } else if (error) {
+    buttonText = "Error loading users";
+  } else if (selectedUser) {
+    buttonText = selectedUser.name;
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -72,37 +67,48 @@ export function UserSelector({
           role="combobox"
           aria-expanded={open}
           className={cn("w-full justify-between", className)}
-          disabled={disabled || loading}
+          disabled={disabled || isLoading || !!error}
         >
-          {selectedUser
-            ? selectedUser.name
-            : loading ? "Loading users..." : error ? "Error loading" : placeholder}
+          {buttonText}
           <CaretSortIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 border-0">
         <Command>
-          <CommandInput placeholder={error ? "Could not load" : "Search user..."} className="h-9" disabled={loading || !!error}/>
-          {!error && !loading && <CommandEmpty>No user found.</CommandEmpty>}
+          <CommandInput 
+            placeholder={isLoading ? "Loading..." : error ? "Error" : "Search user..."} 
+            className="h-9 focus:ring-0" 
+            disabled={isLoading || !!error}
+          />
+          {isLoading && <CommandEmpty>Loading...</CommandEmpty>}
           {error && <CommandEmpty>{error}</CommandEmpty>}
-          {loading && !error && <CommandEmpty>Loading...</CommandEmpty>}
-          {!loading && !error && (
-            <CommandList>
-              <CommandGroup>
-                {users.map((user) => (
-                  <CommandItem
-                    key={user.id}
-                    value={user.name} // Use user.name for matching in Command; ensure names are unique or use ID and display name
-                    onSelect={handleSelect}
-                  >
-                    {user.name}
-                    {selectedUser?.id === user.id && (
-                      <CheckIcon className="ml-auto h-4 w-4" />
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
+          {!isLoading && !error && (
+            <>
+              {allUsersList.length === 0 ? (
+                <CommandEmpty>No users found.</CommandEmpty>
+              ) : (
+                <CommandList>
+                  <CommandGroup>
+                    {allUsersList.map((user) => (
+                      <CommandItem
+                        key={user.id}
+                        value={user.name || ''}
+                        onSelect={() => {
+                          const selectedUserObject = allUsersList.find(u => u.id === user.id);
+                          handleSelect(selectedUserObject ? selectedUserObject.name || '' : '');
+                        }}
+                        disabled={!user.name}
+                      >
+                        {user.name || "Unnamed user"} 
+                        {selectedUser?.id === user.id && (
+                          <CheckIcon className="ml-auto h-4 w-4" />
+                        )}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              )}
+            </>
           )}
         </Command>
       </PopoverContent>

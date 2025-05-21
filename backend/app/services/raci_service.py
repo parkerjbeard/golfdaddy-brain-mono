@@ -9,7 +9,7 @@ from app.models.user import User
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
 from app.core.exceptions import ResourceNotFoundError, DatabaseError, BadRequestError
-# from app.services.notification_service import NotificationService # Potential circular dependency, handle carefully
+from app.services.notification_service import NotificationService # Uncommented and ensured import
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class RaciService:
         # In a larger app, consider dependency injection framework
         self.task_repo = TaskRepository()
         self.user_repo = UserRepository()
-        # self.notification_service = NotificationService() # Be careful with circular dependencies
+        self.notification_service = NotificationService() # Instantiated NotificationService
     
     async def register_raci_assignments(
         self,
@@ -35,7 +35,8 @@ class RaciService:
         informed_ids: Optional[List[UUID]] = None,
         due_date: Optional[datetime] = None,
         task_type: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        priority: Optional[str] = None
     ) -> Tuple[Optional[Task], List[str]]:
         """Validates RACI roles, creates a Task object with all details, persists it, and returns task with warnings."""
         warnings = []
@@ -103,6 +104,7 @@ class RaciService:
             status=TaskStatus.ASSIGNED, # Default status
             task_type=task_type,
             metadata=metadata if metadata else {},
+            priority=priority,
             # id, created_at, updated_at will be set by DB or repo
         )
         
@@ -148,27 +150,88 @@ class RaciService:
         return len(errors) == 0, errors
     
     async def escalate_blocked_task(self, task_id: UUID):
-        """Handles escalation logic when a task is marked as blocked."""
+        """Handles escalation logic when a task is marked as blocked, including notifications."""
         task = await self.task_repo.get_task_by_id(task_id)
-        if not task or task.status != TaskStatus.BLOCKED:
-            logger.warning(f"Escalation requested for non-blocked or non-existent task {task_id}")
+        
+        if not task:
+            logger.warning(f"Escalation requested for non-existent task {task_id}")
+            return
+        
+        if task.status != TaskStatus.BLOCKED:
+            logger.warning(f"Escalation requested for task {task_id} which is not blocked (status: {task.status})")
             return
 
-        accountable_user: Optional[User] = None
+        accountable_user_notified = False
         if task.accountable_id:
             accountable_user = await self.user_repo.get_user_by_id(task.accountable_id)
-            if not accountable_user:
-                # If accountable user is critical for escalation, this could be an error
-                logger.error(f"Accountable user {task.accountable_id} not found for escalating task {task.id}. Escalation cannot proceed.")
-                # Consider raising ResourceNotFoundError or handling as a critical failure of escalation
-                # For now, just logging and returning, as per original logic of not doing much more.
-                return 
+            if accountable_user:
+                logger.info(f"Escalating blocked task {task.id} to Accountable user {accountable_user.id} (Slack: {getattr(accountable_user, 'slack_id', 'N/A')})")
+                try:
+                    await self.notification_service.blocked_task_alert(
+                        task_id=task.id, 
+                        reason=f"Task {task.id} ({task.title[:30]}...) is BLOCKED. Escalating to Accountable User."
+                        # blocking_user can be added if known
+                    )
+                    accountable_user_notified = True
+                    logger.info(f"Notification sent to accountable user {accountable_user.id} for task {task.id}.")
+                except Exception as e:
+                    logger.error(f"Failed to send blocked_task_alert to accountable user {accountable_user.id} for task {task.id}: {e}", exc_info=True)
+            else:
+                logger.error(f"Accountable user {task.accountable_id} not found for escalating task {task.id}. Proceeding to fallback escalation.")
+        else:
+            logger.warning(f"Task {task.id} has no accountable_id set. Proceeding to fallback escalation.")
 
-        if accountable_user: # This check is now more robust
-            logger.info(f"Escalating blocked task {task.id} to Accountable user {accountable_user.id} (Slack: {getattr(accountable_user, 'slack_id', 'N/A')})")
-            # TODO: Integrate with NotificationService.blocked_task_alert or a specific escalation notification
-            # This would require NotificationService to be injectable or accessible here.
-            # Example: await self.notification_service.notify_escalation(task, accountable_user, reason="Task Blocked")
-            pass 
+        if accountable_user_notified:
+            return # Primary escalation target handled
+
+        # Fallback escalation logic
+        logger.info(f"Initiating fallback escalation for blocked task {task.id}.")
+        
+        creator_notified_for_fallback = False
+        escalation_target_description = "No specific user identified or notified for fallback."
+
+        if task.creator_id:
+            creator_user = await self.user_repo.get_user_by_id(task.creator_id)
+            if creator_user:
+                logger.info(f"Fallback escalation for task {task.id}: Attempting to notify creator {creator_user.id} (Slack: {getattr(creator_user, 'slack_id', 'N/A')}).")
+                fallback_reason = (
+                    f"Task {task.id} ({task.title[:30]}...) is BLOCKED. "
+                    f"Fallback escalation to Creator as Accountable user (ID: {task.accountable_id if task.accountable_id else 'Not Set'}) "
+                    f"was not found or not assigned."
+                )
+                try:
+                    await self.notification_service.notify_task_escalation_fallback(
+                        task=task,
+                        escalated_to_user=creator_user,
+                        reason_summary=fallback_reason
+                    )
+                    creator_notified_for_fallback = True
+                    escalation_target_description = f"Task Creator ({creator_user.id}) notified."
+                    logger.info(f"Fallback notification sent to creator {creator_user.id} for task {task.id}.")
+                except Exception as e:
+                    logger.error(f"Failed to send notify_task_escalation_fallback to creator {creator_user.id} for task {task.id}: {e}", exc_info=True)
+                    escalation_target_description = f"Task Creator ({creator_user.id}) notification attempt failed."
+            else:
+                logger.error(f"Task creator {task.creator_id} not found for task {task.id} during fallback escalation.")
+                escalation_target_description = "Task Creator user record not found."
+        else:
+            logger.warning(f"Task {task.id} has no creator_id for fallback escalation.")
+            escalation_target_description = "Task Creator ID not set on task."
+
+        if creator_notified_for_fallback:
+            logger.info(f"Fallback escalation for task {task.id} successfully processed to creator.")
+        else:
+            logger.warning(f"Could not complete fallback escalation notification for task {task.id}. Status: {escalation_target_description}")
+
+        # Further fallback steps (system alerts, admin notifications) are logged below but not implemented as direct notifications here.
+        logger.info(
+            f"Blocked task {task.id} requires further attention if not resolved by user notifications. "
+            f"Final fallback notification status: {escalation_target_description}. Consider system-level alerting/flagging."
+        )
+        # Example for dashboard flagging (remains a comment):
+        # await self.system_alert_service.flag_task_for_manual_review(
+        #     task_id=task.id, 
+        #     reason=f"Blocked - Accountable user/fallback to creator ({escalation_target_description}) failed or needs review"
+        # )
 
     # Add other RACI related business logic methods here

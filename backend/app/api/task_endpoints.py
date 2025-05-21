@@ -17,17 +17,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter(tags=["tasks"])
 
 # Pydantic models for request/response validation
 class TaskCreate(BaseModel):
+    title: str = Field(..., description="Task title")
     description: str = Field(..., description="Task description")
-    assignee_id: str = Field(..., description="ID of the user assigned to the task")
-    responsible_id: Optional[str] = Field(None, description="ID of the responsible user (defaults to assignee)")
-    accountable_id: Optional[str] = Field(None, description="ID of the accountable user")
-    consulted_ids: Optional[List[str]] = Field(None, description="IDs of consulted users")
-    informed_ids: Optional[List[str]] = Field(None, description="IDs of informed users")
+    assignee_id: UUID = Field(..., description="ID of the user assigned to the task")
+    creator_id: UUID = Field(..., description="ID of the user creating the task")
+    responsible_id: Optional[UUID] = Field(None, description="ID of the responsible user (defaults to assignee)")
+    accountable_id: Optional[UUID] = Field(None, description="ID of the accountable user")
+    consulted_ids: Optional[List[UUID]] = Field(None, description="IDs of consulted users")
+    informed_ids: Optional[List[UUID]] = Field(None, description="IDs of informed users")
     due_date: Optional[datetime] = Field(None, description="Due date for the task")
+    task_type: Optional[str] = Field(None, description="Type of the task, e.g., Feature, Bug")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Arbitrary metadata for the task")
+    priority: Optional[str] = Field(None, description="Priority of the task, e.g., High, Medium, Low")
 
 class TaskUpdate(BaseModel):
     description: Optional[str] = Field(None, description="Updated task description")
@@ -41,18 +46,27 @@ class TaskUpdate(BaseModel):
     blocked_reason: Optional[str] = Field(None, description="Reason for blocking the task")
 
 class TaskResponse(BaseModel):
-    id: str
+    id: UUID
+    title: str
     description: str
-    status: str
-    assignee_id: str
-    responsible_id: str
-    accountable_id: str
-    consulted_ids: Optional[List[str]] = None
-    informed_ids: Optional[List[str]] = None
-    created_at: str
-    updated_at: Optional[str] = None
-    due_date: Optional[str] = None
+    status: TaskStatus
+    assignee_id: UUID
+    responsible_id: UUID
+    accountable_id: UUID
+    consulted_ids: Optional[List[UUID]] = None
+    informed_ids: Optional[List[UUID]] = None
+    creator_id: UUID
+    due_date: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    task_type: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    priority: Optional[str] = None
     warnings: Optional[List[str]] = None
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True
 
 class TaskList(BaseModel):
     tasks: List[TaskResponse]
@@ -87,7 +101,8 @@ async def create_task(
     # Create task with RACI validation, now passing creator_id
     # Assumes raci_service.assign_raci is updated to handle creator_id
     # and that it ensures creator_id is part of the Task object sent to task_repo.create_task
-    created_task, warnings = await raci_service.assign_raci( # Made await, assuming raci_service.assign_raci is async
+    created_task, warnings = await raci_service.register_raci_assignments(
+        title=task.title,
         description=task.description,
         assignee_id=task.assignee_id,
         responsible_id=task.responsible_id,
@@ -95,7 +110,10 @@ async def create_task(
         consulted_ids=task.consulted_ids,
         informed_ids=task.informed_ids,
         due_date=task.due_date,
-        creator_id=current_user.id # Pass creator_id
+        task_type=task.task_type,
+        metadata=task.metadata,
+        priority=task.priority,
+        creator_id=current_user.id
     )
     
     if not created_task:
@@ -112,14 +130,14 @@ async def create_task(
     logger.info(f"Task {created_task.id} created successfully by user {current_user.id}")
     
     # Send notification to assignee, passing creator_id for context in notification if needed
-    await notification_service.task_created_notification(created_task.id, current_user.id) # Made await
+    await notification_service.task_created_notification(created_task, current_user.id)
     
-    response_data = created_task.to_dict() # Assumes Task.to_dict() exists or model_dump() is used
+    response_payload = created_task.model_dump()
     if warnings:
-        response_data["warnings"] = warnings
+        response_payload["warnings"] = warnings
         logger.warning(f"Task {created_task.id} created with warnings by user {current_user.id}: {warnings}")
 
-    return response_data
+    return TaskResponse(**response_payload)
 
 @router.get("", response_model=TaskList)
 async def list_tasks(

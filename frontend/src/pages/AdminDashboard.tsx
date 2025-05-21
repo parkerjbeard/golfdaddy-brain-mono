@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, ClipboardList, Target, Award, MessageSquare, TrendingUp, TrendingDown, Calendar, UserCog } from "lucide-react";
 import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
-import { TaskOverview } from '@/components/admin/TaskOverview';
+import { RaciTaskDashboard } from '@/components/admin/RaciTaskDashboard';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Chart } from '@/components/ui/chart';
 import { UserRole } from '@/types/user';
@@ -37,34 +37,6 @@ interface BusinessGoal {
 const AdminDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  
-  // Sample employees data
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: "1",
-      name: "Alex Johnson",
-      email: "alex@company.com",
-      role: "leadership",
-      department: "Engineering",
-      status: "active"
-    },
-    {
-      id: "2",
-      name: "Emily Chen",
-      email: "emily@company.com",
-      role: "manager",
-      department: "Product",
-      status: "active"
-    },
-    {
-      id: "3",
-      name: "Michael Davis",
-      email: "michael@company.com",
-      role: "employee",
-      department: "Marketing",
-      status: "active"
-    }
-  ]);
   
   // Sample objectives data
   const [objectives, setObjectives] = useState<Objective[]>([
@@ -396,7 +368,7 @@ const AdminDashboard = () => {
               <p className="text-muted-foreground mb-6">
                 Overview of tasks across all employees and departments.
               </p>
-              <TaskOverview employees={employees} />
+              <RaciTaskDashboard />
             </Card>
           </div>
         </TabsContent>

@@ -298,8 +298,95 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Unexpected error in send_development_plan_notification for manager {manager_user_id}: {e}", exc_info=True)
 
+    async def notify_task_escalation_fallback(
+        self, 
+        task: Task, 
+        escalated_to_user: User, 
+        reason_summary: str
+    ):
+        """Trigger Make.com scenario for a task escalation fallback notification."""
+        if not task or not escalated_to_user or not escalated_to_user.slack_id:
+            logger.warning(
+                "Task escalation fallback notification skipped: "
+                f"Task ({task.id if task else 'N/A'}), "
+                f"escalated_to_user ({escalated_to_user.id if escalated_to_user else 'N/A'}), "
+                f"or escalated_to_user.slack_id is missing."
+            )
+            return
+
+        try:
+            # Ensure assignee details are available if assignee_id is present
+            assignee_details = {"id": None, "name": None, "slack_id": None}
+            if task.assignee_id:
+                assignee = await self.user_repo.get_user_by_id(task.assignee_id)
+                if assignee:
+                    assignee_details["id"] = str(assignee.id)
+                    assignee_details["name"] = getattr(assignee, 'name', None)
+                    assignee_details["slack_id"] = getattr(assignee, 'slack_id', None)
+                else:
+                    logger.warning(f"Assignee user {task.assignee_id} not found for task {task.id} in fallback notification.")
+            
+            # Ensure responsible user details are available if responsible_id is present
+            responsible_details = {"id": None, "name": None, "slack_id": None}
+            if task.responsible_id:
+                responsible_user = await self.user_repo.get_user_by_id(task.responsible_id)
+                if responsible_user:
+                    responsible_details["id"] = str(responsible_user.id)
+                    responsible_details["name"] = getattr(responsible_user, 'name', None)
+                    responsible_details["slack_id"] = getattr(responsible_user, 'slack_id', None)
+                else:
+                    logger.warning(f"Responsible user {task.responsible_id} not found for task {task.id} in fallback notification.")
+
+
+            payload = {
+                "notification_type": "task_escalation_fallback",
+                "task_id": str(task.id),
+                "task_title": task.title,
+                "task_description": task.description,
+                "task_status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+                "task_due_date": task.due_date.isoformat() if task.due_date else None,
+                "task_type": task.task_type,
+                "escalated_to_user_id": str(escalated_to_user.id),
+                "escalated_to_user_name": getattr(escalated_to_user, 'name', None),
+                "escalated_to_user_slack_id": escalated_to_user.slack_id,
+                "escalation_reason_summary": reason_summary,
+                "original_assignee_id": assignee_details["id"],
+                "original_assignee_name": assignee_details["name"],
+                "original_assignee_slack_id": assignee_details["slack_id"],
+                "original_responsible_id": responsible_details["id"],
+                "original_responsible_name": responsible_details["name"],
+                "original_responsible_slack_id": responsible_details["slack_id"],
+                "original_accountable_id": str(task.accountable_id) if task.accountable_id else None, # Accountable might not exist, so direct ID
+                "timestamp": time.time()
+            }
+            
+            # NOTE: This notification type requires a new webhook URL to be configured in settings.
+            # Example: settings.MAKE_WEBHOOK_TASK_ESCALATION_FALLBACK
+            webhook_url = settings.MAKE_WEBHOOK_TASK_ESCALATION_FALLBACK 
+            
+            logger.info(
+                f"Sending task escalation fallback notification for task {task.id} "
+                f"to user {escalated_to_user.id} (Slack: {escalated_to_user.slack_id}) via {webhook_url}..."
+            )
+            await self._send_webhook(webhook_url, payload)
+
+        except (ConfigurationError, ExternalServiceError, AppExceptionBase) as e_webhook:
+            logger.error(
+                f"Webhook error during task escalation fallback for task {task.id} to user {escalated_to_user.id}: {e_webhook}", 
+                exc_info=True
+            )
+        except ResourceNotFoundError as e_res: # Catch if user_repo.get_user_by_id fails for assignee/responsible
+            logger.warning(
+                f"Resource not found during task escalation fallback for task {task.id} to user {escalated_to_user.id}: {e_res}", 
+                exc_info=True
+            )
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in notify_task_escalation_fallback for task {task.id} to user {escalated_to_user.id}: {e}", 
+                exc_info=True
+            )
+
     # --- Shorthand methods call the above specific notification handlers ---
-    # These already have try-except Exception which will catch the more specific ones now.
     async def task_created_notification(self, task: Task, creator_id: Optional[UUID] = None):
          try:
              # Task object is now passed directly, no need to fetch it again

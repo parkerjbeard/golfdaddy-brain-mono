@@ -14,7 +14,6 @@ import threading
 from app.config.settings import settings
 from app.config.supabase_client import get_supabase_client
 from app.api.docs_generation import router as docs_router
-from app.api.task_endpoints import router as tasks_router
 from app.api.auth_endpoints import router as auth_router
 from app.api.github_events import router as github_router
 from app.api.daily_report_endpoints import router as daily_reports_router
@@ -75,7 +74,6 @@ if settings.ENABLE_API_AUTH:
 # Register routers
 app.include_router(auth_router)
 app.include_router(docs_router)
-app.include_router(tasks_router)
 app.include_router(github_router)
 app.include_router(daily_reports_router)
 app.include_router(api_v1_router, prefix="/api/v1")

@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { User } from "@/types/entities";
-import { getUsers as fetchUsers } from "@/lib/apiService";
 
 interface MultiUserSelectorProps {
   selectedUsers: User[];
@@ -26,6 +25,9 @@ interface MultiUserSelectorProps {
   disabled?: boolean;
   className?: string;
   id?: string;
+  allUsersList: User[];
+  isLoading: boolean;
+  error: string | null;
 }
 
 export function MultiUserSelector({
@@ -34,47 +36,36 @@ export function MultiUserSelector({
   placeholder = "Select users...",
   disabled = false,
   className,
-  id
+  id,
+  allUsersList,
+  isLoading,
+  error,
 }: MultiUserSelectorProps) {
   const [open, setOpen] = React.useState(false);
-  const [allUsers, setAllUsers] = React.useState<User[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  React.useEffect(() => {
-    async function loadUsers() {
-      setLoading(true);
-      setError(null);
-      try {
-        const fetchedUsers = await fetchUsers(null);
-        setAllUsers(fetchedUsers);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load users");
-        console.error("MultiUserSelector error:", err);
-      }
-      setLoading(false);
-    }
-    loadUsers();
-  }, []);
-
   const handleSelect = (currentValue: string) => {
-    const user = allUsers.find(
-      (u) => u.name.toLowerCase() === currentValue.toLowerCase()
+    const user = allUsersList.find(
+      (u) => u.name?.toLowerCase() === currentValue.toLowerCase()
     );
-    if (user && !selectedUsers.find(su => su.id === user.id)) {
+    if (user && user.name && !selectedUsers.find(su => su.id === user.id)) {
       onSelectedUsersChange([...selectedUsers, user]);
     }
-    // Keep popover open for multi-select or close, depending on UX preference
-    // setOpen(false); 
-    inputRef.current?.focus(); // Keep focus in input for further selections
+    inputRef.current?.focus();
   };
 
   const handleRemoveUser = (userIdToRemove: string) => {
     onSelectedUsersChange(selectedUsers.filter(user => user.id !== userIdToRemove));
   };
 
-  const availableUsers = allUsers.filter(u => !selectedUsers.find(su => su.id === u.id));
+  const availableUsers = allUsersList.filter(u => u.name && !selectedUsers.find(su => su.id === u.id));
+  
+  let buttonPlaceholderText = placeholder;
+  if (isLoading) {
+    buttonPlaceholderText = "Loading...";
+  } else if (error) {
+    buttonPlaceholderText = "Error loading users";
+  }
 
   return (
     <div className={cn("group", className)} id={id}>
@@ -85,11 +76,11 @@ export function MultiUserSelector({
             role="combobox"
             aria-expanded={open}
             className="w-full justify-between h-auto min-h-[2.25rem] items-start"
-            disabled={disabled || loading}
+            disabled={disabled || isLoading || !!error}
             onClick={() => setOpen(!open)}
           >
             <div className="flex flex-wrap gap-1 items-center flex-grow">
-              {selectedUsers.length === 0 && (loading ? "Loading..." : error ? "Error" : placeholder)}
+              {selectedUsers.length === 0 && buttonPlaceholderText}
               {selectedUsers.map(user => (
                 <Badge
                   variant="secondary"
@@ -97,7 +88,7 @@ export function MultiUserSelector({
                   className="py-0.5 px-2 flex items-center gap-1"
                   onClick={(e) => { e.stopPropagation(); handleRemoveUser(user.id); }}
                 >
-                  {user.name}
+                  {user.name || "Unnamed user"}
                   <Cross2Icon className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-pointer" />
                 </Badge>
               ))}
@@ -109,29 +100,37 @@ export function MultiUserSelector({
           <Command>
             <CommandInput 
               ref={inputRef}
-              placeholder={error ? "Could not load" : "Search users..."} 
+              placeholder={isLoading ? "Loading..." : error ? "Error" : "Search users..."} 
               className="h-9" 
-              disabled={loading || !!error}
+              disabled={isLoading || !!error}
             />
-            {!error && !loading && availableUsers.length === 0 && selectedUsers.length > 0 && <CommandEmpty>All users selected or no more users.</CommandEmpty>}
-            {!error && !loading && availableUsers.length === 0 && selectedUsers.length === 0 && <CommandEmpty>No users found.</CommandEmpty>}
+            {isLoading && <CommandEmpty>Loading...</CommandEmpty>}
             {error && <CommandEmpty>{error}</CommandEmpty>}
-            {loading && !error && <CommandEmpty>Loading...</CommandEmpty>}
-            {!loading && !error && (
-              <CommandList>
-                <CommandGroup>
-                  {availableUsers.map((user) => (
-                    <CommandItem
-                      key={user.id}
-                      value={user.name} // Use user.name for matching
-                      onSelect={handleSelect}
-                      className="cursor-pointer"
-                    >
-                      {user.name}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
+            {!isLoading && !error && (
+              <>
+                {availableUsers.length === 0 && selectedUsers.length > 0 && <CommandEmpty>All users selected or no more users.</CommandEmpty>}
+                {availableUsers.length === 0 && selectedUsers.length === 0 && <CommandEmpty>No users found.</CommandEmpty>}
+                {availableUsers.length > 0 && (
+                  <CommandList>
+                    <CommandGroup>
+                      {availableUsers.map((user) => (
+                        <CommandItem
+                          key={user.id}
+                          value={user.name || ''}
+                          onSelect={() => {
+                            const selectedUserObject = allUsersList.find(u => u.id === user.id);
+                            handleSelect(selectedUserObject ? selectedUserObject.name || '' : '');
+                          }}
+                          className="cursor-pointer"
+                          disabled={!user.name}
+                        >
+                          {user.name || "Unnamed user"}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                )}
+              </>
             )}
           </Command>
         </PopoverContent>

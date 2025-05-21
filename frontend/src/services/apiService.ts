@@ -33,14 +33,13 @@ export async function fetchUsers(): Promise<User[]> {
  * @param payload - The task creation data.
  * @returns The created task and any warnings from the backend.
  */
-export async function createRaciTask(payload: CreateTaskPayload): Promise<CreateTaskResponse> {
+export async function createRaciTask(token: string, payload: CreateTaskPayload): Promise<CreateTaskResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/tasks`, { // Corrected endpoint to /tasks
+    const response = await fetch(`${API_BASE_URL}/tasks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Add Authorization header if required, e.g.:
-        // 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
     });
