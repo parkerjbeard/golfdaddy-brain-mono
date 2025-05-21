@@ -24,10 +24,10 @@ class ClarificationRequest(BaseModel):
 class AiAnalysis(BaseModel):
     estimated_hours: Optional[float] = None
     estimated_difficulty: Optional[str] = None # e.g., low, medium, high
-    clarification_requests: List[ClarificationRequest] = []
+    clarification_requests: List[ClarificationRequest] = Field(default_factory=list)
     sentiment: Optional[str] = None # e.g., positive, neutral, negative
-    key_achievements: List[str] = []
-    potential_blockers: List[str] = []
+    key_achievements: List[str] = Field(default_factory=list)
+    potential_blockers: List[str] = Field(default_factory=list)
     summary: Optional[str] = None
 
     class Config:
@@ -44,7 +44,7 @@ class DailyReport(BaseModel):
     ai_analysis: Optional[AiAnalysis] = None
     
     # Links to other data
-    linked_commit_ids: List[str] = [] # List of commit SHAs or IDs
+    linked_commit_ids: List[str] = Field(default_factory=list) # List of commit SHAs or IDs
     
     # Overall Assessment (potentially filled by manager or further AI analysis)
     overall_assessment_notes: Optional[str] = None
