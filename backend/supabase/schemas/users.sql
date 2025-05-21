@@ -10,7 +10,13 @@ CREATE TABLE IF NOT EXISTS public.users (
   metadata JSONB DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  github_username TEXT -- Added column
+  github_username TEXT,
+  team_id UUID,
+  reports_to_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  personal_mastery JSONB DEFAULT '{}'::JSONB,
+  last_login_at TIMESTAMPTZ,
+  is_active BOOLEAN DEFAULT TRUE,
+  preferences JSONB DEFAULT '{}'::JSONB
 );
 
 -- Optional: Add a comment for the new column

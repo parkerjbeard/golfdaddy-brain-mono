@@ -20,9 +20,16 @@ export interface UserResponse {
   github_username?: string | null;
   role: UserRole;
   team?: string | null;
+  team_id?: string | null; // UUID, Foreign key to Team model
+  reports_to_id?: string | null; // UUID, ID of the user this user reports to
   avatar_url?: string | null; // HttpUrl
+  metadata?: Record<string, any> | null; // Arbitrary user metadata
+  personal_mastery?: Record<string, any> | null; // Manager-specific tasks/feedback
   created_at?: string | null; // datetime
   updated_at?: string | null; // datetime
+  last_login_at?: string | null; // datetime
+  is_active?: boolean;
+  preferences?: Record<string, any> | null; // User-specific settings
 }
 
 // Matches backend UserListResponse Pydantic model
@@ -41,5 +48,11 @@ export interface UserUpdateByAdminPayload {
   github_username?: string | null;
   role?: UserRole | null;
   team?: string | null;
+  team_id?: string | null; // Added
   avatar_url?: string | null;
+  reports_to_id?: string | null; // Added
+  metadata?: Record<string, any> | null; // Added
+  personal_mastery?: Record<string, any> | null; // Added
+  is_active?: boolean | null; // Added
+  preferences?: Record<string, any> | null; // Added
 } 
