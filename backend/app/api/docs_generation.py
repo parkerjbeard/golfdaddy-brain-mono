@@ -29,10 +29,6 @@ class DocumentationResponse(BaseModel):
     generated_at: str
     git_url: Optional[str] = None
 
-class DocumentationUpdateRequest(BaseModel):
-    doc_id: str = Field(..., description="The ID of the document to update")
-    feedback: str = Field(..., description="Feedback or instructions for updating the document")
-
 @router.post("", response_model=DocumentationResponse)
 def generate_documentation(
     request: DocumentationRequest = Body(...),
@@ -104,67 +100,24 @@ def generate_documentation(
         "git_url": git_url
     }
 
-@router.post("/iterate", response_model=DocumentationResponse)
-def iterate_documentation(
-    request: DocumentationUpdateRequest = Body(...),
-    supabase: Client = Depends(get_supabase_client)
-):
-    """
-    Update a document based on feedback.
-    
-    Takes the document ID and feedback, then generates an updated version.
-    """
-    # Initialize service
-    doc_service = DocGenerationService(supabase)
-    
-    # First, try to fetch the existing document to ensure it exists
-    existing_doc = doc_service.get_documentation_by_id(request.doc_id)
-    if not existing_doc:
-        logger.warning(f"Attempted to iterate on non-existent document ID: {request.doc_id}")
-        raise ResourceNotFoundError(resource_name="Document", resource_id=request.doc_id)
-
-    # Handle iteration
-    try:
-        updated_doc = doc_service.handle_iteration(
-            doc_id=request.doc_id,
-            feedback=request.feedback
-        )
-        if "error" in updated_doc:
-            logger.error(f"AI documentation iteration failed for doc {request.doc_id}: {updated_doc['error']}")
-            raise AIIntegrationError(message=updated_doc["error"])
-
-    except Exception as e:
-        logger.exception(f"Unexpected error during documentation iteration for doc {request.doc_id}: {str(e)}")
-        # This could be a more specific error from the service, or a generic one if not caught by service
-        raise AIIntegrationError(message=f"Failed to iterate on document: {str(e)}")
-
-    # Prepare response
-    return {
-        "doc_id": updated_doc.get("doc_id"),
-        "title": updated_doc.get("title", "Updated Documentation"),
-        "content": updated_doc.get("content", ""),
-        "git_url": None,  # Would update the existing doc in a real implementation
-        "generated_at": updated_doc.get("updated_at")
-    }
-
-@router.get("/{doc_id}")
-def get_documentation(
-    doc_id: str,
-    supabase: Client = Depends(get_supabase_client)
-):
-    """
-    Retrieve a generated document by ID.
-    
-    This would typically fetch the document from storage.
-    In the current implementation, this is a placeholder.
-    """
-    # This would typically fetch from a database
-    doc_service = DocGenerationService(supabase)
-    document = doc_service.get_documentation_by_id(doc_id)
-    
-    if not document:
-        logger.warning(f"Document with ID {doc_id} not found.")
-        raise ResourceNotFoundError(resource_name="Document", resource_id=doc_id)
-
-    # Assuming document is a dictionary or Pydantic model that can be returned
-    return document
+# @router.get("/{doc_id}")
+# def get_documentation(
+#     doc_id: str,
+#     supabase: Client = Depends(get_supabase_client)
+# ):
+#     """
+#     Retrieve a generated document by ID.
+#     
+#     This would typically fetch the document from storage.
+#     In the current implementation, this is a placeholder.
+#     """
+#     # This would typically fetch from a database
+#     doc_service = DocGenerationService(supabase)
+#     document = doc_service.get_documentation_by_id(doc_id)
+#     
+#     if not document:
+#         logger.warning(f"Document with ID {doc_id} not found.")
+#         raise ResourceNotFoundError(resource_name="Document", resource_id=doc_id)
+#
+#     # Assuming document is a dictionary or Pydantic model that can be returned
+#     return document

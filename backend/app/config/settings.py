@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # OpenAI settings
     OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")
     OPENAI_MODEL: Optional[str] = Field("gpt-4.1-2025-04-14", env="OPENAI_MODEL")
-    DOCUMENTATION_OPENAI_MODEL: Optional[str] = Field("gpt-4.1-2025-04-14", env="DOCUMENTATION_OPENAI_MODEL")
+    DOC_AGENT_OPENAI_MODEL: Optional[str] = Field("gpt-4.1-2025-04-14", env="DOC_AGENT_OPENAI_MODEL")
 
     # Service-specific AI models
     COMMIT_ANALYSIS_MODEL: Optional[str] = Field("o4-mini-2025-04-16", env="COMMIT_ANALYSIS_MODEL")
@@ -173,6 +173,10 @@ class Settings(BaseSettings):
     @property
     def reanalyze_existing_commits(self):
         return self.REANALYZE_EXISTING_COMMITS
+
+    @property
+    def doc_agent_openai_model(self):
+        return self.DOC_AGENT_OPENAI_MODEL
 
     class Config:
         env_file = '.env'
