@@ -113,8 +113,8 @@ dmypy.json
 # Pytest
 .pytest_cache/
 
-# folder for docs
-docs/
+# folder for docs (allow versioned documentation)
+# docs/ was previously ignored but we now track architecture docs
 
 CLAUDE.md
 
