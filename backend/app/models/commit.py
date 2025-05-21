@@ -21,10 +21,10 @@ class Commit(BaseModel):
     lines_added: Optional[int] = None
     lines_deleted: Optional[int] = None
     changed_files: Optional[List[str]] = None
-    # ai_analysis_notes: Optional[str] = None # Potentially JSON or Text in DB - Replaced by specific fields
+    ai_analysis_notes: Optional[str] = Field(None, description="Raw text notes from AI analysis, potentially replaced by more structured fields below.") # Potentially JSON or Text in DB - Replaced by specific fields
     complexity_score: Optional[int] = None # From AI analysis
     risk_level: Optional[str] = None # Could be an Enum: LOW, MEDIUM, HIGH - From AI analysis
-    # risk_factor: Optional[float] = None # Numeric factor contributing to risk - This seems duplicative if risk_level is string
+    risk_factor: Optional[float] = None # Numeric factor contributing to risk
 
     # New fields from AI commit analysis
     key_changes: Optional[List[str]] = Field(None, description="List of key changes identified by AI")
