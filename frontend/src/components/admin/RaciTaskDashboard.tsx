@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-// import { getAllRaciTasks } from '@/lib/apiService'; // Will be uncommented later
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { useTaskSelectors, useAppStore } from '@/store';
+import { TaskStatus } from '@/types/entities';
 
 // Mock User and RaciTask types - these should ideally come from @/types/entities
 interface User {
@@ -75,51 +76,31 @@ const mockGetAllRaciTasks = (token: string): Promise<RaciTask[]> => {
 
 
 export const RaciTaskDashboard: React.FC = () => {
-  const { token, loading: authLoading } = useAuth();
-  const [tasks, setTasks] = useState<RaciTask[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { filteredTasks, taskStats } = useTaskSelectors();
+  const { actions, status } = useAppStore();
 
   useEffect(() => {
-    if (authLoading) {
-      return; // Wait for auth loading to complete
-    }
+    // Load tasks on component mount
+    actions.tasks.fetch();
+  }, [actions.tasks]);
 
-    if (!token) {
-      setError("Authentication token not available. Cannot fetch tasks.");
-      setIsLoading(false);
-      return;
-    }
-
-    const fetchTasks = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        // const fetchedTasks = await getAllRaciTasks(token); // Real call
-        const fetchedTasks = await mockGetAllRaciTasks(token); // Mock call
-        setTasks(fetchedTasks);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-        setError(`Failed to fetch RACI tasks: ${errorMessage}`);
-        console.error("Error fetching RACI tasks:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTasks();
-  }, [token, authLoading]);
-
-  const getStatusBadgeVariant = (status: RaciTask['status']) => {
+  const getStatusBadgeVariant = (status: TaskStatus) => {
     switch (status) {
-      case 'OPEN':
+      case TaskStatus.OPEN:
         return 'outline';
-      case 'IN_PROGRESS':
-        return 'default'; // Or a specific color like "bg-blue-500 text-white"
-      case 'COMPLETED':
-        return 'secondary'; // Or "bg-green-500 text-white"
-      case 'CANCELLED':
+      case TaskStatus.ASSIGNED:
+        return 'outline';
+      case TaskStatus.IN_PROGRESS:
+        return 'default';
+      case TaskStatus.UNDER_REVIEW:
+        return 'default';
+      case TaskStatus.DONE:
+        return 'secondary';
+      case TaskStatus.BLOCKED:
         return 'destructive';
+      case TaskStatus.ARCHIVED:
+        return 'secondary';
       default:
         return 'outline';
     }
@@ -139,7 +120,7 @@ export const RaciTaskDashboard: React.FC = () => {
   };
 
 
-  if (authLoading || isLoading) {
+  if (status.isLoading) {
     return (
       <div className="space-y-4 p-6">
         <Skeleton className="h-8 w-1/4" />
@@ -150,19 +131,19 @@ export const RaciTaskDashboard: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (status.hasErrors) {
     return (
       <Alert variant="destructive" className="m-4">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
-        <AlertDescription>{error}</AlertDescription>
+        <AlertDescription>{status.errors.join(', ')}</AlertDescription>
       </Alert>
     );
   }
 
   return (
-    <div className="p-1"> {/* Reduced padding if Card already has it */}
-      {tasks.length === 0 ? (
+    <div className="p-1">
+      {filteredTasks.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           No RACI tasks found.
         </div>
@@ -181,12 +162,12 @@ export const RaciTaskDashboard: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tasks.map((task) => (
+              {filteredTasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
-                  <TableCell>{task.assignee?.name || 'N/A'}</TableCell>
-                  <TableCell>{task.responsible?.name || 'N/A'}</TableCell>
-                  <TableCell>{task.accountable?.name || 'N/A'}</TableCell>
+                  <TableCell>{task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'N/A'}</TableCell>
+                  <TableCell>{task.responsible ? `${task.responsible.first_name} ${task.responsible.last_name}` : 'N/A'}</TableCell>
+                  <TableCell>{task.accountable ? `${task.accountable.first_name} ${task.accountable.last_name}` : 'N/A'}</TableCell>
                   <TableCell>{formatDate(task.due_date)}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(task.status)}>
@@ -197,7 +178,7 @@ export const RaciTaskDashboard: React.FC = () => {
                     <Button variant="outline" size="sm" className="mr-2" onClick={() => console.log('Review task:', task.id)}>
                       Review
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => console.log('Edit task:', task.id)}>
+                    <Button variant="outline" size="sm" onClick={() => actions.tasks.update(task.id, { status: TaskStatus.IN_PROGRESS })}>
                       Edit
                     </Button>
                   </TableCell>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { UserCog, UserCheck, UserX } from 'lucide-react';
+import { useUserSelectors, useAppStore } from '@/store';
+import { UserResponse, UserRole } from '@/types/user';
 
 interface Employee {
   id: string;
@@ -18,108 +20,87 @@ interface Employee {
 }
 
 export const EmployeeManagement = () => {
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: "1",
-      name: "Alex Johnson",
-      email: "alex@company.com",
-      role: "leadership",
-      department: "Engineering",
-      status: "active"
-    },
-    {
-      id: "2",
-      name: "Emily Chen",
-      email: "emily@company.com",
-      role: "manager",
-      department: "Product",
-      status: "active"
-    },
-    {
-      id: "3",
-      name: "Michael Davis",
-      email: "michael@company.com",
-      role: "employee",
-      department: "Marketing",
-      status: "active"
-    },
-    {
-      id: "4",
-      name: "Sarah Williams",
-      email: "sarah@company.com",
-      role: "employee",
-      status: "pending"
-    },
-    {
-      id: "5",
-      name: "David Brown",
-      email: "david@company.com",
-      role: "employee",
-      status: "pending"
-    }
-  ]);
-
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  // Use the new store system
+  const { filteredUsers } = useUserSelectors();
+  const { actions } = useAppStore();
+  
+  const [selectedEmployee, setSelectedEmployee] = useState<UserResponse | null>(null);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
-  const [newRole, setNewRole] = useState('');
+  const [newRole, setNewRole] = useState<UserRole>(UserRole.USER);
   const [newDepartment, setNewDepartment] = useState('');
 
-  const handleApproveEmployee = (employee: Employee) => {
-    setSelectedEmployee(employee);
-    setNewRole(employee.role);
-    setNewDepartment(employee.department || '');
+  // Filter users by status (assuming we have an is_active field or similar)
+  const activeUsers = filteredUsers.filter(user => user.is_active !== false);
+  const pendingUsers = filteredUsers.filter(user => user.is_active === false);
+
+  // Load users on component mount
+  useEffect(() => {
+    actions.users.fetch();
+  }, [actions.users]);
+
+  const handleApproveEmployee = (user: UserResponse) => {
+    setSelectedEmployee(user);
+    setNewRole(user.role);
+    setNewDepartment(user.department || '');
     setIsRoleDialogOpen(true);
   };
 
-  const handleRejectEmployee = (employeeId: string) => {
-    const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
-    setEmployees(updatedEmployees);
-    
-    toast({
-      title: "Employee Rejected",
-      description: "The employee request has been rejected."
-    });
+  const handleRejectEmployee = async (userId: string) => {
+    try {
+      await actions.users.delete(userId);
+      toast({
+        title: "Employee Rejected",
+        description: "The employee request has been rejected."
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to reject employee request.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleSaveRole = () => {
+  const handleSaveRole = async () => {
     if (!selectedEmployee) return;
     
-    const updatedEmployees = employees.map(emp => {
-      if (emp.id === selectedEmployee.id) {
-        return {
-          ...emp,
-          role: newRole,
-          department: newDepartment || emp.department,
-          status: 'active' as const
-        };
-      }
-      return emp;
-    });
-    
-    setEmployees(updatedEmployees);
-    
-    toast({
-      title: "Role Updated",
-      description: `${selectedEmployee.name}'s role has been updated to ${newRole}.`
-    });
-    
-    setIsRoleDialogOpen(false);
+    try {
+      await actions.users.update(selectedEmployee.id, {
+        role: newRole,
+        department: newDepartment || selectedEmployee.department,
+        is_active: true
+      });
+      
+      toast({
+        title: "Role Updated",
+        description: `${selectedEmployee.first_name} ${selectedEmployee.last_name}'s role has been updated to ${newRole}.`
+      });
+      
+      setIsRoleDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update employee role.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleChangeRole = (employeeId: string, role: string) => {
-    const updatedEmployees = employees.map(emp => {
-      if (emp.id === employeeId) {
-        return { ...emp, role };
-      }
-      return emp;
-    });
-    
-    setEmployees(updatedEmployees);
-    
-    toast({
-      title: "Role Updated",
-      description: `Employee role has been updated to ${role}.`
-    });
+  const handleChangeRole = async (userId: string, role: UserRole) => {
+    try {
+      await actions.users.updateRole(userId, role);
+      
+      toast({
+        title: "Role Updated",
+        description: `Employee role has been updated to ${role}.`
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update employee role.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -127,7 +108,7 @@ export const EmployeeManagement = () => {
       <Card className="mb-6 p-6">
         <h2 className="text-xl font-medium mb-4">Pending Employees</h2>
         
-        {employees.filter(emp => emp.status === 'pending').length === 0 ? (
+        {pendingUsers.length === 0 ? (
           <div className="text-center p-4 text-muted-foreground">
             No pending employee requests.
           </div>
@@ -142,37 +123,35 @@ export const EmployeeManagement = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employees
-                  .filter(employee => employee.status === 'pending')
-                  .map((employee) => (
-                    <TableRow key={employee.id}>
-                      <TableCell>
-                        <div className="font-medium">{employee.name}</div>
-                      </TableCell>
-                      <TableCell>{employee.email}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="flex items-center gap-1"
-                            onClick={() => handleApproveEmployee(employee)}
-                          >
-                            <UserCheck className="h-4 w-4" />
-                            Approve
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="flex items-center gap-1 text-red-500 hover:text-red-700"
-                            onClick={() => handleRejectEmployee(employee.id)}
-                          >
-                            <UserX className="h-4 w-4" />
-                            Reject
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                {pendingUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div className="font-medium">{user.first_name} {user.last_name}</div>
+                    </TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="flex items-center gap-1"
+                          onClick={() => handleApproveEmployee(user)}
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          Approve
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="flex items-center gap-1 text-red-500 hover:text-red-700"
+                          onClick={() => handleRejectEmployee(user.id)}
+                        >
+                          <UserX className="h-4 w-4" />
+                          Reject
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ))}
               </TableBody>
             </Table>
@@ -195,36 +174,35 @@ export const EmployeeManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees
-                .filter(employee => employee.status === 'active')
-                .map((employee) => (
-                  <TableRow key={employee.id}>
-                    <TableCell>
-                      <div className="font-medium">{employee.name}</div>
-                    </TableCell>
-                    <TableCell>{employee.email}</TableCell>
-                    <TableCell>{employee.department || 'Not assigned'}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {employee.role.charAt(0).toUpperCase() + employee.role.slice(1)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Select 
-                        value={employee.role} 
-                        onValueChange={(value) => handleChangeRole(employee.id, value)}
-                      >
-                        <SelectTrigger className="w-36">
-                          <SelectValue placeholder="Change role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="employee">Employee</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
-                          <SelectItem value="leadership">Leadership</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
+              {activeUsers.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <div className="font-medium">{user.first_name} {user.last_name}</div>
+                  </TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.department || 'Not assigned'}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={user.role} 
+                      onValueChange={(value) => handleChangeRole(user.id, value as UserRole)}
+                    >
+                      <SelectTrigger className="w-36">
+                        <SelectValue placeholder="Change role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={UserRole.USER}>User</SelectItem>
+                        <SelectItem value={UserRole.DEVELOPER}>Developer</SelectItem>
+                        <SelectItem value={UserRole.MANAGER}>Manager</SelectItem>
+                        <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
               ))}
             </TableBody>
           </Table>
@@ -249,9 +227,10 @@ export const EmployeeManagement = () => {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="employee">Employee</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="leadership">Leadership</SelectItem>
+                  <SelectItem value={UserRole.USER}>User</SelectItem>
+                  <SelectItem value={UserRole.DEVELOPER}>Developer</SelectItem>
+                  <SelectItem value={UserRole.MANAGER}>Manager</SelectItem>
+                  <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>

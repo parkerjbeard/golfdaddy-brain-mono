@@ -10,6 +10,7 @@ import { RaciTaskDashboard } from '@/components/admin/RaciTaskDashboard';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Chart } from '@/components/ui/chart';
 import { UserRole } from '@/types/user';
+import { useDashboardSelectors } from '@/store';
 
 interface Employee {
   id: string;
@@ -37,6 +38,17 @@ interface BusinessGoal {
 const AdminDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  
+  // Get real data from normalized stores
+  const {
+    dashboardMetrics,
+    taskStats,
+    userStats,
+    overdueTasks,
+    tasksDueToday,
+    teamPerformanceMetrics,
+    userWorkloadAnalysis,
+  } = useDashboardSelectors();
   
   // Sample objectives data
   const [objectives, setObjectives] = useState<Objective[]>([
@@ -150,65 +162,68 @@ const AdminDashboard = () => {
         <TabsContent value="metrics">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             <KpiCard 
-              title="CSAT" 
-              value="92%" 
-              trend="up" 
-              percentageChange={3.5} 
-              description="Customer satisfaction rating" 
+              title="Total Tasks" 
+              value={dashboardMetrics.totalTasks.toString()} 
+              trend={dashboardMetrics.trends.tasksCreatedThisWeek > 0 ? "up" : "neutral"}
+              description="Active tasks across all projects" 
             />
             <KpiCard 
-              title="Average Shipping Time" 
-              value="3.2 days" 
-              trend="down" 
-              percentageChange={8.1} 
-              description="Average order fulfillment time" 
+              title="Completion Rate" 
+              value={`${dashboardMetrics.completionRate}%`} 
+              trend={dashboardMetrics.completionRate > 75 ? "up" : dashboardMetrics.completionRate > 50 ? "neutral" : "down"}
+              description="Tasks completed vs. total tasks" 
             />
             <KpiCard 
-              title="Views" 
-              value="125,836" 
-              trend="up" 
-              percentageChange={12.3} 
-              description="Product page views this month" 
+              title="Total Users" 
+              value={dashboardMetrics.totalUsers.toString()} 
+              trend="up"
+              description="Active users in the system" 
             />
             <KpiCard 
-              title="Weeks Since Last Logistics Mistake" 
-              value="14" 
-              description="Consistent operational excellence" 
+              title="Overdue Tasks" 
+              value={dashboardMetrics.overdueCount.toString()} 
+              trend={dashboardMetrics.overdueCount > 0 ? "down" : "up"}
+              description="Tasks past their due date" 
             />
             <KpiCard 
-              title="Retention (Day 0-6)" 
-              value="55%" 
-              trend="neutral" 
-              description="User retention in first week" 
+              title="Tasks Due Today" 
+              value={tasksDueToday.length.toString()} 
+              trend="neutral"
+              description="Tasks requiring attention today" 
             />
             <KpiCard 
-              title="First Month Usage" 
-              value="58%" 
-              trend="up" 
-              percentageChange={5.2} 
-              description="New user engagement" 
+              title="Team Performance" 
+              value={`${Math.round(teamPerformanceMetrics.reduce((acc, team) => acc + team.performanceScore, 0) / Math.max(teamPerformanceMetrics.length, 1))}%`}
+              trend="up"
+              description="Average team performance score" 
             />
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="p-4">
-              <h3 className="text-lg font-medium mb-4">Retention (Day 0-6)</h3>
+              <h3 className="text-lg font-medium mb-4">Task Status Distribution</h3>
               <Chart 
-                type="line"
-                data={retentionData}
-                xKey="day"
-                yKeys={[{ key: "retention", name: "Retention %", color: "#8B5CF6" }]}
+                type="bar"
+                data={Object.entries(taskStats.byStatus).map(([status, count]) => ({
+                  status: status.replace('_', ' '),
+                  count
+                }))}
+                xKey="status"
+                yKeys={[{ key: "count", name: "Tasks", color: "#8B5CF6" }]}
                 height={250}
               />
             </Card>
             
             <Card className="p-4">
-              <h3 className="text-lg font-medium mb-4">First Month Usage (Week 0-2)</h3>
+              <h3 className="text-lg font-medium mb-4">Team Performance Metrics</h3>
               <Chart 
                 type="bar"
-                data={firstMonthData}
-                xKey="week"
-                yKeys={[{ key: "usage", name: "Engagement %", color: "#F97316" }]}
+                data={teamPerformanceMetrics.map(team => ({
+                  team: team.teamId || 'No Team',
+                  performance: team.performanceScore
+                }))}
+                xKey="team"
+                yKeys={[{ key: "performance", name: "Performance %", color: "#F97316" }]}
                 height={250}
               />
             </Card>
