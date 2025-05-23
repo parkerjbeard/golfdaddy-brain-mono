@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/lib/supabaseClient'; // Import your Supabase client
 import { UserResponse, UserRole } from '@/types/user'; // Import your User type
 import { Session, User as SupabaseAuthUser, SignUpWithPasswordCredentials } from '@supabase/supabase-js';
+import { useAuthToken } from './useAuthToken';
 
 // Use the environment variable for the API base URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'; // Fallback if not set, though it should be
@@ -107,9 +108,9 @@ async function fetchUserProfile(authToken: string): Promise<UserResponse | null>
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<UserResponse | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const tokenManager = useAuthToken();
   console.log("[AuthProvider] Initializing. Loading:", loading);
 
   useEffect(() => {
@@ -126,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(initialSession);
         if (initialSession?.access_token) {
           console.log("[AuthProvider] Initial session has access token. Fetching profile.");
-          setToken(initialSession.access_token);
+          tokenManager.setToken(initialSession.access_token);
           
           try {
             const profile = await fetchUserProfile(initialSession.access_token);
@@ -139,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } else {
           console.log("[AuthProvider] No initial session or no access token.");
-          setToken(null);
+          tokenManager.removeToken();
           setUser(null);
           setIsAdmin(false);
         }
@@ -162,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(newSession);
           if (newSession?.access_token) {
             console.log("[AuthProvider] onAuthStateChange: New session has access token. Fetching profile.");
-            setToken(newSession.access_token);
+            tokenManager.setToken(newSession.access_token);
             
             try {
               const profile = await fetchUserProfile(newSession.access_token);
@@ -192,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           } else {
             console.log("[AuthProvider] onAuthStateChange: No new session or no access token.");
-            setToken(null);
+            tokenManager.removeToken();
             setUser(null);
             setIsAdmin(false);
           }
@@ -280,6 +281,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Listen for token expiration events
+  useEffect(() => {
+    const handleTokenExpired = () => {
+      console.warn("[AuthProvider] Token expired, signing out user");
+      logout();
+    };
+
+    const handleTokenRefreshNeeded = () => {
+      console.info("[AuthProvider] Token refresh needed - should implement refresh logic here");
+      // Could implement token refresh logic here if needed
+    };
+
+    window.addEventListener('auth-token-expired', handleTokenExpired);
+    window.addEventListener('token-refresh-needed', handleTokenRefreshNeeded);
+
+    return () => {
+      window.removeEventListener('auth-token-expired', handleTokenExpired);
+      window.removeEventListener('token-refresh-needed', handleTokenRefreshNeeded);
+    };
+  }, []);
+
   console.log("[AuthProvider] Rendering AuthContext.Provider. Loading:", loading, "User:", user ? 'User exists' : 'No user');
   return (
     <AuthContext.Provider value={{
@@ -290,7 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpWithEmailPassword,
       logout, 
       isAdmin, 
-      token 
+      token: tokenManager.getToken()
     }}>
       {children}
     </AuthContext.Provider>
