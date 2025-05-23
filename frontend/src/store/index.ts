@@ -21,6 +21,9 @@ export {
 export * from './utils/normalization';
 export * from './utils/performance';
 export * from './utils/sync';
+export * from './utils/loading';
+export * from './utils/optimistic';
+export * from './utils/errorHandling';
 
 // Store types
 export type {
@@ -28,6 +31,14 @@ export type {
   CacheConfig,
   StoreOperationResult,
   QueryState,
+  LoadingStates,
+  ErrorStates,
+  OptimisticUpdate,
+  StoreError,
+  EnhancedStoreError,
+  OperationContext,
+  RetryConfig,
+  StoreHealth,
 } from './types';
 
 // Re-export entity types for convenience

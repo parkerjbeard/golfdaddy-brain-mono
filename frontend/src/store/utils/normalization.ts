@@ -2,7 +2,8 @@
  * Utility functions for data normalization and denormalization
  */
 
-import { NormalizedState, EntityRelationships } from '../types';
+import { NormalizedState, EntityRelationships, LoadingStates, ErrorStates, OptimisticUpdate } from '../types';
+import { createInitialLoadingStates, createInitialErrorStates } from './loading';
 
 /**
  * Normalize an array of entities by their ID
@@ -38,10 +39,11 @@ export function createNormalizedState<T>(): NormalizedState<T> {
   return {
     byId: {},
     allIds: [],
-    loading: false,
-    error: null,
+    loading: createInitialLoadingStates(),
+    errors: createInitialErrorStates(),
     lastFetch: null,
     hasMore: true,
+    optimisticUpdates: {},
   };
 }
 
@@ -65,8 +67,14 @@ export function updateNormalizedState<T extends { id: string }>(
       byId: { ...state.byId, ...newById },
       allIds: [...state.allIds, ...uniqueNewIds],
       lastFetch: Date.now(),
-      loading: false,
-      error: null,
+      loading: {
+        ...state.loading,
+        fetching: false,
+      },
+      errors: {
+        ...state.errors,
+        fetch: null,
+      },
     };
   } else {
     // Replace all entities
@@ -75,8 +83,14 @@ export function updateNormalizedState<T extends { id: string }>(
       byId: newById,
       allIds: newAllIds,
       lastFetch: Date.now(),
-      loading: false,
-      error: null,
+      loading: {
+        ...state.loading,
+        fetching: false,
+      },
+      errors: {
+        ...state.errors,
+        fetch: null,
+      },
     };
   }
 }

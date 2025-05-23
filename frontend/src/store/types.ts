@@ -2,14 +2,43 @@
  * Types for normalized state management
  */
 
+// Loading states for different operations
+export interface LoadingStates {
+  fetching: boolean;
+  creating: boolean;
+  updating: Record<string, boolean>; // entityId -> isUpdating
+  deleting: Record<string, boolean>; // entityId -> isDeleting
+  bulkOperations: boolean;
+}
+
+// Error states for different operations
+export interface ErrorStates {
+  fetch: string | null;
+  create: string | null;
+  update: Record<string, string>; // entityId -> error message
+  delete: Record<string, string>; // entityId -> error message
+  bulkOperations: string | null;
+}
+
+// Optimistic update tracking
+export interface OptimisticUpdate<T> {
+  id: string;
+  type: 'create' | 'update' | 'delete';
+  originalData?: T;
+  optimisticData: T;
+  timestamp: number;
+  confirmed: boolean;
+}
+
 // Normalized store structure
 export interface NormalizedState<T> {
   byId: Record<string, T>;
   allIds: string[];
-  loading: boolean;
-  error: string | null;
+  loading: LoadingStates;
+  errors: ErrorStates;
   lastFetch: number | null;
   hasMore: boolean;
+  optimisticUpdates: Record<string, OptimisticUpdate<T>>;
 }
 
 // Cache configuration
@@ -43,10 +72,52 @@ export interface EntityRelationships {
   };
 }
 
-// Store operation result
+// Enhanced store operation result
 export interface StoreOperationResult<T> {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: StoreError;
   cached?: boolean;
+  optimistic?: boolean;
+  retryable?: boolean;
+}
+
+// Comprehensive error information
+export interface StoreError {
+  message: string;
+  code?: string;
+  statusCode?: number;
+  timestamp: number;
+  operation: string;
+  entityId?: string;
+  retryable: boolean;
+  context?: Record<string, any>;
+}
+
+// Operation context for tracking and debugging
+export interface OperationContext {
+  operationId: string;
+  entityType: string;
+  operation: 'fetch' | 'create' | 'update' | 'delete' | 'bulkUpdate' | 'bulkDelete';
+  entityId?: string;
+  startTime: number;
+  endTime?: number;
+  metadata?: Record<string, any>;
+}
+
+// Store health monitoring
+export interface StoreHealth {
+  isHealthy: boolean;
+  errorRate: number;
+  averageResponseTime: number;
+  lastError?: StoreError;
+  uptime: number;
+}
+
+// Retry configuration
+export interface RetryConfig {
+  maxAttempts: number;
+  backoffMs: number;
+  backoffMultiplier: number;
+  retryableErrors: string[];
 }
