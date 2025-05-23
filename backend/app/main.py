@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import schedule
 import time
 import threading
+import asyncio
 
 from app.config.settings import settings
 from app.config.supabase_client import get_supabase_client
@@ -17,9 +18,11 @@ from app.api.docs_generation import router as docs_router
 from app.api.auth_endpoints import router as auth_router
 from app.api.github_events import router as github_router
 from app.api.daily_report_endpoints import router as daily_reports_router
+from app.api.archive_endpoints import router as archive_router
 from app.api.v1.api import api_v1_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
+from app.services.archive_service import ArchiveService
 from app.middleware.api_key_auth import ApiKeyMiddleware
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_metrics import RequestMetricsMiddleware
@@ -76,6 +79,7 @@ app.include_router(auth_router)
 app.include_router(docs_router)
 app.include_router(github_router)
 app.include_router(daily_reports_router)
+app.include_router(archive_router, prefix="/api/v1")
 app.include_router(api_v1_router, prefix="/api/v1")
 
 # Register custom exception handlers
@@ -109,6 +113,12 @@ def startup_db_client():
 def schedule_tasks():
     schedule.every().day.at("01:00").do(daily_maintenance)
     
+    # Schedule data archiving at configured time (default 2 AM)
+    if settings.ENABLE_AUTO_ARCHIVE:
+        archive_time = f"{settings.ARCHIVE_SCHEDULE_HOUR:02d}:00"
+        schedule.every().day.at(archive_time).do(run_data_archiving)
+        logger.info(f"Scheduled automatic data archiving at {archive_time}")
+    
     # Run scheduled tasks in background
     while True:
         schedule.run_pending()
@@ -128,6 +138,27 @@ def daily_maintenance():
         logger.info("Daily maintenance completed")
     except Exception as e:
         logger.error(f"Error in daily maintenance: {e}")
+
+def run_data_archiving():
+    """Run automatic data archiving based on retention policies."""
+    try:
+        logger.info("Starting automatic data archiving")
+        supabase = get_supabase_client()
+        
+        archive_service = ArchiveService(supabase)
+        results = asyncio.run(archive_service.archive_old_data(dry_run=False))
+        
+        # Log archiving results
+        total_archived = 0
+        for table_name, result in results.items():
+            archived_count = result.get('records_archived', 0)
+            total_archived += archived_count
+            logger.info(f"Archived {archived_count} records from {table_name}")
+        
+        logger.info(f"Data archiving completed. Total records archived: {total_archived}")
+        
+    except Exception as e:
+        logger.error(f"Error in data archiving: {e}")
 
 # Start scheduler in background on startup
 @app.on_event("startup")

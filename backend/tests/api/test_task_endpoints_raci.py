@@ -5,7 +5,7 @@ from uuid import uuid4
 from datetime import datetime
 
 from app.main import app # Assuming your FastAPI app instance is here
-from app.models.task import Task, TaskStatus
+from app.models.task import Task, TaskStatus, TaskPriority
 from app.models.user import User, UserRole
 from app.services.raci_service import RaciService
 from app.core.exceptions import ResourceNotFoundError, BadRequestError
@@ -89,7 +89,7 @@ def test_create_task_success(
         "due_date": None,
         "task_type": "API_FEATURE",
         "metadata": {"source": "api_test"},
-        "priority": "Medium"
+        "priority": "MEDIUM"
     }
 
     # Mock RaciService response
@@ -97,7 +97,7 @@ def test_create_task_success(
         id=task_id, title=request_payload["title"], description=request_payload["description"], 
         status=TaskStatus.ASSIGNED, assignee_id=assignee_id, responsible_id=assignee_id, 
         accountable_id=assignee_id, creator_id=mock_current_user_data.id, 
-        created_at=now, updated_at=now, priority="Medium", task_type="API_FEATURE"
+        created_at=now, updated_at=now, priority=TaskPriority.MEDIUM, task_type="API_FEATURE"
     )
     mock_raci_service.register_raci_assignments.return_value = (mock_created_task, ["Test warning"])
 

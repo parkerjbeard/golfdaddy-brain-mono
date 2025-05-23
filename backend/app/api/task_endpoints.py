@@ -9,7 +9,7 @@ from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
 from app.services.raci_service import RaciService
 from app.services.notification_service import NotificationService
-from app.models.task import TaskStatus, Task
+from app.models.task import TaskStatus, Task, TaskPriority
 from app.auth.dependencies import get_current_user as get_current_user_profile
 from app.models.user import User, UserRole
 from app.core.exceptions import ResourceNotFoundError, PermissionDeniedError, BadRequestError, DatabaseError
@@ -32,7 +32,7 @@ class TaskCreate(BaseModel):
     due_date: Optional[datetime] = Field(None, description="Due date for the task")
     task_type: Optional[str] = Field(None, description="Type of the task, e.g., Feature, Bug")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Arbitrary metadata for the task")
-    priority: Optional[str] = Field(None, description="Priority of the task, e.g., High, Medium, Low")
+    priority: Optional[TaskPriority] = Field(None, description="Priority of the task")
 
 class TaskUpdate(BaseModel):
     description: Optional[str] = Field(None, description="Updated task description")

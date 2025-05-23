@@ -1,10 +1,24 @@
+-- Create enums for tasks
+DO $$ BEGIN
+    CREATE TYPE task_status AS ENUM ('assigned', 'in_progress', 'blocked', 'completed');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE task_priority AS ENUM ('URGENT', 'HIGH', 'MEDIUM', 'LOW');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
 -- Create tasks table for tracking work with RACI assignments
 CREATE TABLE IF NOT EXISTS public.tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   description TEXT,
-  status TEXT NOT NULL DEFAULT 'ASSIGNED',
-  priority TEXT DEFAULT 'MEDIUM',
+  status task_status NOT NULL DEFAULT 'assigned',
+  priority task_priority DEFAULT 'MEDIUM',
+  task_type TEXT,
   due_date TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -24,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   metadata JSONB DEFAULT '{}'::JSONB,
   blocked BOOLEAN DEFAULT FALSE,
   blocked_reason TEXT,
-  doc_references TEXT[]
+  doc_references UUID[] DEFAULT ARRAY[]::UUID[]
 );
 
 -- Add indices for common queries

@@ -202,9 +202,68 @@ RATE_LIMIT_EXCLUDE_PATHS=/health,/auth
 # JSON string of API keys and their properties
 API_KEYS={"api-key": {"owner": "name", "role": "role", "rate_limit": 100}}
 
-# Or path to a JSON file containing API keys (more secure)
-# API_KEYS_FILE=/path/to/api_keys.json
+# Or path to a JSON/YAML file containing API keys (more secure)
+# API_KEYS_FILE_PATH=/path/to/api_keys.json
+# API_KEYS_FILE_PATH=/path/to/api_keys.yaml
 ```
+
+### API Keys File Configuration
+
+For better security, API keys can be loaded from an external file instead of environment variables. This is especially useful for production environments where you want to keep sensitive keys separate from your main configuration.
+
+#### Setting up API Keys File
+
+1. Create an API keys file in JSON or YAML format:
+
+**JSON format (`api_keys.json`):**
+```json
+{
+  "admin-key": {
+    "owner": "admin-user",
+    "role": "admin",
+    "rate_limit": 1000,
+    "description": "Administrator API key"
+  },
+  "service-key": {
+    "owner": "external-service",
+    "role": "service", 
+    "rate_limit": 500,
+    "description": "Service-to-service integration key"
+  }
+}
+```
+
+**YAML format (`api_keys.yaml`):**
+```yaml
+admin-key:
+  owner: admin-user
+  role: admin
+  rate_limit: 1000
+  description: Administrator API key
+
+service-key:
+  owner: external-service
+  role: service
+  rate_limit: 500
+  description: Service-to-service integration key
+```
+
+2. Set the file path in your environment:
+```bash
+API_KEYS_FILE_PATH=/secure/path/to/api_keys.json
+```
+
+#### Key Merging Priority
+
+- **Environment variables override file values**: If both file and `API_KEYS` environment variable are provided, environment variable values take precedence
+- **File-only**: If only `API_KEYS_FILE_PATH` is set, keys are loaded from the file
+- **Environment-only**: If only `API_KEYS` is set, keys are parsed from the JSON string
+
+#### Template Files
+
+Use the provided template files as starting points:
+- `apikeys.template.json` - JSON format template
+- `apikeys.template.yaml` - YAML format template
 ## User Profile Email Source
 
 The authoritative record for a user's **email** lives in `auth.users`. A copy is stored in `public.users` for convenience when joining profile data. Whenever an email is changed via Supabase Auth, a trigger updates the value in `public.users` so the two tables remain consistent.
