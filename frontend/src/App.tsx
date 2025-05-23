@@ -1,3 +1,4 @@
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +8,8 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { StoreProvider } from "@/store";
 import { Layout } from "@/components/layout/Layout";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { GlobalErrorBoundary } from "@/components/ErrorBoundary";
+import { initializeApi } from "@/services/api";
 import AuthenticatedLogin from "@/components/auth/AuthenticatedLogin";
 import CompanyDashboard from "./pages/CompanyDashboard";
 import DepartmentDashboard from "./pages/DepartmentDashboard";
@@ -21,14 +24,21 @@ import { UserRole } from "@/types/user";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <StoreProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <Router>
+const App = () => {
+  // Initialize API on app startup
+  React.useEffect(() => {
+    initializeApi();
+  }, []);
+
+  return (
+    <GlobalErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <StoreProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <Router>
           <div>
             <main className="p-4">
               <Routes>
@@ -126,11 +136,13 @@ const App = () => (
               </Routes>
             </main>
           </div>
-          </Router>
-        </TooltipProvider>
-      </StoreProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+              </Router>
+            </TooltipProvider>
+          </StoreProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </GlobalErrorBoundary>
+  );
+};
 
 export default App;
