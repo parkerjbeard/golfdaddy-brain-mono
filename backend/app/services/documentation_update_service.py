@@ -16,6 +16,18 @@ from app.core.exceptions import (
     AIIntegrationError,
     AppExceptionBase
 )
+from app.core.circuit_breaker import (
+    circuit_breaker,
+    CircuitBreakerOpenError,
+    create_github_circuit_breaker,
+    create_openai_circuit_breaker
+)
+from app.core.rate_limiter import (
+    create_github_rate_limiter,
+    create_openai_rate_limiter,
+    RateLimitExceededError,
+    rate_limiter_manager
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +53,12 @@ class DocumentationUpdateService:
             raise ConfigurationError(f"Failed to initialize clients: {e}")
 
         self.openai_model = settings.DOCUMENTATION_OPENAI_MODEL
+        
+        # Initialize circuit breakers and rate limiters
+        self.github_circuit_breaker = create_github_circuit_breaker()
+        self.openai_circuit_breaker = create_openai_circuit_breaker()
+        self.github_rate_limiter = create_github_rate_limiter()
+        self.openai_rate_limiter = create_openai_rate_limiter()
     
     def _log_separator(self, message="", char="=", length=80):
         """Print a separator line with optional message for visual log grouping."""
@@ -57,7 +75,7 @@ class DocumentationUpdateService:
         right = char * (length - side_length - len(message) - 2)
         logger.info(f"{left} {message} {right}")
     
-    def get_repository_content(self, repo_name: str, path: str = "") -> List[Dict[str, Any]]:
+    async def get_repository_content(self, repo_name: str, path: str = "") -> List[Dict[str, Any]]:
         """
         Recursively get all markdown content from a repository.
         
@@ -71,8 +89,10 @@ class DocumentationUpdateService:
         try:
             logger.info(f"Fetching documentation files from {repo_name}/{path}")
             
-            repo = self.github_client.get_repo(repo_name)
-            contents = repo.get_contents(path)
+            # Apply rate limiting and circuit breaker protection
+            await self.github_rate_limiter.acquire(1)
+            repo = await self.github_circuit_breaker.call(self.github_client.get_repo, repo_name)
+            contents = await self.github_circuit_breaker.call(repo.get_contents, path)
             
             markdown_files = []
             
@@ -80,8 +100,11 @@ class DocumentationUpdateService:
                 file_content = contents.pop(0)
                 
                 if file_content.type == "dir":
-                    # Get contents of the directory
-                    dir_contents = repo.get_contents(file_content.path)
+                    # Get contents of the directory with rate limiting
+                    await self.github_rate_limiter.acquire(1)
+                    dir_contents = await self.github_circuit_breaker.call(
+                        repo.get_contents, file_content.path
+                    )
                     contents.extend(dir_contents)
                 elif file_content.name.endswith((".md", ".markdown")) and not file_content.name.startswith("."):
                     # Only include markdown files and exclude hidden files
@@ -100,14 +123,21 @@ class DocumentationUpdateService:
             logger.info(f"Found {len(markdown_files)} markdown files in repository")
             return markdown_files
         
-        except GithubException as e:
-            logger.error(f"GitHub API error fetching repository content for {repo_name}/{path}: {e.status} {e.data}", exc_info=True)
-            raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to fetch content from {repo_name}: {e.data.get('message', str(e))}")
+        except (GithubException, CircuitBreakerOpenError, RateLimitExceededError) as e:
+            if isinstance(e, CircuitBreakerOpenError):
+                logger.error(f"GitHub circuit breaker is open for {repo_name}: {e}")
+                raise ExternalServiceError(service_name="GitHub", original_message=f"GitHub service temporarily unavailable: {e}")
+            elif isinstance(e, RateLimitExceededError):
+                logger.error(f"GitHub rate limit exceeded for {repo_name}: {e}")
+                raise ExternalServiceError(service_name="GitHub", original_message=f"GitHub rate limit exceeded: {e}")
+            else:
+                logger.error(f"GitHub API error fetching repository content for {repo_name}/{path}: {e.status if hasattr(e, 'status') else 'N/A'} {e.data if hasattr(e, 'data') else str(e)}", exc_info=True)
+                raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to fetch content from {repo_name}: {e.data.get('message', str(e)) if hasattr(e, 'data') else str(e)}")
         except Exception as e:
             logger.error(f"Unexpected error fetching repository content for {repo_name}/{path}: {e}", exc_info=True)
             raise AppExceptionBase(f"Unexpected error fetching repository content from {repo_name}: {str(e)}")
     
-    def analyze_documentation(self, 
+    async def analyze_documentation(self, 
                              docs_repo_name: str, 
                              commit_analysis_result: Dict[str, Any],
                              source_repo_name: str) -> Dict[str, Any]:
@@ -128,7 +158,7 @@ class DocumentationUpdateService:
         
         try:
             # Fetch all markdown documentation files
-            docs_files = self.get_repository_content(docs_repo_name)
+            docs_files = await self.get_repository_content(docs_repo_name)
             
             if not docs_files:
                 logger.warning(f"No documentation files found in {docs_repo_name}. Skipping analysis.")
@@ -150,8 +180,10 @@ class DocumentationUpdateService:
             # Prepare prompt for OpenAI
             prompt = self._create_analysis_prompt(all_docs_content, doc_files_list, commit_analysis_result, source_repo_name)
             
-            # Call OpenAI to analyze the documentation
-            response = self.openai_client.chat.completions.create(
+            # Call OpenAI to analyze the documentation with protection
+            await self.openai_rate_limiter.acquire(1)
+            response = await self.openai_circuit_breaker.call(
+                self.openai_client.chat.completions.create,
                 model=self.openai_model,
                 messages=[
                     {"role": "system", "content": "You are an expert technical documentation specialist with a deep understanding of software development. Your task is to analyze existing documentation against recent code changes and suggest necessary updates."},
@@ -184,9 +216,16 @@ class DocumentationUpdateService:
             self._log_separator(f"END DOCUMENTATION ANALYSIS", "=")
             return analysis_result
             
-        except OpenAIAPIError as e:
-            logger.error(f"OpenAI API error during documentation analysis: {e.status_code} {e.response}", exc_info=True)
-            raise AIIntegrationError(f"OpenAI service error: {e.message or str(e)}")
+        except (OpenAIAPIError, CircuitBreakerOpenError, RateLimitExceededError) as e:
+            if isinstance(e, CircuitBreakerOpenError):
+                logger.error(f"OpenAI circuit breaker is open: {e}")
+                raise AIIntegrationError(f"OpenAI service temporarily unavailable: {e}")
+            elif isinstance(e, RateLimitExceededError):
+                logger.error(f"OpenAI rate limit exceeded: {e}")
+                raise AIIntegrationError(f"OpenAI rate limit exceeded: {e}")
+            else:
+                logger.error(f"OpenAI API error during documentation analysis: {e.status_code if hasattr(e, 'status_code') else 'N/A'} {e.response if hasattr(e, 'response') else str(e)}", exc_info=True)
+                raise AIIntegrationError(f"OpenAI service error: {e.message if hasattr(e, 'message') else str(e)}")
         except (ExternalServiceError, AppExceptionBase) as e:
             raise e
         except Exception as e:
@@ -276,7 +315,7 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
 
         return prompt
     
-    def create_pull_request(self, 
+    async def create_pull_request(self, 
                           docs_repo_name: str, 
                           proposed_changes: List[Dict[str, Any]],
                           commit_analysis: Dict[str, Any],
@@ -301,7 +340,9 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
             }
         
         try:
-            repo = self.github_client.get_repo(docs_repo_name)
+            # Apply rate limiting and circuit breaker protection for GitHub operations
+            await self.github_rate_limiter.acquire(1)
+            repo = await self.github_circuit_breaker.call(self.github_client.get_repo, docs_repo_name)
             default_branch = repo.default_branch
             
             # Create a unique branch name if not provided
@@ -311,11 +352,13 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 branch_name = f"docs-update-{commit_hash}-{timestamp}"
             
             # Get the reference to the default branch
-            ref = repo.get_git_ref(f"heads/{default_branch}")
+            await self.github_rate_limiter.acquire(1)
+            ref = await self.github_circuit_breaker.call(repo.get_git_ref, f"heads/{default_branch}")
             sha = ref.object.sha
             
             # Create a new branch
-            repo.create_git_ref(f"refs/heads/{branch_name}", sha)
+            await self.github_rate_limiter.acquire(1)
+            await self.github_circuit_breaker.call(repo.create_git_ref, f"refs/heads/{branch_name}", sha)
             logger.info(f"Created branch {branch_name} in {docs_repo_name}")
             
             # Make changes to each file
@@ -323,8 +366,11 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 file_path = change["file_path"]
                 
                 try:
-                    # Get the current file content
-                    file_content = repo.get_contents(file_path, ref=branch_name)
+                    # Get the current file content with protection
+                    await self.github_rate_limiter.acquire(1)
+                    file_content = await self.github_circuit_breaker.call(
+                        repo.get_contents, file_path, ref=branch_name
+                    )
                     current_content = file_content.decoded_content.decode("utf-8")
                     
                     # Create prompt for generating updated content
@@ -342,8 +388,10 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                     
                     Return only the complete updated markdown content. Do not include any explanations or markdown code blocks."""
                     
-                    # Generate updated content
-                    updated_content_response = self.openai_client.chat.completions.create(
+                    # Generate updated content with protection
+                    await self.openai_rate_limiter.acquire(1)
+                    updated_content_response = await self.openai_circuit_breaker.call(
+                        self.openai_client.chat.completions.create,
                         model=self.openai_model,
                         messages=[
                             {"role": "system", "content": "You are a technical documentation specialist. Your task is to update markdown documentation to accurately reflect code changes."},
@@ -354,9 +402,11 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                     
                     updated_content = updated_content_response.choices[0].message.content.strip()
                     
-                    # Commit the changes
+                    # Commit the changes with protection
                     commit_message = f"Update {file_path}\n\n{change['change_summary']}"
-                    repo.update_file(
+                    await self.github_rate_limiter.acquire(1)
+                    await self.github_circuit_breaker.call(
+                        repo.update_file,
                         path=file_path,
                         message=commit_message,
                         content=updated_content,
@@ -393,8 +443,10 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
             
             pr_body += "\nThis PR was automatically generated based on code changes analysis."
             
-            # Create the PR
-            pr = repo.create_pull(
+            # Create the PR with protection
+            await self.github_rate_limiter.acquire(1)
+            pr = await self.github_circuit_breaker.call(
+                repo.create_pull,
                 title=pr_title,
                 body=pr_body,
                 head=branch_name,
@@ -410,17 +462,26 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 "branch_name": branch_name
             }
             
-        except GithubException as e:
-            logger.error(f"GitHub API error creating pull request for {docs_repo_name}: {e.status} {e.data}", exc_info=True)
-            raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to create PR for {docs_repo_name}: {e.data.get('message', str(e))}")
-        except OpenAIAPIError as e:
-            logger.error(f"OpenAI API error during PR creation process for {docs_repo_name}: {e.status_code} {e.response}", exc_info=True)
-            raise AIIntegrationError(f"OpenAI service error during PR creation: {e.message or str(e)}")
+        except (GithubException, OpenAIAPIError, CircuitBreakerOpenError, RateLimitExceededError) as e:
+            if isinstance(e, CircuitBreakerOpenError):
+                service_name = "GitHub" if "github" in e.circuit_name.lower() else "OpenAI"
+                logger.error(f"{service_name} circuit breaker is open during PR creation: {e}")
+                raise ExternalServiceError(service_name=service_name, original_message=f"{service_name} service temporarily unavailable: {e}")
+            elif isinstance(e, RateLimitExceededError):
+                service_name = "GitHub" if "github" in e.service_name.lower() else "OpenAI"
+                logger.error(f"{service_name} rate limit exceeded during PR creation: {e}")
+                raise ExternalServiceError(service_name=service_name, original_message=f"{service_name} rate limit exceeded: {e}")
+            elif isinstance(e, GithubException):
+                logger.error(f"GitHub API error creating pull request for {docs_repo_name}: {e.status} {e.data}", exc_info=True)
+                raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to create PR for {docs_repo_name}: {e.data.get('message', str(e))}")
+            else:  # OpenAIAPIError
+                logger.error(f"OpenAI API error during PR creation process for {docs_repo_name}: {e.status_code} {e.response}", exc_info=True)
+                raise AIIntegrationError(f"OpenAI service error during PR creation: {e.message or str(e)}")
         except Exception as e:
             logger.error(f"Error creating pull request for {docs_repo_name}: {e}", exc_info=True)
             raise AppExceptionBase(f"Unexpected error creating pull request for {docs_repo_name}: {str(e)}")
 
-    def save_to_git_repository(self, repo_name: str, file_path: str, content: str, 
+    async def save_to_git_repository(self, repo_name: str, file_path: str, content: str, 
                              title: str, commit_message: Optional[str] = None) -> Dict[str, Any]:
         """
         Save documentation directly to a Git repository.
@@ -443,14 +504,18 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
             if not file_path.endswith(('.md', '.markdown')):
                 file_path = f"{file_path}.md"
             
-            # Get repository
-            repo = self.github_client.get_repo(repo_name)
+            # Get repository with protection
+            await self.github_rate_limiter.acquire(1)
+            repo = await self.github_circuit_breaker.call(self.github_client.get_repo, repo_name)
             default_branch = repo.default_branch
             
-            # Check if file exists
+            # Check if file exists with protection
             file_exists = True
             try:
-                file_content = repo.get_contents(file_path, ref=default_branch)
+                await self.github_rate_limiter.acquire(1)
+                file_content = await self.github_circuit_breaker.call(
+                    repo.get_contents, file_path, ref=default_branch
+                )
                 file_sha = file_content.sha
             except Exception:
                 # File doesn't exist
@@ -462,10 +527,12 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
             if not commit_message:
                 commit_message = f"{'Update' if file_exists else 'Add'} documentation: {title}"
             
-            # Commit the file
+            # Commit the file with protection
             if file_exists:
                 # Update existing file
-                result = repo.update_file(
+                await self.github_rate_limiter.acquire(1)
+                result = await self.github_circuit_breaker.call(
+                    repo.update_file,
                     path=file_path,
                     message=commit_message,
                     content=content,
@@ -476,7 +543,9 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 logger.info(f"Updated file: {file_url}")
             else:
                 # Create new file
-                result = repo.create_file(
+                await self.github_rate_limiter.acquire(1)
+                result = await self.github_circuit_breaker.call(
+                    repo.create_file,
                     path=file_path,
                     message=commit_message,
                     content=content,
@@ -493,9 +562,16 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 "commit_sha": result["commit"].sha if isinstance(result, dict) and "commit" in result else None
             }
         
-        except GithubException as e:
-            logger.error(f"GitHub API error saving to repository {repo_name}/{file_path}: {e.status} {e.data}", exc_info=True)
-            raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to save to Git repo {repo_name}: {e.data.get('message', str(e))}")
+        except (GithubException, CircuitBreakerOpenError, RateLimitExceededError) as e:
+            if isinstance(e, CircuitBreakerOpenError):
+                logger.error(f"GitHub circuit breaker is open while saving to {repo_name}: {e}")
+                raise ExternalServiceError(service_name="GitHub", original_message=f"GitHub service temporarily unavailable: {e}")
+            elif isinstance(e, RateLimitExceededError):
+                logger.error(f"GitHub rate limit exceeded while saving to {repo_name}: {e}")
+                raise ExternalServiceError(service_name="GitHub", original_message=f"GitHub rate limit exceeded: {e}")
+            else:
+                logger.error(f"GitHub API error saving to repository {repo_name}/{file_path}: {e.status} {e.data}", exc_info=True)
+                raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to save to Git repo {repo_name}: {e.data.get('message', str(e))}")
         except Exception as e:
             logger.error(f"Error saving to Git repository {repo_name}/{file_path}: {e}", exc_info=True)
             raise AppExceptionBase(f"Unexpected error saving to Git repository {repo_name}: {str(e)}") 

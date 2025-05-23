@@ -19,6 +19,7 @@ from app.api.auth_endpoints import router as auth_router
 from app.api.github_events import router as github_router
 from app.api.daily_report_endpoints import router as daily_reports_router
 from app.api.archive_endpoints import router as archive_router
+from app.api.health import router as health_router
 from app.api.v1.api import api_v1_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
@@ -80,6 +81,7 @@ app.include_router(docs_router)
 app.include_router(github_router)
 app.include_router(daily_reports_router)
 app.include_router(archive_router, prefix="/api/v1")
+app.include_router(health_router)
 app.include_router(api_v1_router, prefix="/api/v1")
 
 # Register custom exception handlers
@@ -94,9 +96,9 @@ async def health_check():
         "version": "1.0.0",
     }
 
-# Create database tables on startup
+# Initialize services on startup
 @app.on_event("startup")
-def startup_db_client():
+def startup_services():
     try:
         # Initialize the Supabase client
         supabase_client = get_supabase_client()
@@ -104,6 +106,21 @@ def startup_db_client():
         
         # Database schema is managed via Supabase migrations in supabase/schemas
         logger.info("Database tables are managed declaratively via supabase/schemas")
+        
+        # Initialize circuit breakers and rate limiters for documentation services
+        from app.core.circuit_breaker import create_github_circuit_breaker, create_openai_circuit_breaker
+        from app.core.rate_limiter import create_github_rate_limiter, create_openai_rate_limiter
+        
+        github_breaker = create_github_circuit_breaker()
+        openai_breaker = create_openai_circuit_breaker()
+        github_limiter = create_github_rate_limiter()
+        openai_limiter = create_openai_rate_limiter()
+        
+        logger.info("Circuit breakers and rate limiters initialized")
+        logger.info(f"GitHub circuit breaker: {github_breaker.config.name} (threshold: {github_breaker.config.failure_threshold})")
+        logger.info(f"OpenAI circuit breaker: {openai_breaker.config.name} (threshold: {openai_breaker.config.failure_threshold})")
+        logger.info(f"GitHub rate limiter: {github_limiter.config.requests_per_hour} requests/hour")
+        logger.info(f"OpenAI rate limiter: {openai_limiter.config.requests_per_hour} requests/hour")
         
     except Exception as e:
         logger.error(f"Error during startup: {e}")
