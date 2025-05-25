@@ -18,7 +18,7 @@ import {
   denormalizeEntities,
   populateRelationships,
 } from './utils/normalization';
-import authApiClient from '@/services/authApiClient';
+import { tasksApi } from '@/services/api';
 import { useUserStore } from './userStore';
 
 // Cache configuration for tasks
@@ -175,8 +175,8 @@ export const useTaskStore = create<TaskStoreState>()(
           if (status) queryParams.status = status;
           if (assignee) queryParams.assignee_id = assignee;
 
-          const response = await authApiClient.get<Task[]>('/tasks', queryParams);
-          const tasks = response.data;
+          const response = await tasksApi.getTasks(queryParams);
+          const tasks = response.tasks;
 
           // Update task relationships
           const tasksByUser: Record<string, string[]> = {};
@@ -223,8 +223,7 @@ export const useTaskStore = create<TaskStoreState>()(
         }
 
         try {
-          const response = await authApiClient.get<Task>(`/tasks/${taskId}`);
-          const task = response.data;
+          const task = await tasksApi.getTask(taskId);
 
           set(state => ({
             tasks: updateEntity(state.tasks, task),
@@ -240,8 +239,8 @@ export const useTaskStore = create<TaskStoreState>()(
       // Create new task
       createTask: async (taskData: CreateTaskPayload) => {
         try {
-          const response = await authApiClient.post<CreateTaskResponse>('/tasks', taskData);
-          const { task, warnings } = response.data;
+          const response = await tasksApi.createTask(taskData);
+          const { task, warnings } = response;
 
           set(state => ({
             tasks: updateEntity(state.tasks, task),
@@ -273,8 +272,7 @@ export const useTaskStore = create<TaskStoreState>()(
         }));
 
         try {
-          const response = await authApiClient.put<Task>(`/tasks/${taskId}`, updates);
-          const updatedTask = response.data;
+          const updatedTask = await tasksApi.updateTask(taskId, updates);
 
           set(state => ({
             tasks: updateEntity(state.tasks, updatedTask),
@@ -312,7 +310,7 @@ export const useTaskStore = create<TaskStoreState>()(
         }));
 
         try {
-          await authApiClient.delete(`/tasks/${taskId}`);
+          await tasksApi.deleteTask(taskId);
           get().refreshTaskRelationships();
           return { success: true, data: true };
         } catch (error) {
@@ -339,11 +337,7 @@ export const useTaskStore = create<TaskStoreState>()(
       // Bulk operations
       bulkUpdateTasks: async (taskIds: string[], updates: Partial<Task>) => {
         try {
-          const response = await authApiClient.put<Task[]>('/tasks/bulk', {
-            task_ids: taskIds,
-            updates,
-          });
-          const updatedTasks = response.data;
+          const updatedTasks = await tasksApi.bulkUpdateTasks(taskIds, updates);
 
           set(state => {
             let newTasks = { ...state.tasks };
@@ -375,7 +369,7 @@ export const useTaskStore = create<TaskStoreState>()(
         });
 
         try {
-          await authApiClient.delete('/tasks/bulk', { task_ids: taskIds });
+          await tasksApi.bulkDeleteTasks(taskIds);
           get().refreshTaskRelationships();
           return { success: true, data: true };
         } catch (error) {

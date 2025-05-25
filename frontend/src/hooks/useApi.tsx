@@ -23,7 +23,7 @@ import type {
 
 // ========== AUTHENTICATION HOOKS ==========
 
-export const useAuth = () => {
+export const useApiAuth = () => {
   const [user, setUser] = React.useState<User | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -522,7 +522,7 @@ export const useApiSearch = () => {
 // ========== COMBINED API HOOK ==========
 
 export const useApi = () => {
-  const auth = useAuth();
+  const auth = useApiAuth();
   const tasks = useApiTasks();
   const users = useApiUsers();
   const reports = useApiReports();

@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, ClipboardList, Target, Award, MessageSquare, TrendingUp, TrendingDown, Calendar, UserCog } from "lucide-react";
 import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
 import { RaciTaskDashboard } from '@/components/admin/RaciTaskDashboard';
+import { UserMappingManager } from '@/components/admin/UserMappingManager';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Chart } from '@/components/ui/chart';
 import { UserRole } from '@/types/user';
@@ -370,6 +371,8 @@ const AdminDashboard = () => {
         {/* Admin Tab */}
         <TabsContent value="admin">
           <div className="grid grid-cols-1 gap-6">
+            <UserMappingManager />
+            
             <Card className="p-6">
               <h2 className="text-xl font-medium mb-4">Employee Management</h2>
               <p className="text-muted-foreground mb-6">

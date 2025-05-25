@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Test</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Authentication Test Page</h1>
+    <div id="status">Loading...</div>
+    <div id="error" style="color: red;"></div>
+    
+    <div id="login" style="display: none;">
+        <h2>Login</h2>
+        <input type="email" id="email" placeholder="Email" value="testuser1@example.com">
+        <input type="password" id="password" placeholder="Password" value="testpassword123">
+        <button onclick="login()">Login</button>
+    </div>
+    
+    <div id="dashboard" style="display: none;">
+        <h2>Dashboard</h2>
+        <p>User: <span id="userEmail"></span></p>
+        <button onclick="logout()">Logout</button>
+        <button onclick="testBackendAPI()">Test Backend API</button>
+        <div id="apiResult"></div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://xfnxafbsmqowzvuwmhvi.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhmbnhhZmJzbXFvd3p2dXdtaHZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3NTM4OTQsImV4cCI6MjA2MDMyOTg5NH0.r9VkBRgQ9jW5JtWS-dEapIkEq0CF1Qjx59h6wpwmBHs';
+        const API_BASE_URL = 'http://localhost:8000/api/v1';
+        
+        // Fix: Use window.supabase instead of supabase
+        const { createClient } = window.supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        async function checkAuth() {
+            const { data: { session }, error } = await supabaseClient.auth.getSession();
+            console.log('Session check:', session, error);
+            
+            if (session) {
+                document.getElementById('status').textContent = 'Authenticated';
+                document.getElementById('login').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                document.getElementById('userEmail').textContent = session.user.email;
+            } else {
+                document.getElementById('status').textContent = 'Not authenticated';
+                document.getElementById('login').style.display = 'block';
+                document.getElementById('dashboard').style.display = 'none';
+            }
+        }
+        
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            document.getElementById('error').textContent = '';
+            document.getElementById('status').textContent = 'Logging in...';
+            
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+            
+            if (error) {
+                document.getElementById('error').textContent = 'Login error: ' + error.message;
+                document.getElementById('status').textContent = 'Login failed';
+            } else {
+                document.getElementById('status').textContent = 'Login successful!';
+                checkAuth();
+            }
+        }
+        
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            checkAuth();
+        }
+        
+        async function testBackendAPI() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) {
+                document.getElementById('apiResult').textContent = 'No session';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/users/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('apiResult').textContent = 'API Response: ' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('apiResult').textContent = 'API Error: ' + error.message;
+            }
+        }
+        
+        // Check auth on load
+        checkAuth();
+        
+        // Listen for auth changes
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            console.log('Auth state changed:', event, session);
+            checkAuth();
+        });
+    </script>
+</body>
+</html>

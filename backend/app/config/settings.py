@@ -23,19 +23,29 @@ class Settings(BaseSettings):
     # General App Settings
     TESTING_MODE: bool = Field(False, env="TESTING_MODE") # Added for testing purposes
     REANALYZE_EXISTING_COMMITS: bool = Field(False, env="REANALYZE_EXISTING_COMMITS") # Controls whether to reprocess commits already in the database
+    FRONTEND_URL: str = Field("http://localhost:8080", env="FRONTEND_URL")  # Frontend URL for links in notifications
 
     # Documentation Config
     DOCS_REPOSITORY: Optional[str] = Field(None, env="DOCS_REPOSITORY")  # Format: owner/repo
     ENABLE_DOCS_UPDATES: bool = Field(False, env="ENABLE_DOCS_UPDATES")  # Whether to enable documentation scanning
+    DOCUMENTATION_OPENAI_MODEL: Optional[str] = Field("gpt-4-turbo-preview", env="DOCUMENTATION_OPENAI_MODEL")  # Model for doc analysis
 
-    # Slack Config (Keep ONLY if needed for non-auth integrations)
-    SLACK_TOKEN: Optional[str] = Field(None, env="SLACK_TOKEN")
+    # Slack Config
+    SLACK_BOT_TOKEN: Optional[str] = Field(None, env="SLACK_BOT_TOKEN")  # Bot user OAuth token
     SLACK_SIGNING_SECRET: Optional[str] = Field(None, env="SLACK_SIGNING_SECRET")
+    SLACK_DEFAULT_CHANNEL: Optional[str] = Field(None, env="SLACK_DEFAULT_CHANNEL")  # Default channel for notifications
+    
+    # Slack Circuit Breaker Settings
+    SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = Field(5, env="SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD")
+    SLACK_CIRCUIT_BREAKER_TIMEOUT: int = Field(60, env="SLACK_CIRCUIT_BREAKER_TIMEOUT")
 
     # Integration Keys
     GITHUB_TOKEN: Optional[str] = Field(None, env="GITHUB_TOKEN")
     AI_SERVICE_KEY: Optional[str] = Field(None, env="AI_SERVICE_KEY")
     MAKE_INTEGRATION_API_KEY: Optional[str] = Field(None, env="MAKE_INTEGRATION_API_KEY")
+    
+    # GitHub Webhook Configuration
+    GITHUB_WEBHOOK_SECRET: Optional[str] = Field(None, env="GITHUB_WEBHOOK_SECRET")
 
     # Make.com Webhook URLs
     MAKE_WEBHOOK_TASK_CREATED: Optional[str] = Field(None, env="MAKE_WEBHOOK_TASK_CREATED")
@@ -141,8 +151,12 @@ class Settings(BaseSettings):
         return self.SUPABASE_ANON_KEY
     
     @property
-    def slack_token(self):
-        return self.SLACK_TOKEN
+    def slack_bot_token(self):
+        return self.SLACK_BOT_TOKEN
+    
+    @property
+    def slack_default_channel(self):
+        return self.SLACK_DEFAULT_CHANNEL
     
     @property
     def slack_signing_secret(self):
@@ -176,6 +190,10 @@ class Settings(BaseSettings):
     def make_webhook_mastery_reminder(self):
         return self.MAKE_WEBHOOK_MASTERY_REMINDER
 
+    @property
+    def github_webhook_secret(self):
+        return self.GITHUB_WEBHOOK_SECRET
+    
     @property
     def openai_api_key(self):
         return self.OPENAI_API_KEY
@@ -271,6 +289,22 @@ class Settings(BaseSettings):
     @property
     def archive_schedule_hour(self):
         return self.ARCHIVE_SCHEDULE_HOUR
+    
+    @property
+    def slack_circuit_breaker_failure_threshold(self):
+        return self.SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD
+    
+    @property
+    def slack_circuit_breaker_timeout(self):
+        return self.SLACK_CIRCUIT_BREAKER_TIMEOUT
+    
+    @property
+    def documentation_openai_model(self):
+        return self.DOCUMENTATION_OPENAI_MODEL
+    
+    @property
+    def frontend_url(self):
+        return self.FRONTEND_URL
 
     class Config:
         env_file = '.env'
@@ -279,3 +313,7 @@ class Settings(BaseSettings):
 
 # Create a single instance for easy import
 settings = Settings()
+
+# Function to get settings instance
+def get_settings() -> Settings:
+    return settings

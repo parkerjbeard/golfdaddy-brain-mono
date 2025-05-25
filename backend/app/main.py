@@ -21,6 +21,7 @@ from app.api.daily_report_endpoints import router as daily_reports_router
 from app.api.archive_endpoints import router as archive_router
 from app.api.health import router as health_router
 from app.api.v1.api import api_v1_router
+from app.api.webhooks import router as webhooks_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
 from app.services.archive_service import ArchiveService
@@ -83,6 +84,7 @@ app.include_router(daily_reports_router)
 app.include_router(archive_router, prefix="/api/v1")
 app.include_router(health_router)
 app.include_router(api_v1_router, prefix="/api/v1")
+app.include_router(webhooks_router)
 
 # Register custom exception handlers
 add_exception_handlers(app)

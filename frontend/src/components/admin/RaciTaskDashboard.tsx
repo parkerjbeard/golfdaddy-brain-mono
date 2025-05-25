@@ -13,6 +13,8 @@ import { TaskStatus } from '@/types/entities';
 interface User {
   id: string;
   name: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
 }
 
@@ -165,9 +167,9 @@ export const RaciTaskDashboard: React.FC = () => {
               {filteredTasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
-                  <TableCell>{task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'N/A'}</TableCell>
-                  <TableCell>{task.responsible ? `${task.responsible.first_name} ${task.responsible.last_name}` : 'N/A'}</TableCell>
-                  <TableCell>{task.accountable ? `${task.accountable.first_name} ${task.accountable.last_name}` : 'N/A'}</TableCell>
+                  <TableCell>{task.assignee ? `${task.assignee.name}` : 'N/A'}</TableCell>
+                  <TableCell>{task.responsible ? `${task.responsible.name}` : 'N/A'}</TableCell>
+                  <TableCell>{task.accountable ? `${task.accountable.name}` : 'N/A'}</TableCell>
                   <TableCell>{formatDate(task.due_date)}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(task.status)}>

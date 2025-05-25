@@ -46,6 +46,14 @@ apiClient.addResponseInterceptor(async (response) => {
 
 export const initializeApi = async () => {
   try {
+    // Check if we're in bypass mode
+    const bypassAuth = import.meta.env.VITE_BYPASS_AUTH === 'true';
+    
+    if (bypassAuth) {
+      console.log('🔓 API initialized in bypass mode - skipping authentication check');
+      return;
+    }
+    
     // Check if we have a valid token
     const token = await tokenManager.getToken();
     

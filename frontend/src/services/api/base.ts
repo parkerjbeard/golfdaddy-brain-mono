@@ -3,7 +3,7 @@
  */
 
 import { ApiResponse, ApiError } from '@/types/api';
-import { createEnhancedError, ErrorCategory, ErrorSeverity } from '@/store/utils/errorHandling';
+import { createEnhancedError, ErrorCategory, ErrorSeverity, EnhancedStoreError } from '@/store/utils/errorHandling';
 
 export interface ApiClientConfig {
   baseURL: string;
@@ -387,7 +387,7 @@ export class ApiClient {
     return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  private enhanceError(error: any, method: string, url: string, requestId: string): Error {
+  private enhanceError(error: any, method: string, url: string, requestId: string): EnhancedStoreError {
     if (error instanceof ApiResponseError) {
       return createEnhancedError(error, `${method} ${url}`, undefined, {
         requestId,

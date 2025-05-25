@@ -9,7 +9,7 @@ project/
 ├── app/
 │   ├── config/           # Configuration settings and database setup
 │   ├── middleware/       # API Gateway and security middleware
-│   ├── auth/             # Authentication with Slack
+│   ├── auth/             # Authentication and authorization
 │   ├── models/           # SQLAlchemy models
 │   ├── repositories/     # Database operations
 │   ├── services/         # Business logic
@@ -30,7 +30,6 @@ project/
 - **AI-Powered Analytics**: Analyze GitHub commits and estimate points/time
 - **Documentation Generation**: Transform minimal input into robust documentation
 - **Slack Integration**: Notifications, task creation, and daily reminders
-- **Slack Authentication**: Log in with your Slack account
 - **Personal Mastery Tracking**: Manager-specific tasks with reminders
 - **API Gateway & Security**: API key authentication, rate limiting, and request metrics
 

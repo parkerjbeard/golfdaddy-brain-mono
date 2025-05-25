@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Console Debug</title>
+</head>
+<body>
+    <h1>Console Debug Helper</h1>
+    <p>This page helps capture console errors when developer tools won't open.</p>
+    
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Open this page in one tab</li>
+        <li>Open your app (http://localhost:8080) in another tab</li>
+        <li>Come back here to see any errors</li>
+    </ol>
+    
+    <h2>Console Output:</h2>
+    <div id="console" style="background: #f0f0f0; padding: 10px; font-family: monospace; white-space: pre-wrap;"></div>
+    
+    <button onclick="clearConsole()">Clear</button>
+    <button onclick="openApp()">Open App in New Tab</button>
+    
+    <script>
+        const consoleDiv = document.getElementById('console');
+        
+        // Store original console methods
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        function addToConsole(type, ...args) {
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            
+            consoleDiv.innerHTML += `[${timestamp}] ${type}: ${message}\n`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        // Override console methods
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole('LOG', ...args);
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole('ERROR', ...args);
+        };
+        
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addToConsole('WARN', ...args);
+        };
+        
+        // Capture unhandled errors
+        window.addEventListener('error', (event) => {
+            addToConsole('UNCAUGHT ERROR', event.message, 'at', event.filename, ':', event.lineno);
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            addToConsole('UNHANDLED PROMISE REJECTION', event.reason);
+        });
+        
+        function clearConsole() {
+            consoleDiv.innerHTML = '';
+        }
+        
+        function openApp() {
+            window.open('http://localhost:8080', '_blank');
+        }
+        
+        console.log('Console debug ready');
+    </script>
+</body>
+</html>

@@ -16,7 +16,7 @@ import {
   sortEntities,
   denormalizeEntities,
 } from './utils/normalization';
-import authApiClient from '@/services/authApiClient';
+import { usersApi } from '@/services/api';
 
 // Cache configuration for users
 const USER_CACHE_CONFIG: CacheConfig = {
@@ -101,7 +101,7 @@ export const useUserStore = create<UserStoreState>()(
         }));
 
         try {
-          const response = await authApiClient.get<UserResponse[]>('/users');
+          const response = await usersApi.getUsers(params);
           const users = response.data;
 
           set(state => ({
@@ -131,8 +131,7 @@ export const useUserStore = create<UserStoreState>()(
         }
 
         try {
-          const response = await authApiClient.get<UserResponse>(`/users/${userId}`);
-          const user = response.data;
+          const user = await usersApi.getUser(userId);
 
           set(state => ({
             users: updateEntity(state.users, user),
@@ -154,8 +153,7 @@ export const useUserStore = create<UserStoreState>()(
         }
 
         try {
-          const response = await authApiClient.get<UserResponse>('/users/me');
-          const profile = response.data;
+          const profile = await usersApi.getCurrentUserProfile();
 
           set(state => ({
             currentUserProfile: profile,
@@ -188,8 +186,7 @@ export const useUserStore = create<UserStoreState>()(
         }));
 
         try {
-          const response = await authApiClient.put<UserResponse>(`/users/${userId}`, updates);
-          const updatedUser = response.data;
+          const updatedUser = await usersApi.updateUser(userId, updates);
 
           set(state => ({
             users: updateEntity(state.users, updatedUser),
@@ -216,8 +213,7 @@ export const useUserStore = create<UserStoreState>()(
       // Create new user
       createUser: async (userData) => {
         try {
-          const response = await authApiClient.post<UserResponse>('/users', userData);
-          const newUser = response.data;
+          const newUser = await usersApi.createUser(userData);
 
           set(state => ({
             users: updateEntity(state.users, newUser),
@@ -245,7 +241,7 @@ export const useUserStore = create<UserStoreState>()(
         }));
 
         try {
-          await authApiClient.delete(`/users/${userId}`);
+          await usersApi.deleteUser(userId);
           return { success: true, data: true };
         } catch (error) {
           // Revert on error

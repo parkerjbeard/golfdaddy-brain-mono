@@ -1,6 +1,6 @@
 import { User, CreateTaskPayload, CreateTaskResponse } from '@/types/entities';
 
-const API_BASE_URL = '/api/v1'; // Adjust if your API base URL is different
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 // Helper function to handle API responses
 async function handleResponse<T>(response: Response): Promise<T> {

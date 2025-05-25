@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .log { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffe0e0; border-left: 4px solid #ff0000; }
+        .success { background: #e0ffe0; border-left: 4px solid #00ff00; }
+        .info { background: #e0f0ff; border-left: 4px solid #0080ff; }
+    </style>
+</head>
+<body>
+    <h1>Authentication Debug</h1>
+    <div id="logs"></div>
+    <button onclick="testAuth()">Test Authentication</button>
+    
+    <script>
+        const logs = document.getElementById('logs');
+        
+        function addLog(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = new Date().toISOString() + ': ' + message;
+            logs.appendChild(div);
+            console.log(`[DEBUG] ${message}`);
+            
+            // Also send to backend for Docker logs
+            fetch('/api/debug-log', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message, type, timestamp: Date.now()})
+            }).catch(e => console.warn('Failed to send debug log'));
+        }
+        
+        async function testAuth() {
+            addLog('🚀 Starting authentication test');
+            
+            try {
+                // Test 1: Check if we have a token in localStorage
+                const token = localStorage.getItem('golf_daddy_auth_token');
+                addLog(`🔑 Token in localStorage: ${token ? 'YES' : 'NO'}`);
+                
+                // Test 2: Try to call the protected API
+                addLog('🌐 Testing API call to /api/v1/users/me');
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                // Check if we have API key
+                headers['X-API-Key'] = 'dev-api-key';
+                
+                const response = await fetch('/api/v1/users/me', {
+                    method: 'GET',
+                    headers
+                });
+                
+                addLog(`📊 API Response: ${response.status} ${response.statusText}`, 
+                       response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const userData = await response.json();
+                    addLog(`👤 User data: ${JSON.stringify(userData)}`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    addLog(`❌ Error response: ${errorText}`, 'error');
+                }
+                
+            } catch (error) {
+                addLog(`💥 Exception: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-run test on page load
+        window.addEventListener('load', () => {
+            addLog('📄 Debug page loaded');
+            testAuth();
+        });
+    </script>
+</body>
+</html> 

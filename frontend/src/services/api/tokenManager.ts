@@ -112,6 +112,18 @@ export class GolfDaddyTokenManager implements TokenManager {
     this.refreshCallbacks.forEach(callback => callback(this.tokenData!.accessToken));
   }
 
+  // Simple method for setting a token directly (useful for bypass mode)
+  setToken(token: string): void {
+    this.tokenData = {
+      accessToken: token,
+      refreshToken: token,
+      tokenType: 'Bearer',
+      expiresIn: 86400, // 24 hours
+      expiresAt: Date.now() + (86400 * 1000),
+    };
+    this.saveTokenToStorage();
+  }
+
   onTokenRefresh(callback: (token: string) => void): void {
     this.refreshCallbacks.push(callback);
   }

@@ -1,12 +1,12 @@
 # File: app/services/notification_service.py
-# (Showing relevant parts demonstrating Make.com webhook usage)
+# Direct Slack integration replacing Make.com webhooks
 
-import requests
 import json
+import logging
 from typing import Dict, Any, Optional, List
 from supabase import Client
-import logging
-# Slack integration removed - will be replaced with Make integration
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
 from app.models.task import Task, TaskStatus
@@ -15,106 +15,105 @@ from uuid import UUID
 import schedule
 import time
 from threading import Thread
-import asyncio # Added import
+import asyncio
 
-from app.config.settings import settings # Import settings to get webhook URLs
+from app.config.settings import settings
 from app.core.exceptions import (
     ConfigurationError,
     ExternalServiceError,
-    ResourceNotFoundError, # For context if repo calls raise it
+    ResourceNotFoundError,
     AppExceptionBase
 )
+from app.services.slack_service import SlackService
+from app.services.slack_message_templates import SlackMessageTemplates
 
 # Configure logging
 logging.basicConfig(level=logging.INFO) # This might be already set by main.py
 logger = logging.getLogger(__name__)
 
 class NotificationService:
-    """Service for triggering Make.com notifications via webhooks."""
+    """Service for sending notifications via direct Slack integration."""
 
     def __init__(self, supabase: Optional[Client] = None):
         """
-        Initialize the NotificationService.
+        Initialize the NotificationService with direct Slack integration.
         """
-        self.session = requests.Session()
+        self.slack_service = SlackService()
+        self.templates = SlackMessageTemplates()
         self.task_repo = TaskRepository() 
         self.user_repo = UserRepository()
+        self.default_channel = settings.SLACK_DEFAULT_CHANNEL
 
-    async def _send_webhook(self, webhook_url: str, payload: Dict[str, Any]) -> bool: # Made async
-        """Helper method to send data to a Make.com webhook."""
-        if not webhook_url or "YOUR_MAKE_" in webhook_url or "https://hook.make.com/your-" in webhook_url:
-            logger.error(f"Make.com webhook URL is not configured or is a placeholder: {webhook_url}")
-            raise ConfigurationError(f"Make.com webhook URL is not configured or is a placeholder: {webhook_url}")
-        try:
-            headers = {'Content-Type': 'application/json'}
-            response = await asyncio.to_thread(
-                self.session.post,
-                webhook_url, 
-                headers=headers, 
-                data=json.dumps(payload, default=str), 
-                timeout=10
-            )
-            response.raise_for_status() 
-            logger.info(f"Successfully triggered Make.com webhook: {webhook_url}")
-            return True
-        except requests.exceptions.Timeout as e:
-            logger.error(f"Timeout triggering Make.com webhook {webhook_url}: {e}", exc_info=True)
-            raise ExternalServiceError(service_name="Make.com Webhook", original_message=f"Timeout connecting to {webhook_url}")
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP error triggering Make.com webhook {webhook_url}: {e.response.status_code} - {e.response.text}", exc_info=True)
-            raise ExternalServiceError(service_name="Make.com Webhook", original_message=f"HTTP {e.response.status_code} from {webhook_url}: {e.response.text}")
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to trigger Make.com webhook {webhook_url}: {e}", exc_info=True)
-            raise ExternalServiceError(service_name="Make.com Webhook", original_message=f"Request failed for {webhook_url}: {str(e)}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred while sending webhook to {webhook_url}: {e}", exc_info=True)
-            raise AppExceptionBase(f"Unexpected error sending webhook to {webhook_url}: {str(e)}")
+    async def _get_slack_user_id(self, user: User, db: AsyncSession) -> Optional[str]:
+        """Get Slack user ID from User object, attempting GitHub username lookup if needed."""
+        if user.slack_id:
+            return user.slack_id
+        
+        # Try to find by GitHub username if available
+        if hasattr(user, 'github_username') and user.github_username:
+            slack_user = await self.slack_service.find_user_by_github_username(user.github_username, db)
+            if slack_user:
+                return slack_user['id']
+        
+        # Try to find by email
+        if user.email:
+            slack_user = await self.slack_service.find_user_by_email(user.email)
+            if slack_user:
+                return slack_user['id']
+        
+        return None
 
-    async def notify_task_created(self, task: Task, creator: Optional[User] = None): # Made async
-        """Trigger Make.com scenario for a new task notification."""
-        if not task or not task.assignee_id: # Ensure task and assignee exist
+    async def notify_task_created(self, task: Task, creator: Optional[User] = None, db: AsyncSession = None):
+        """Send task creation notification via direct Slack integration."""
+        if not task or not task.assignee_id:
             logger.warning("Task creation notification skipped: Task or assignee ID missing.")
             return
+        
         try:
             assignee = await self.user_repo.get_user_by_id(task.assignee_id)
             if not assignee:
                 logger.warning(f"Cannot send task created notification: Assignee user with ID {task.assignee_id} not found for task {task.id}")
-                return # Fail gracefully for this notification if assignee not found
+                return
 
             responsible = await self.user_repo.get_user_by_id(task.responsible_id) if task.responsible_id else None
             accountable = await self.user_repo.get_user_by_id(task.accountable_id) if task.accountable_id else None
-
-            payload = {
-                "task_id": str(task.id),
-                "task_title": task.title, # Added title
-                "task_description": task.description,
-                "task_type": task.task_type, # Added task_type
-                "assignee_slack_id": assignee.slack_id,
-                "assignee_name": getattr(assignee, 'name', None),
-                "responsible_slack_id": responsible.slack_id if responsible else None,
-                "accountable_slack_id": accountable.slack_id if accountable else None,
-                "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
-                "due_date": task.due_date.isoformat() if task.due_date else None,
-                "creator_slack_id": creator.slack_id if creator else None,
-                "creator_name": getattr(creator, 'name', None) if creator else None,
-                "notification_type": "task_created" # Added notification type for Make.com routing
-            }
             
-            # Add development-specific fields if it's a manager development task
-            if task.task_type == "manager_development" and task.metadata:
-                payload["development_area"] = task.metadata.get("development_area")
-                payload["learning_objectives"] = task.metadata.get("learning_objectives")
-                # Potentially add other metadata fields relevant to the notification
-
-            logger.info(f"Sending task created payload for task {task.id} (type: {task.task_type}) to Make.com...")
-            await self._send_webhook(settings.MAKE_WEBHOOK_TASK_CREATED, payload)
-        except (ConfigurationError, ExternalServiceError, AppExceptionBase) as e_webhook:
-            logger.error(f"Webhook error during task created notification for task {task.id}: {e_webhook}", exc_info=True)
-            # Optionally re-raise or handle (e.g., queue for retry)
-        except ResourceNotFoundError as e_res:
-             logger.warning(f"Resource not found during task created notification for task {task.id}: {e_res}", exc_info=True)
+            # Get Slack user IDs
+            responsible_slack_id = await self._get_slack_user_id(responsible, db) if responsible else None
+            accountable_slack_id = await self._get_slack_user_id(accountable, db) if accountable else None
+            
+            # Generate message using template
+            message = self.templates.task_created(
+                task_name=task.title,
+                task_id=str(task.id),
+                responsible_user_id=responsible_slack_id or "unknown",
+                accountable_user_id=accountable_slack_id or "unknown",
+                priority=task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                due_date=task.due_date,
+                description=task.description
+            )
+            
+            # Send to assignee
+            assignee_slack_id = await self._get_slack_user_id(assignee, db)
+            if assignee_slack_id:
+                await self.slack_service.send_direct_message(
+                    user_id=assignee_slack_id,
+                    text=message["text"],
+                    blocks=message["blocks"]
+                )
+            
+            # Also send to default channel if configured
+            if self.default_channel:
+                await self.slack_service.send_message(
+                    channel=self.default_channel,
+                    text=message["text"],
+                    blocks=message["blocks"]
+                )
+            
+            logger.info(f"Task created notification sent for task {task.id}")
+            
         except Exception as e:
-            logger.error(f"Unexpected error in notify_task_created for task {task.id}: {e}", exc_info=True)
+            logger.error(f"Error sending task created notification for task {task.id}: {e}", exc_info=True)
 
     async def notify_milestone_tracking(self, manager: User, milestone: Dict[str, Any]):
         if not manager or not manager.slack_id:
@@ -212,7 +211,8 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Unexpected error in notify_daily_task_followup for manager {manager.id}: {e}", exc_info=True)
 
-    async def blocked_task_alert(self, task_id: UUID, reason: str, blocking_user: Optional[User] = None):
+    async def blocked_task_alert(self, task_id: UUID, reason: str, blocking_user: Optional[User] = None, db: AsyncSession = None):
+        """Send task blocked notification via direct Slack integration."""
         logger.info(f"Preparing blocked task alert for task ID: {task_id}")
         try:
             task = await self.task_repo.get_task_by_id(task_id)
@@ -220,81 +220,97 @@ class NotificationService:
                 logger.warning(f"Blocked task alert skipped: Task {task_id} not found.")
                 return
 
+            responsible_user = await self.user_repo.get_user_by_id(task.responsible_id) if task.responsible_id else None
             accountable_user = await self.user_repo.get_user_by_id(task.accountable_id) if task.accountable_id else None
-            if task.accountable_id and not accountable_user:
-                logger.warning(f"Accountable user {task.accountable_id} not found for blocked task alert {task_id}")
             
-            assignee_user = await self.user_repo.get_user_by_id(task.assignee_id) if task.assignee_id else None
-            if task.assignee_id and not assignee_user:
-                 logger.warning(f"Assignee user {task.assignee_id} not found for blocked task alert {task_id}")
-
-            payload = { # Payload construction ... (as before) ...
-                "task_id": str(task.id),
-                "task_description": task.description,
-                "blocked_reason": reason,
-                "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
-                "assignee_id": str(task.assignee_id) if task.assignee_id else None,
-                "assignee_name": getattr(assignee_user, 'name', None) if assignee_user else None,
-                "assignee_slack_id": getattr(assignee_user, 'slack_id', None) if assignee_user else None,
-                "accountable_id": str(task.accountable_id) if task.accountable_id else None,
-                "accountable_name": getattr(accountable_user, 'name', None) if accountable_user else None,
-                "accountable_slack_id": getattr(accountable_user, 'slack_id', None) if accountable_user else None,
-                "blocked_by_user_id": str(blocking_user.id) if blocking_user else None,
-                "blocked_by_user_name": getattr(blocking_user, 'name', None) if blocking_user else None,
-                "blocked_by_user_slack_id": getattr(blocking_user, 'slack_id', None) if blocking_user else None,
-                "timestamp": time.time()
-            }
-            webhook_url = settings.MAKE_WEBHOOK_TASK_BLOCKED
-            logger.info(f"Sending task blocked alert payload for task {task.id} to Make.com webhook: {webhook_url}")
-            await self._send_webhook(webhook_url, payload)
-        except (ConfigurationError, ExternalServiceError, AppExceptionBase) as e_webhook:
-            logger.error(f"Webhook error during blocked task alert for task {task_id}: {e_webhook}", exc_info=True)
-        except ResourceNotFoundError as e_res:
-             logger.warning(f"Resource not found during blocked task alert for task {task_id}: {e_res}", exc_info=True)
+            # Get Slack user IDs
+            blocked_by_slack_id = await self._get_slack_user_id(blocking_user, db) if blocking_user else "unknown"
+            responsible_slack_id = await self._get_slack_user_id(responsible_user, db) if responsible_user else "unknown"
+            accountable_slack_id = await self._get_slack_user_id(accountable_user, db) if accountable_user else "unknown"
+            
+            # Generate message using template
+            message = self.templates.task_blocked(
+                task_name=task.title,
+                task_id=str(task.id),
+                blocked_by_user_id=blocked_by_slack_id,
+                responsible_user_id=responsible_slack_id,
+                accountable_user_id=accountable_slack_id,
+                reason=reason
+            )
+            
+            # Send to accountable user
+            if accountable_slack_id and accountable_slack_id != "unknown":
+                await self.slack_service.send_direct_message(
+                    user_id=accountable_slack_id,
+                    text=message["text"],
+                    blocks=message["blocks"]
+                )
+            
+            # Also send to responsible user if different from accountable
+            if responsible_slack_id and responsible_slack_id != "unknown" and responsible_slack_id != accountable_slack_id:
+                await self.slack_service.send_direct_message(
+                    user_id=responsible_slack_id,
+                    text=message["text"],
+                    blocks=message["blocks"]
+                )
+            
+            # Send to default channel
+            if self.default_channel:
+                await self.slack_service.send_message(
+                    channel=self.default_channel,
+                    text=message["text"],
+                    blocks=message["blocks"]
+                )
+            
+            logger.info(f"Task blocked alert sent for task {task.id}")
+            
         except Exception as e:
             logger.error(f"Unexpected error in blocked_task_alert for task {task_id}: {e}", exc_info=True)
 
     async def send_development_plan_notification(
         self, 
-        manager_user_id: UUID, # Changed from manager_slack_id to user_id for consistency
+        manager_user_id: UUID,
         development_areas: List[str], 
         num_tasks_created: int,
-        plan_link: Optional[str] = None # Optional link to view the plan
+        plan_link: Optional[str] = None,
+        db: AsyncSession = None
     ):
-        """Trigger Make.com scenario for a new development plan notification."""
+        """Send development plan notification via direct Slack integration."""
         if not manager_user_id:
             logger.warning("Development plan notification skipped: Manager User ID missing.")
             return
 
         try:
             manager = await self.user_repo.get_user_by_id(manager_user_id)
-            if not manager or not manager.slack_id:
-                logger.warning(f"Cannot send development plan notification: Manager {manager_user_id} not found or Slack ID missing.")
+            if not manager:
+                logger.warning(f"Cannot send development plan notification: Manager {manager_user_id} not found.")
                 return
-
-            payload = {
-                "manager_user_id": str(manager.id),
-                "manager_slack_id": manager.slack_id,
-                "manager_name": getattr(manager, 'name', 'Manager'),
-                "development_areas": development_areas,
-                "num_tasks_created": num_tasks_created,
-                "plan_link": plan_link,
-                "notification_type": "development_plan_created"
-            }
-            webhook_url = settings.MAKE_WEBHOOK_DEV_PLAN_CREATED
-            if not webhook_url or "YOUR_MAKE_" in webhook_url:
-                logger.error(f"Make.com webhook URL for development plan creation is not configured: {webhook_url}")
-                # Depending on policy, either raise ConfigurationError or log and skip
-                # For now, logging and skipping to avoid breaking flow if webhook is optional/not yet set up
-                return 
-
-            logger.info(f"Sending development plan created payload for manager {manager.id} to {webhook_url}...")
-            await self._send_webhook(webhook_url, payload)
-
-        except (ConfigurationError, ExternalServiceError, AppExceptionBase) as e_webhook:
-            logger.error(f"Webhook error during development plan notification for manager {manager_user_id}: {e_webhook}", exc_info=True)
-        except ResourceNotFoundError as e_res:
-            logger.warning(f"Resource not found (manager) during development plan notification for manager {manager_user_id}: {e_res}", exc_info=True)
+            
+            # Get manager's Slack ID
+            manager_slack_id = await self._get_slack_user_id(manager, db)
+            if not manager_slack_id:
+                logger.warning(f"Cannot send development plan notification: No Slack ID found for manager {manager_user_id}")
+                return
+            
+            # Generate message using template
+            # Note: Using personal_mastery_reminder template as placeholder - you may want to create a specific template
+            message = self.templates.development_plan_created(
+                user_id=manager_slack_id,
+                manager_user_id=manager_slack_id,  # Assuming manager creates their own plan
+                plan_name=f"Development Plan - {', '.join(development_areas[:2])}",
+                objectives=development_areas,
+                timeline=f"{num_tasks_created} tasks created"
+            )
+            
+            # Send to manager
+            await self.slack_service.send_direct_message(
+                user_id=manager_slack_id,
+                text=message["text"],
+                blocks=message["blocks"]
+            )
+            
+            logger.info(f"Development plan notification sent to manager {manager.id}")
+            
         except Exception as e:
             logger.error(f"Unexpected error in send_development_plan_notification for manager {manager_user_id}: {e}", exc_info=True)
 
@@ -438,20 +454,94 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Error sending daily task follow-up for manager {manager_id}: {e}", exc_info=True)
 
-    # Method send_task_reminders would also need to be async and its internal calls to _send_webhook handled.
-    # Example for one part of send_task_reminders:
-    # async def send_task_reminders(self):
-    #     logger.info("Checking for overdue tasks to send reminders...")
-    #     overdue_tasks = await self.task_repo.get_overdue_tasks() # Made await
-    #     for task in overdue_tasks:
-    #         try:
-    #             assignee = await self.user_repo.get_user_by_id(task.assignee_id) # Made await
-    #             if assignee and assignee.slack_id:
-    #                 payload = { ... }
-    #                 await self._send_webhook(settings.MAKE_WEBHOOK_TASK_REMINDER, payload) # Made await
-    #         except (ConfigurationError, ExternalServiceError, AppExceptionBase) as e_webhook:
-    #             logger.error(f"Webhook error sending task reminder for task {task.id}: {e_webhook}", exc_info=True)
-    #         except ResourceNotFoundError as e_res:
-    #             logger.warning(f"Resource not found for task reminder {task.id} (assignee: {task.assignee_id}): {e_res}")
-    #         except Exception as e:
-    #             logger.error(f"Error processing reminder for task {task.id}: {e}", exc_info=True)
+    async def send_documentation_proposal(
+        self,
+        commit_sha: str,
+        commit_message: str,
+        github_username: str,
+        proposed_updates: List[Dict[str, str]],
+        pr_url: Optional[str] = None,
+        db: AsyncSession = None
+    ):
+        """Send documentation update proposal to commit author via Slack."""
+        try:
+            # Find Slack user by GitHub username
+            slack_user = await self.slack_service.find_user_by_github_username(github_username, db)
+            if not slack_user:
+                logger.warning(f"Cannot send documentation proposal: No Slack user found for GitHub username {github_username}")
+                # Send to default channel instead
+                if self.default_channel:
+                    message = self.templates.documentation_proposal(
+                        author_user_id="team",
+                        commit_sha=commit_sha,
+                        commit_message=commit_message,
+                        proposed_updates=proposed_updates,
+                        pr_url=pr_url
+                    )
+                    await self.slack_service.send_message(
+                        channel=self.default_channel,
+                        text=message["text"],
+                        blocks=message["blocks"]
+                    )
+                return
+            
+            # Generate message using template
+            message = self.templates.documentation_proposal(
+                author_user_id=slack_user['id'],
+                commit_sha=commit_sha,
+                commit_message=commit_message,
+                proposed_updates=proposed_updates,
+                pr_url=pr_url
+            )
+            
+            # Send direct message to commit author
+            await self.slack_service.send_direct_message(
+                user_id=slack_user['id'],
+                text=message["text"],
+                blocks=message["blocks"]
+            )
+            
+            logger.info(f"Documentation proposal sent to {github_username} for commit {commit_sha[:8]}")
+            
+        except Exception as e:
+            logger.error(f"Error sending documentation proposal: {e}", exc_info=True)
+    
+    async def send_commit_analysis_summary(
+        self,
+        commit_sha: str,
+        github_username: str,
+        estimated_points: int,
+        estimated_hours: float,
+        complexity: str,
+        impact_areas: List[str],
+        db: AsyncSession = None
+    ):
+        """Send commit analysis summary to commit author via Slack."""
+        try:
+            # Find Slack user by GitHub username
+            slack_user = await self.slack_service.find_user_by_github_username(github_username, db)
+            if not slack_user:
+                logger.warning(f"Cannot send commit analysis: No Slack user found for GitHub username {github_username}")
+                return
+            
+            # Generate message using template
+            message = self.templates.commit_analysis_summary(
+                author_user_id=slack_user['id'],
+                commit_sha=commit_sha,
+                estimated_points=estimated_points,
+                estimated_hours=estimated_hours,
+                complexity=complexity,
+                impact_areas=impact_areas
+            )
+            
+            # Send direct message to commit author
+            await self.slack_service.send_direct_message(
+                user_id=slack_user['id'],
+                text=message["text"],
+                blocks=message["blocks"]
+            )
+            
+            logger.info(f"Commit analysis sent to {github_username} for commit {commit_sha[:8]}")
+            
+        except Exception as e:
+            logger.error(f"Error sending commit analysis summary: {e}", exc_info=True)

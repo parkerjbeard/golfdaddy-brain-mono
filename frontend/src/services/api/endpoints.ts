@@ -429,7 +429,7 @@ export const systemApi = {
   },
 
   async getVersion(): Promise<{ version: string; build: string; deploy_date: string }> {
-    const response = await apiClient.get('/api/v1/system/version', {}, { skipAuth: true });
+    const response = await apiClient.get<{ version: string; build: string; deploy_date: string }>('/api/v1/system/version', {}, { skipAuth: true });
     return response.data;
   },
 

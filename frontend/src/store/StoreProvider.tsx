@@ -8,6 +8,7 @@ import { useCacheWarming } from './utils/performance';
 import { useTaskStore } from './taskStore';
 import { useUserStore } from './userStore';
 import { useAuth } from '@/hooks/useAuth';
+import { TaskStatus } from '@/types/entities';
 
 interface StoreContextValue {
   isInitialized: boolean;
@@ -58,15 +59,15 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
       await warmCache([
         // High priority: current user and their immediate data
         () => userStore.fetchCurrentUserProfile(),
-        () => userStore.fetchUsers({ limit: 50 }), // Fetch initial user set
+        () => userStore.fetchUsers(), // Fetch initial user set
         
         // Medium priority: user's tasks and team data
         () => taskStore.fetchTasks({ assignee: user.id, limit: 20 }),
         () => taskStore.fetchTasks({ limit: 50 }), // Fetch initial task set
         
         // Low priority: additional data for dashboard
-        () => userStore.fetchUsersByRole(user.role),
-        () => taskStore.fetchTasks({ status: 'IN_PROGRESS', limit: 100 }),
+        () => Promise.resolve(userStore.getUsersByRole(user.role)), // This is a selector, not an async function
+        () => taskStore.fetchTasks({ status: TaskStatus.IN_PROGRESS, limit: 100 }),
       ]);
 
       // Check data consistency after initial load
@@ -90,7 +91,7 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
   const refreshAllData = React.useCallback(async () => {
     try {
       await Promise.allSettled([
-        userStore.fetchUsers({ force: true }),
+        userStore.fetchUsers(true), // force refresh
         taskStore.fetchTasks({ force: true }),
       ]);
     } catch (error) {
@@ -166,9 +167,9 @@ export const useAppStore = () => {
     const userCacheStatus = userStore.getCacheStatus();
 
     return {
-      isLoading: taskStore.tasks.loading || userStore.users.loading,
-      hasErrors: !!(taskStore.tasks.error || userStore.users.error),
-      errors: [taskStore.tasks.error, userStore.users.error].filter(Boolean),
+      isLoading: taskStore.tasks.loading.fetching || userStore.users.loading.fetching,
+      hasErrors: !!(taskStore.tasks.errors.fetch || userStore.users.errors.fetch),
+      errors: [taskStore.tasks.errors.fetch, userStore.users.errors.fetch].filter(Boolean),
       cacheStatus: {
         tasks: taskCacheStatus,
         users: userCacheStatus,
@@ -179,10 +180,10 @@ export const useAppStore = () => {
       },
     };
   }, [
-    taskStore.tasks.loading,
-    taskStore.tasks.error,
-    userStore.users.loading,
-    userStore.users.error,
+    taskStore.tasks.loading.fetching,
+    taskStore.tasks.errors.fetch,
+    userStore.users.loading.fetching,
+    userStore.users.errors.fetch,
     taskStore.getCacheStatus,
     userStore.getCacheStatus,
   ]);
@@ -206,12 +207,10 @@ export const useAppStore = () => {
     users: {
       fetch: userStore.fetchUsers,
       fetchById: userStore.fetchUser,
+      fetchCurrentProfile: userStore.fetchCurrentUserProfile,
       create: userStore.createUser,
       update: userStore.updateUser,
       delete: userStore.deleteUser,
-      updateRole: userStore.updateUserRole,
-      addToTeam: userStore.addUserToTeam,
-      removeFromTeam: userStore.removeUserFromTeam,
     },
 
     // Global actions
@@ -243,9 +242,8 @@ export const useAppStore = () => {
       getById: userStore.getUserById,
       getByRole: userStore.getUsersByRole,
       getByTeam: userStore.getUsersByTeam,
-      getTeamMembers: userStore.getTeamMembers,
       getFiltered: userStore.getFilteredUsers,
-      getStats: userStore.getUserStats,
+      getSearchResults: userStore.getSearchResults,
     },
   }), [taskStore, userStore]);
 

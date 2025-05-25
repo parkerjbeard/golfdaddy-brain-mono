@@ -3,7 +3,9 @@ export interface User {
   name: string;
   email?: string;
   slack_id?: string;
+  github_username?: string;
   avatar_url?: string;
+  role?: string;
 }
 
 export enum TaskStatus {
