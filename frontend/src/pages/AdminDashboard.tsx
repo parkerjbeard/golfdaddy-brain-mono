@@ -1,17 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart, ClipboardList, Target, Award, MessageSquare, TrendingUp, TrendingDown, Calendar, UserCog } from "lucide-react";
+import { BarChart, ClipboardList, Target, Award, MessageSquare, TrendingUp, TrendingDown, Calendar, UserCog, RefreshCw } from "lucide-react";
 import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
 import { RaciTaskDashboard } from '@/components/admin/RaciTaskDashboard';
 import { UserMappingManager } from '@/components/admin/UserMappingManager';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Chart } from '@/components/ui/chart';
+import { RetentionChart } from '@/components/ui/RetentionChart';
+import { WinsSection } from '@/components/ui/WinsSection';
 import { UserRole } from '@/types/user';
 import { useDashboardSelectors } from '@/store';
+import { api } from '@/services/api/endpoints';
+import type { WeeklyData } from '@/services/zapierApi';
 
 interface Employee {
   id: string;
@@ -50,6 +54,10 @@ const AdminDashboard = () => {
     teamPerformanceMetrics,
     userWorkloadAnalysis,
   } = useDashboardSelectors();
+
+  // Zapier data state
+  const [weeklyData, setWeeklyData] = useState<WeeklyData | null>(null);
+  const [zapierLoading, setZapierLoading] = useState(false);
   
   // Sample objectives data
   const [objectives, setObjectives] = useState<Objective[]>([
@@ -89,6 +97,23 @@ const AdminDashboard = () => {
     { id: "3", name: "Achieve carbon neutral status", tags: ["Sustainability", "Corporate"] }
   ]);
   
+  // Fetch Zapier data
+  const fetchZapierData = async () => {
+    setZapierLoading(true);
+    try {
+      const data = await api.zapier.getWeeklyData();
+      setWeeklyData(data);
+    } catch (error) {
+      console.error('Error fetching Zapier data:', error);
+    } finally {
+      setZapierLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchZapierData();
+  }, []);
+
   // Sample mission statement points
   const missionPoints = [
     "Deliver exceptional products that improve daily workflows",
@@ -334,36 +359,72 @@ const AdminDashboard = () => {
                 </ul>
               </Card>
               
+              {/* User Feedback Summary from Zapier */}
               <Card className="p-6">
                 <h2 className="text-xl font-medium mb-4">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5" />
                     User Feedback Summary
+                    {zapierLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
                   </div>
                 </h2>
                 <div className="prose max-w-none">
-                  <p>
-                    Recent customer feedback highlights satisfaction with our new interface. 
-                    Users appreciate the streamlined checkout process and personalized recommendations.
-                    However, there are recurring concerns about mobile responsiveness and load times 
-                    during peak hours. We should prioritize optimizing performance on mobile devices 
-                    and scaling our server capacity to handle increased traffic.
-                  </p>
+                  {weeklyData ? (
+                    <p className="text-sm leading-relaxed">
+                      {weeklyData.user_feedback_summary}
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      Loading user feedback from Zapier...
+                    </p>
+                  )}
                 </div>
               </Card>
               
+              {/* Recent Wins from Zapier */}
               <Card className="p-6">
                 <h2 className="text-xl font-medium mb-4">
                   <div className="flex items-center gap-2">
                     <Award className="h-5 w-5" />
                     Recent Wins
+                    {zapierLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
                   </div>
                 </h2>
-                <div className="flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-lg">
-                  <p className="text-muted-foreground">No recent wins recorded</p>
-                  <Button variant="outline" className="mt-2">Add Win</Button>
-                </div>
+                {weeklyData && weeklyData.wins.length > 0 ? (
+                  <div className="space-y-3">
+                    {weeklyData.wins.map((win, index) => (
+                      <div key={index} className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <p className="text-sm font-medium text-yellow-900">{win}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-lg">
+                    <p className="text-muted-foreground">
+                      {zapierLoading ? 'Loading wins...' : 'No recent wins recorded'}
+                    </p>
+                    {!zapierLoading && (
+                      <Button variant="outline" className="mt-2" onClick={fetchZapierData}>
+                        Refresh Data
+                      </Button>
+                    )}
+                  </div>
+                )}
               </Card>
+
+              {/* Retention Data */}
+              {weeklyData && (
+                <div className="space-y-4">
+                  <RetentionChart 
+                    title="First Week Retention (%)"
+                    data={weeklyData.weekly_retention}
+                  />
+                  <RetentionChart 
+                    title="First Month Usage (%)"
+                    data={weeklyData.monthly_retention}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </TabsContent>

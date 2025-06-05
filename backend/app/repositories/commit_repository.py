@@ -227,7 +227,7 @@ class CommitRepository:
                          .gte("commit_timestamp", start_dt)\
                          .lt("commit_timestamp", end_dt)\
                          .order("commit_timestamp", desc=True)\
-                         .execute()
+                         .execute
             )
                          
             self._handle_supabase_error(response, f"Error fetching commits for user {author_id} in range {start_date} - {end_date}")

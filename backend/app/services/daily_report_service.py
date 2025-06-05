@@ -1,11 +1,15 @@
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from app.models.daily_report import DailyReport, DailyReportCreate, DailyReportUpdate, AiAnalysis, ClarificationRequest
+from app.models.commit import Commit
 from app.repositories.daily_report_repository import DailyReportRepository
+from app.repositories.commit_repository import CommitRepository
 from app.integrations.ai_integration import AIIntegration # Added
+from app.services.deduplication_service import DeduplicationService
+# Removed circular import - will be injected
 from app.core.exceptions import (
     DatabaseError, # For repository/DB issues
     AIIntegrationError, # If AI service fails explicitly
@@ -20,7 +24,10 @@ logger = logging.getLogger(__name__)
 class DailyReportService:
     def __init__(self):
         self.report_repository = DailyReportRepository()
+        self.commit_repository = CommitRepository()
         self.ai_integration = AIIntegration() # Instantiate AIIntegration
+        self.deduplication_service = DeduplicationService()
+        self.daily_commit_analysis_service = None  # Will be injected to avoid circular import
         # self.user_service = UserService() # Placeholder
 
     async def submit_daily_report(self, report_data: DailyReportCreate, current_user_id: UUID) -> DailyReport:
@@ -97,7 +104,79 @@ class DailyReportService:
             processed_report = await self.report_repository.update_daily_report(new_report.id, update_with_ai_data)
             if processed_report:
                 logger.info(f"Successfully processed and updated EOD report {new_report.id} with AI analysis.")
-                return processed_report
+                
+                # --- Deduplication Processing ---
+                try:
+                    # Get user's commits from the same day
+                    report_date = processed_report.report_date or datetime.utcnow().date()
+                    start_of_day = datetime.combine(report_date, datetime.min.time())
+                    end_of_day = start_of_day + timedelta(days=1)
+                    
+                    user_commits = await self.commit_repository.get_commits_by_user_id(
+                        current_user_id,
+                        start_date=start_of_day,
+                        end_date=end_of_day
+                    )
+                    
+                    # Run deduplication
+                    logger.info(f"Running deduplication for report {processed_report.id} with {len(user_commits)} commits")
+                    deduplicated_report = await self.deduplication_service.deduplicate_daily_report(
+                        processed_report, 
+                        user_commits
+                    )
+                    
+                    # Update report with deduplication results
+                    dedup_update = DailyReportUpdate(
+                        deduplication_results=deduplicated_report.deduplication_results,
+                        confidence_scores=deduplicated_report.confidence_scores,
+                        commit_hours=deduplicated_report.commit_hours,
+                        additional_hours=deduplicated_report.additional_hours,
+                        linked_commit_ids=[c.sha for c in user_commits] if user_commits else []
+                    )
+                    
+                    final_report = await self.report_repository.update_daily_report(processed_report.id, dedup_update)
+                    if final_report:
+                        logger.info(f"Successfully deduplicated report {processed_report.id}. "
+                                  f"Commit hours: {final_report.commit_hours}, "
+                                  f"Additional hours: {final_report.additional_hours}")
+                        
+                        # --- Daily Commit Analysis ---
+                        try:
+                            if self.daily_commit_analysis_service:
+                                logger.info(f"Triggering daily commit analysis for report {final_report.id}")
+                                daily_analysis = await self.daily_commit_analysis_service.analyze_for_report(
+                                    user_id=current_user_id,
+                                    report_date=report_date,
+                                    daily_report=final_report
+                                )
+                                logger.info(f"Daily commit analysis completed: {daily_analysis.total_estimated_hours} hours")
+                            else:
+                                # Import here to avoid circular dependency
+                                from app.services.daily_commit_analysis_service import DailyCommitAnalysisService
+                                analysis_service = DailyCommitAnalysisService()
+                                logger.info(f"Triggering daily commit analysis for report {final_report.id}")
+                                daily_analysis = await analysis_service.analyze_for_report(
+                                    user_id=current_user_id,
+                                    report_date=report_date,
+                                    daily_report=final_report
+                                )
+                                logger.info(f"Daily commit analysis completed: {daily_analysis.total_estimated_hours} hours")
+                        except Exception as analysis_error:
+                            logger.error(f"Error during daily commit analysis: {analysis_error}", exc_info=True)
+                            # Continue without daily analysis if it fails
+                        # --- End Daily Commit Analysis ---
+                        
+                        return final_report
+                    else:
+                        logger.error(f"Failed to update report {processed_report.id} with deduplication results")
+                        return processed_report
+                        
+                except Exception as dedup_error:
+                    logger.error(f"Error during deduplication for report {processed_report.id}: {dedup_error}", exc_info=True)
+                    # Continue without deduplication if it fails
+                    return processed_report
+                # --- End Deduplication Processing ---
+                
             else: 
                 logger.error(f"Failed to update report {new_report.id} with AI data after successful AI analysis. Returning report without this AI update.", exc_info=True)
                 # Fallback: return the report as it was before this update attempt, but with AI data attached if possible
@@ -184,3 +263,95 @@ class DailyReportService:
     
     # TODO: Add method for AI to request clarification and for user to respond to clarifications.
     # This would involve updating the ClarificationRequest status and answer within the AiAnalysis field.
+    
+    async def get_weekly_hours_summary(self, user_id: UUID, week_start: datetime) -> Dict[str, Any]:
+        """
+        Get a comprehensive weekly hours summary for a user, combining commits and daily reports.
+        Uses the deduplication service to ensure accurate hour counting.
+        """
+        week_end = week_start + timedelta(days=7)
+        
+        # Get all daily reports for the week
+        daily_reports = []
+        for day_offset in range(7):
+            date = week_start + timedelta(days=day_offset)
+            report = await self.report_repository.get_daily_reports_by_user_and_date(user_id, date)
+            if report:
+                daily_reports.append(report)
+        
+        # Get all commits for the week
+        commits = await self.commit_repository.get_commits_by_user_id(
+            user_id,
+            start_date=week_start,
+            end_date=week_end
+        )
+        
+        # Use deduplication service to get weekly aggregate
+        return await self.deduplication_service.get_weekly_aggregate(
+            user_id,
+            week_start,
+            week_end,
+            daily_reports,
+            commits
+        )
+    
+    async def handle_slack_conversation(self, report_id: UUID, user_message: str, slack_thread_ts: str) -> Dict[str, Any]:
+        """
+        Handle ongoing Slack conversation for daily report clarification.
+        Returns response to send back to Slack.
+        """
+        report = await self.get_report_by_id(report_id)
+        if not report:
+            return {
+                "error": "Report not found",
+                "message": "I couldn't find the report you're referring to."
+            }
+        
+        # Update conversation state
+        conversation_state = report.conversation_state or {}
+        conversation_state["last_user_message"] = user_message
+        conversation_state["last_interaction"] = datetime.utcnow().isoformat()
+        
+        # Process with AI
+        try:
+            ai_response = await self.ai_integration.process_eod_clarification(
+                original_report=report.raw_text_input,
+                user_message=user_message,
+                conversation_history=conversation_state.get("history", [])
+            )
+            
+            # Update conversation history
+            if "history" not in conversation_state:
+                conversation_state["history"] = []
+            conversation_state["history"].append({
+                "user": user_message,
+                "ai": ai_response.get("response", ""),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            # Update report with new conversation state and any extracted information
+            update_data = DailyReportUpdate(
+                conversation_state=conversation_state,
+                slack_thread_ts=slack_thread_ts
+            )
+            
+            # If AI extracted new information, update the report
+            if ai_response.get("updated_summary"):
+                update_data.clarified_tasks_summary = ai_response["updated_summary"]
+            if ai_response.get("updated_hours") is not None:
+                update_data.final_estimated_hours = ai_response["updated_hours"]
+                
+            await self.report_repository.update_daily_report(report_id, update_data)
+            
+            return {
+                "response": ai_response.get("response", "I understand. Let me update your report."),
+                "needs_more_info": ai_response.get("needs_clarification", False),
+                "conversation_complete": ai_response.get("conversation_complete", False)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing Slack conversation for report {report_id}: {e}", exc_info=True)
+            return {
+                "error": "Processing error",
+                "message": "I had trouble understanding that. Could you please rephrase?"
+            }

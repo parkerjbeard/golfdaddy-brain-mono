@@ -22,6 +22,10 @@ from app.api.archive_endpoints import router as archive_router
 from app.api.health import router as health_router
 from app.api.v1.api import api_v1_router
 from app.api.webhooks import router as webhooks_router
+from app.api.slack_daily_reports import router as slack_daily_reports_router
+from app.api.weekly_hours_endpoints import router as weekly_hours_router
+from app.api.daily_commit_analysis_endpoints import router as daily_analysis_router
+from app.api.zapier_endpoints import router as zapier_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
 from app.services.archive_service import ArchiveService
@@ -29,6 +33,7 @@ from app.middleware.api_key_auth import ApiKeyMiddleware
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_metrics import RequestMetricsMiddleware
 from app.core.error_handlers import add_exception_handlers
+from app.services.scheduled_tasks import start_scheduled_tasks, stop_scheduled_tasks
 
 # Configure logging
 logging.basicConfig(
@@ -85,6 +90,10 @@ app.include_router(archive_router, prefix="/api/v1")
 app.include_router(health_router)
 app.include_router(api_v1_router, prefix="/api/v1")
 app.include_router(webhooks_router)
+app.include_router(slack_daily_reports_router, prefix="/api")
+app.include_router(weekly_hours_router)
+app.include_router(daily_analysis_router)
+app.include_router(zapier_router, prefix="/api/v1")
 
 # Register custom exception handlers
 add_exception_handlers(app)
@@ -138,6 +147,11 @@ def schedule_tasks():
         schedule.every().day.at(archive_time).do(run_data_archiving)
         logger.info(f"Scheduled automatic data archiving at {archive_time}")
     
+    # Schedule EOD reminders at configured time (default 5 PM)
+    eod_time = getattr(settings, 'EOD_REMINDER_TIME', '17:00')
+    schedule.every().day.at(eod_time).do(run_eod_reminders)
+    logger.info(f"Scheduled EOD reminders at {eod_time}")
+    
     # Run scheduled tasks in background
     while True:
         schedule.run_pending()
@@ -179,12 +193,31 @@ def run_data_archiving():
     except Exception as e:
         logger.error(f"Error in data archiving: {e}")
 
+def run_eod_reminders():
+    """Run EOD reminder task."""
+    try:
+        logger.info("Starting EOD reminder task")
+        from app.services.eod_reminder_service import send_daily_eod_reminders
+        results = asyncio.run(send_daily_eod_reminders())
+        logger.info(f"EOD reminders sent: {results}")
+    except Exception as e:
+        logger.error(f"Error in EOD reminders: {e}")
+
 # Start scheduler in background on startup
 @app.on_event("startup")
 def start_scheduler():
     t = threading.Thread(target=schedule_tasks, daemon=True)
     t.start()
     logger.info("Scheduler started")
+
+# Start new scheduled tasks
+@app.on_event("startup")
+async def start_async_tasks():
+    await start_scheduled_tasks()
+
+@app.on_event("shutdown")
+async def shutdown_async_tasks():
+    await stop_scheduled_tasks()
 
 # Main entry point
 if __name__ == "__main__":

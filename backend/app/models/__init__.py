@@ -10,11 +10,18 @@ from app.models.daily_report import (
     ClarificationRequest,
     ClarificationStatus
 )
+from app.models.daily_commit_analysis import (
+    DailyCommitAnalysis,
+    DailyCommitAnalysisCreate,
+    DailyCommitAnalysisUpdate,
+    DailyCommitAnalysisWithDetails
+)
 
 __all__ = [
     "User", "UserRole", 
     "Task", "TaskStatus",
     "Commit", "DocMetadata",
     "DailyReport", "DailyReportCreate", "DailyReportUpdate",
-    "AiAnalysis", "ClarificationRequest", "ClarificationStatus"
+    "AiAnalysis", "ClarificationRequest", "ClarificationStatus",
+    "DailyCommitAnalysis", "DailyCommitAnalysisCreate", "DailyCommitAnalysisUpdate", "DailyCommitAnalysisWithDetails"
 ]

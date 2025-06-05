@@ -9,6 +9,13 @@ class ClarificationStatus(str, Enum):
     ANSWERED = "answered"
     RESOLVED = "resolved"
 
+class ConversationState(str, Enum):
+    INITIATED = "initiated"
+    AWAITING_REPORT = "awaiting_report"
+    CLARIFYING = "clarifying"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
 class ClarificationRequest(BaseModel):
     question: str
     original_text: str
@@ -39,9 +46,20 @@ class DailyReport(BaseModel):
     report_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     raw_text_input: str = Field(..., description="Raw bullet points submitted by the employee")
     
+    # Slack Integration
+    slack_thread_ts: Optional[str] = Field(None, description="Slack thread timestamp for conversation tracking")
+    slack_channel_id: Optional[str] = Field(None, description="Slack channel/DM ID where report was submitted")
+    conversation_state: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Slack conversation context")
+    
     # AI Processed Data
     clarified_tasks_summary: Optional[str] = Field(None, description="Summary of tasks after AI clarification (if any)")
     ai_analysis: Optional[AiAnalysis] = None
+    
+    # Deduplication Data
+    deduplication_results: Optional[Dict[str, Any]] = Field(None, description="Results of commit/report deduplication")
+    confidence_scores: Optional[Dict[str, float]] = Field(None, description="AI confidence scores for deduplication")
+    commit_hours: Optional[float] = Field(None, description="Hours already accounted for in commits")
+    additional_hours: Optional[float] = Field(None, description="Hours from report not in commits")
     
     # Links to other data
     linked_commit_ids: List[str] = [] # List of commit SHAs or IDs

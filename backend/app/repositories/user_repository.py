@@ -350,3 +350,4 @@ class UserRepository:
         except Exception as e:
             logger.error(f"Error finding peers for user {user_id}: {e}", exc_info=True)
             raise DatabaseError(f"Error finding peers for user {user_id}: {str(e)}")
+    

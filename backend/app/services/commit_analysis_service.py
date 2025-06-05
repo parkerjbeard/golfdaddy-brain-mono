@@ -17,9 +17,8 @@ from app.models.commit import Commit
 from app.models.user import User
 from app.services.daily_report_service import DailyReportService
 from app.models.daily_report import DailyReport
-# TODO: Import DailyReportService if direct interaction is needed, or pass data through other means
-# from app.services.daily_report_service import DailyReportService 
 from app.config.settings import settings
+# TODO: Import DailyReportService if direct interaction is needed, or pass data through other means
 from app.core.exceptions import ( # New imports for context and future use
     AppExceptionBase,
     ResourceNotFoundError,
@@ -184,9 +183,27 @@ class CommitAnalysisService:
                 "deletions": commit_data.get("deletions", 0)
             }
             
-            # Call AI integration with the structured data
-            logger.info("Sending commit data to AI for analysis...")
-            analysis_result = await self.ai_integration.analyze_commit_diff(ai_commit_data)
+            # Check if individual commit analysis should be skipped in favor of daily batch analysis
+            if settings.SKIP_INDIVIDUAL_COMMIT_ANALYSIS:
+                logger.info("Skipping individual commit AI analysis (daily batch analysis enabled)")
+                # Create a minimal analysis result without AI call
+                analysis_result = {
+                    "complexity_score": 5,  # Default value
+                    "estimated_hours": 0.0,  # Will be overridden by daily analysis
+                    "risk_level": "medium",
+                    "seniority_score": 5,
+                    "seniority_rationale": "Skipped individual analysis - will be analyzed in daily batch",
+                    "key_changes": [],
+                    "analyzed_at": datetime.now().isoformat(),
+                    "commit_hash": commit_hash,
+                    "repository": commit_data.get("repository", ""),
+                    "model_used": "none (batch analysis mode)",
+                    "batch_analysis_pending": True
+                }
+            else:
+                # Call AI integration with the structured data
+                logger.info("Sending commit data to AI for analysis...")
+                analysis_result = await self.ai_integration.analyze_commit_diff(ai_commit_data)
 
             # --- New EOD/Code Quality Integration Point --- 
             # TODO: Fetch relevant EOD report from DailyReportService for this user & date.

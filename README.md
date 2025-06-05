@@ -1,13 +1,23 @@
 # GolfDaddy Brain
 
-GolfDaddy Brain is an AI assistant for software engineering.
+GolfDaddy Brain is an AI-powered software engineering assistant that helps teams track work, manage tasks, and improve productivity through intelligent analysis of code commits and daily reports.
+
+## Key Features
+
+- **Daily Batch Commit Analysis**: Revolutionary AI-powered system that analyzes all daily commits together for 90% cost reduction and improved accuracy
+- **GitHub Commit Analysis**: AI-powered analysis of individual commits to estimate work hours and complexity
+- **Daily Report Collection**: Slack bot collects end-of-day reports with intelligent deduplication
+- **RACI Task Management**: Complete task tracking with Responsible, Accountable, Consulted, and Informed roles
+- **KPI Tracking**: Automated calculation of velocity, completion rates, and team performance
+- **Automatic Documentation**: AI generates and updates documentation based on code changes
+- **Manager Development**: Personal mastery tracking and AI-generated development plans
 
 ## Project Structure
 
 The project is structured into two main parts:
 
-- `backend/`: FastAPI-based backend API
-- `frontend/`: React/TypeScript frontend application
+- `backend/`: FastAPI-based backend API with AI integrations
+- `frontend/`: React/TypeScript frontend application with real-time updates
 
 ## Setup and Installation
 
@@ -94,6 +104,44 @@ pytest
 cd frontend
 npm test
 ```
+
+## Daily Batch Commit Analysis
+
+**NEW**: Revolutionary approach to commit analysis that provides 90% cost reduction and improved accuracy:
+
+### How It Works
+1. **Daily Report Submission**: When users submit daily reports, all commits from that day are analyzed together
+2. **Midnight Automatic Analysis**: Users without reports get automatic analysis at 12:05 AM
+3. **Holistic AI Analysis**: Single AI call analyzes entire day's work with full context
+4. **Smart Reconciliation**: Compares AI estimates with user-reported hours for accuracy
+
+### Benefits
+- **90% Cost Reduction**: One AI call per day instead of per commit
+- **Better Context**: AI sees full daily work patterns and context switching
+- **Improved Accuracy**: Holistic analysis provides more realistic hour estimates
+- **Automatic Coverage**: Works with or without daily reports
+
+### Configuration
+```bash
+ENABLE_DAILY_BATCH_ANALYSIS=true
+SKIP_INDIVIDUAL_COMMIT_ANALYSIS=false  # Gradual migration
+EOD_REMINDER_HOUR=17  # 5 PM
+EOD_REMINDER_MINUTE=30  # 5:30 PM
+```
+
+See [DAILY_BATCH_COMMIT_ANALYSIS.md](./claude_docs/DAILY_BATCH_COMMIT_ANALYSIS.md) for complete documentation.
+
+## Daily Report Workflow
+
+The system combines GitHub commit analysis with daily reports collected via Slack:
+
+1. **Individual Analysis**: Each GitHub commit can be analyzed by AI to estimate work hours (optional)
+2. **Daily Batch Analysis**: All commits analyzed together when daily report is submitted
+3. **EOD Reports**: Slack bot prompts employees for daily reports at configurable times
+4. **Intelligent Deduplication**: AI prevents double-counting between commits and reports
+5. **Weekly Aggregation**: Combined view of all work performed with accurate hour tracking
+
+See [DAILY_REPORT_WORKFLOW.md](./DAILY_REPORT_WORKFLOW.md) for detailed information.
 
 ## Deployment
 

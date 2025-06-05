@@ -644,6 +644,191 @@ class SlackMessageTemplates:
             "text": f"Commit analysis: {estimated_points} points, {estimated_hours:.1f} hours",
             "blocks": blocks
         }
+    
+    @staticmethod
+    def eod_reminder(
+        user_id: str,
+        user_name: str,
+        today_commits_count: int = 0,
+        last_commit_time: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """Template for EOD report reminder."""
+        greeting = f"Hi {user_name}! 👋"
+        
+        if today_commits_count > 0:
+            commit_text = f"I see you made {today_commits_count} commit{'s' if today_commits_count > 1 else ''} today"
+            if last_commit_time:
+                commit_text += f" (last one at {last_commit_time.strftime('%I:%M %p')})"
+            commit_text += "."
+        else:
+            commit_text = "I didn't see any commits from you today."
+        
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🌅 End of Day Report",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"{greeting}\n\nIt's time for your daily report. {commit_text}\n\nWhat else did you work on today? (meetings, planning, code reviews, debugging, etc.)"
+                }
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Submit Report",
+                            "emoji": True
+                        },
+                        "style": "primary",
+                        "action_id": "start_eod_report"
+                    },
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Skip Today",
+                            "emoji": True
+                        },
+                        "action_id": "skip_eod_report"
+                    }
+                ]
+            }
+        ]
+        
+        return {
+            "text": "Time for your daily report!",
+            "blocks": blocks
+        }
+    
+    @staticmethod
+    def eod_clarification(
+        question: str,
+        original_text: str,
+        suggestions: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Template for EOD report clarification request."""
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"I need a bit more information about:\n\n_{original_text}_\n\n**{question}**"
+                }
+            }
+        ]
+        
+        if suggestions:
+            elements = []
+            for suggestion in suggestions[:3]:
+                elements.append({
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": suggestion,
+                        "emoji": True
+                    },
+                    "action_id": f"clarify_suggestion_{suggestions.index(suggestion)}"
+                })
+            
+            blocks.append({
+                "type": "actions",
+                "elements": elements
+            })
+        
+        return {
+            "text": question,
+            "blocks": blocks
+        }
+    
+    @staticmethod
+    def eod_summary(
+        total_hours: float,
+        commit_hours: float,
+        additional_hours: float,
+        key_achievements: List[str],
+        deduplication_count: int = 0
+    ) -> Dict[str, Any]:
+        """Template for EOD report summary after processing."""
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "✅ Daily Report Processed",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "Thanks for submitting your report! Here's the summary:"
+                }
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Total Hours:*\n{total_hours:.1f}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*From Commits:*\n{commit_hours:.1f}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Additional Work:*\n{additional_hours:.1f}"
+                    }
+                ]
+            }
+        ]
+        
+        if deduplication_count > 0:
+            blocks.append({
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"_✨ Prevented double-counting of {deduplication_count} item{'s' if deduplication_count > 1 else ''}_"
+                    }
+                ]
+            })
+        
+        if key_achievements:
+            blocks.append({"type": "divider"})
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*🎯 Key Achievements:*\n" + "\n".join([f"• {achievement}" for achievement in key_achievements[:5]])
+                }
+            })
+        
+        blocks.append({
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "_Your report has been saved and will be included in weekly summaries._"
+                }
+            ]
+        })
+        
+        return {
+            "text": f"Daily report processed: {total_hours:.1f} hours total",
+            "blocks": blocks
+        }
 
 
 # Import settings for URL construction

@@ -62,6 +62,9 @@ import {
   PaginatedResponse,
 } from '@/types/api';
 
+// Import Zapier types
+import { WeeklyData, ZapierObjective, BusinessGoals, DashboardRefreshResult } from '@/services/zapierApi';
+
 // ========== AUTHENTICATION API ==========
 
 export const authApi = {
@@ -509,6 +512,35 @@ export const searchApi = {
   },
 };
 
+// ========== ZAPIER API ==========
+
+export const zapierApi = {
+  async getWeeklyData(): Promise<WeeklyData> {
+    const response = await apiClient.get<WeeklyData>('/zapier/weekly-data');
+    return response.data;
+  },
+
+  async getObjectives(): Promise<ZapierObjective[]> {
+    const response = await apiClient.get<ZapierObjective[]>('/zapier/objectives');
+    return response.data;
+  },
+
+  async getBusinessGoals(): Promise<BusinessGoals> {
+    const response = await apiClient.get<BusinessGoals>('/zapier/business-goals');
+    return response.data;
+  },
+
+  async getCompanyMission(): Promise<string[]> {
+    const response = await apiClient.get<string[]>('/zapier/mission');
+    return response.data;
+  },
+
+  async refreshDashboardData(): Promise<DashboardRefreshResult> {
+    const response = await apiClient.post<DashboardRefreshResult>('/zapier/refresh');
+    return response.data;
+  },
+};
+
 // ========== EXPORT ALL APIs ==========
 
 export const api = {
@@ -524,6 +556,7 @@ export const api = {
   webhook: webhookApi,
   batch: batchApi,
   search: searchApi,
+  zapier: zapierApi,
 };
 
 export default api;

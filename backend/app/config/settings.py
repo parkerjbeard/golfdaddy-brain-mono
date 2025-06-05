@@ -38,20 +38,21 @@ class Settings(BaseSettings):
     # Slack Circuit Breaker Settings
     SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = Field(5, env="SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD")
     SLACK_CIRCUIT_BREAKER_TIMEOUT: int = Field(60, env="SLACK_CIRCUIT_BREAKER_TIMEOUT")
+    
+    # EOD Reminder Settings
+    EOD_REMINDER_TIME: str = Field("17:00", env="EOD_REMINDER_TIME")  # 24-hour format
+    EOD_REMINDER_TIMEZONE: str = Field("America/Los_Angeles", env="EOD_REMINDER_TIMEZONE")
 
     # Integration Keys
     GITHUB_TOKEN: Optional[str] = Field(None, env="GITHUB_TOKEN")
     AI_SERVICE_KEY: Optional[str] = Field(None, env="AI_SERVICE_KEY")
-    MAKE_INTEGRATION_API_KEY: Optional[str] = Field(None, env="MAKE_INTEGRATION_API_KEY")
+    # MAKE_INTEGRATION_API_KEY: Optional[str] = Field(None, env="MAKE_INTEGRATION_API_KEY")  # Removed - no longer using Make.com
     
     # GitHub Webhook Configuration
     GITHUB_WEBHOOK_SECRET: Optional[str] = Field(None, env="GITHUB_WEBHOOK_SECRET")
 
-    # Make.com Webhook URLs
-    MAKE_WEBHOOK_TASK_CREATED: Optional[str] = Field(None, env="MAKE_WEBHOOK_TASK_CREATED")
-    MAKE_WEBHOOK_TASK_BLOCKED: Optional[str] = Field(None, env="MAKE_WEBHOOK_TASK_BLOCKED")
-    MAKE_WEBHOOK_EOD_REMINDER: Optional[str] = Field(None, env="MAKE_WEBHOOK_EOD_REMINDER")
-    MAKE_WEBHOOK_MASTERY_REMINDER: Optional[str] = Field(None, env="MAKE_WEBHOOK_MASTERY_REMINDER")
+    # Make.com Webhook URLs - Removed as per requirements
+    # Direct Slack messages are now disabled except for EOD reminders
 
     # OpenAI settings
     OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")
@@ -69,6 +70,11 @@ class Settings(BaseSettings):
     DOCS_RETENTION_MONTHS: int = Field(18, env="DOCS_RETENTION_MONTHS")
     ENABLE_AUTO_ARCHIVE: bool = Field(True, env="ENABLE_AUTO_ARCHIVE")
     ARCHIVE_SCHEDULE_HOUR: int = Field(2, env="ARCHIVE_SCHEDULE_HOUR")  # Run at 2 AM daily
+
+    # Zapier Integration Settings
+    ZAPIER_WEEKLY_ANALYTICS_URL: Optional[str] = Field(None, env="ZAPIER_WEEKLY_ANALYTICS_URL")
+    ZAPIER_OBJECTIVES_URL: Optional[str] = Field(None, env="ZAPIER_OBJECTIVES_URL")
+    ZAPIER_API_KEY: Optional[str] = Field(None, env="ZAPIER_API_KEY")
 
     # API Gateway Settings
     ENABLE_API_AUTH: bool = Field(True, env="ENABLE_API_AUTH")
@@ -305,6 +311,16 @@ class Settings(BaseSettings):
     @property
     def frontend_url(self):
         return self.FRONTEND_URL
+    
+    # Daily Batch Analysis Settings
+    ENABLE_DAILY_BATCH_ANALYSIS: bool = True
+    SKIP_INDIVIDUAL_COMMIT_ANALYSIS: bool = False  # Keep individual analysis by default for backward compatibility
+    
+    # EOD Reminder Settings
+    ENABLE_EOD_REMINDERS: bool = True
+    EOD_REMINDER_HOUR: int = 17  # 5 PM
+    EOD_REMINDER_MINUTE: int = 30  # 5:30 PM
+    SKIP_WEEKEND_REMINDERS: bool = True
 
     class Config:
         env_file = '.env'

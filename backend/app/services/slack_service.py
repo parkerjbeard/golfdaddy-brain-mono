@@ -13,7 +13,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
-from app.core.circuit_breaker import CircuitBreaker
+from app.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from app.repositories.user_repository import UserRepository
 from app.models.user import User
 
@@ -25,10 +25,15 @@ class SlackService:
     
     def __init__(self):
         self.client = WebClient(token=settings.SLACK_BOT_TOKEN)
-        self.circuit_breaker = CircuitBreaker(
+        
+        # Create circuit breaker config
+        circuit_config = CircuitBreakerConfig(
             failure_threshold=settings.SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
-            timeout=settings.SLACK_CIRCUIT_BREAKER_TIMEOUT
+            timeout=settings.SLACK_CIRCUIT_BREAKER_TIMEOUT,
+            name="slack_api"
         )
+        self.circuit_breaker = CircuitBreaker(circuit_config)
+        
         self.user_repository = UserRepository()
         self._user_cache: Dict[str, Dict[str, Any]] = {}
         self._cache_ttl = timedelta(hours=1)
@@ -192,3 +197,59 @@ class SlackService:
     def _format_link(self, url: str, text: str) -> str:
         """Format a link for Slack markdown."""
         return f"<{url}|{text}>"
+    
+    async def open_dm(self, user_id: str) -> Optional[str]:
+        """Open a DM channel with a user and return the channel ID."""
+        try:
+            with self.circuit_breaker:
+                response = self.client.conversations_open(users=user_id)
+                if response["ok"]:
+                    return response["channel"]["id"]
+                return None
+        except SlackApiError as e:
+            logger.error(f"Failed to open DM with user {user_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error opening DM: {e}")
+            return None
+    
+    async def send_response_url_message(
+        self,
+        response_url: str,
+        message: Dict[str, Any]
+    ) -> bool:
+        """Send a message using a Slack response URL."""
+        import aiohttp
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(response_url, json=message) as resp:
+                    return resp.status == 200
+        except Exception as e:
+            logger.error(f"Failed to send response URL message: {e}")
+            return False
+    
+    async def schedule_message(
+        self,
+        channel: str,
+        post_at: int,  # Unix timestamp
+        text: str,
+        blocks: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[str]:
+        """Schedule a message to be sent at a specific time."""
+        try:
+            with self.circuit_breaker:
+                response = self.client.chat_scheduleMessage(
+                    channel=channel,
+                    post_at=post_at,
+                    text=text,
+                    blocks=blocks
+                )
+                if response["ok"]:
+                    return response["scheduled_message_id"]
+                return None
+        except SlackApiError as e:
+            logger.error(f"Failed to schedule message: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error scheduling message: {e}")
+            return None
