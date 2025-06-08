@@ -15,7 +15,7 @@ interface Employee {
   name: string;
   email: string;
   role: string;
-  department?: string;
+  team?: string;
   status: 'active' | 'pending';
 }
 
@@ -41,7 +41,7 @@ export const EmployeeManagement = () => {
   const handleApproveEmployee = (user: UserResponse) => {
     setSelectedEmployee(user);
     setNewRole(user.role);
-    setNewDepartment(user.department || '');
+    setNewDepartment(user.team || '');
     setIsRoleDialogOpen(true);
   };
 
@@ -67,13 +67,13 @@ export const EmployeeManagement = () => {
     try {
       await actions.users.update(selectedEmployee.id, {
         role: newRole,
-        department: newDepartment || selectedEmployee.department,
+        team: newDepartment || selectedEmployee.team,
         is_active: true
       });
       
       toast({
         title: "Role Updated",
-        description: `${selectedEmployee.first_name} ${selectedEmployee.last_name}'s role has been updated to ${newRole}.`
+        description: `${selectedEmployee.name || selectedEmployee.email}'s role has been updated to ${newRole}.`
       });
       
       setIsRoleDialogOpen(false);
@@ -88,7 +88,7 @@ export const EmployeeManagement = () => {
 
   const handleChangeRole = async (userId: string, role: UserRole) => {
     try {
-      await actions.users.updateRole(userId, role);
+      await actions.users.update(userId, { role });
       
       toast({
         title: "Role Updated",
@@ -126,7 +126,7 @@ export const EmployeeManagement = () => {
                 {pendingUsers.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>
-                      <div className="font-medium">{user.first_name} {user.last_name}</div>
+                      <div className="font-medium">{user.name || user.email}</div>
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
@@ -177,10 +177,10 @@ export const EmployeeManagement = () => {
               {activeUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
-                    <div className="font-medium">{user.first_name} {user.last_name}</div>
+                    <div className="font-medium">{user.name || user.email}</div>
                   </TableCell>
                   <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.department || 'Not assigned'}</TableCell>
+                  <TableCell>{user.team || 'Not assigned'}</TableCell>
                   <TableCell>
                     <Badge variant="outline">
                       {user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()}
@@ -221,7 +221,7 @@ export const EmployeeManagement = () => {
               </label>
               <Select 
                 value={newRole} 
-                onValueChange={setNewRole}
+                onValueChange={(value) => setNewRole(value as UserRole)}
               >
                 <SelectTrigger id="role">
                   <SelectValue placeholder="Select role" />

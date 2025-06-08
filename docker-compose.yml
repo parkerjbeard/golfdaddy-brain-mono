@@ -16,12 +16,21 @@ services:
       - ./backend:/app
     networks:
       - golfdaddy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: golfdaddy_frontend_dev
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "8080:8080"
     volumes:
