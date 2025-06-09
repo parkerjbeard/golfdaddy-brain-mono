@@ -34,7 +34,7 @@ import {
 import { toast } from 'sonner';
 
 import { UserResponse, UserRole, UserUpdateByAdminPayload, UserListResponse } from '@/types/user';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 // Placeholder for your actual auth token retrieval - THIS WILL BE REMOVED
 /*

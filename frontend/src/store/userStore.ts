@@ -16,7 +16,7 @@ import {
   sortEntities,
   denormalizeEntities,
 } from './utils/normalization';
-import { usersApi } from '@/services/api';
+import api from '@/services/api';
 
 // Cache configuration for users
 const USER_CACHE_CONFIG: CacheConfig = {
@@ -66,10 +66,13 @@ interface UserStoreState {
   getUserById: (userId: string) => UserResponse | undefined;
   getUsersByRole: (role: UserRole) => UserResponse[];
   getUsersByTeam: (teamId: string) => UserResponse[];
+  getTeamMembers: (teamId: string) => UserResponse[];
   getFilteredUsers: () => UserResponse[];
   getSearchResults: () => UserResponse[];
+  getUserStats: () => { total: number; byRole: Record<string, number>; byTeam: Record<string, number> };
   isUserCached: (userId: string) => boolean;
   getCacheStatus: () => { size: number; lastFetch: number | null; isValid: boolean };
+  teams: Record<string, string[]>;
 }
 
 export const useUserStore = create<UserStoreState>()(
@@ -79,6 +82,7 @@ export const useUserStore = create<UserStoreState>()(
       users: createNormalizedState<UserResponse>(),
       currentUserProfile: null,
       teamMembers: {},
+      teams: {},
       searchQuery: '',
       roleFilter: null,
       teamFilter: null,
@@ -101,8 +105,7 @@ export const useUserStore = create<UserStoreState>()(
         }));
 
         try {
-          const response = await usersApi.getUsers(params);
-          const users = response.data;
+          const users = await api.users.getUsers();
 
           set(state => ({
             users: updateNormalizedState(state.users, users),
@@ -131,7 +134,7 @@ export const useUserStore = create<UserStoreState>()(
         }
 
         try {
-          const user = await usersApi.getUser(userId);
+          const user = await api.users.get(userId);
 
           set(state => ({
             users: updateEntity(state.users, user),
@@ -153,7 +156,7 @@ export const useUserStore = create<UserStoreState>()(
         }
 
         try {
-          const profile = await usersApi.getCurrentUserProfile();
+          const profile = await api.users.getCurrentUserProfile();
 
           set(state => ({
             currentUserProfile: profile,
@@ -186,7 +189,7 @@ export const useUserStore = create<UserStoreState>()(
         }));
 
         try {
-          const updatedUser = await usersApi.updateUser(userId, updates);
+          const updatedUser = await api.users.updateUser(userId, updates);
 
           set(state => ({
             users: updateEntity(state.users, updatedUser),
@@ -213,7 +216,7 @@ export const useUserStore = create<UserStoreState>()(
       // Create new user
       createUser: async (userData) => {
         try {
-          const newUser = await usersApi.createUser(userData);
+          const newUser = await api.users.createUser(userData);
 
           set(state => ({
             users: updateEntity(state.users, newUser),
@@ -241,7 +244,7 @@ export const useUserStore = create<UserStoreState>()(
         }));
 
         try {
-          await usersApi.deleteUser(userId);
+          await api.users.deleteUser(userId);
           return { success: true, data: true };
         } catch (error) {
           // Revert on error
@@ -320,6 +323,38 @@ export const useUserStore = create<UserStoreState>()(
         return filterEntities(state.users, user => user.team_id === teamId);
       },
 
+      getTeamMembers: (teamId: string) => {
+        const state = get();
+        const memberIds = state.teams[teamId] || [];
+        return memberIds.map(id => state.users.byId[id]).filter(Boolean) as UserResponse[];
+      },
+
+      getUserStats: () => {
+        const state = get();
+        const users = denormalizeEntities(state.users.byId, state.users.allIds);
+        
+        const byRole: Record<string, number> = {};
+        const byTeam: Record<string, number> = {};
+        
+        users.forEach(user => {
+          // Count by role
+          if (user.role) {
+            byRole[user.role] = (byRole[user.role] || 0) + 1;
+          }
+          
+          // Count by team
+          if (user.team_id) {
+            byTeam[user.team_id] = (byTeam[user.team_id] || 0) + 1;
+          }
+        });
+        
+        return {
+          total: users.length,
+          byRole,
+          byTeam,
+        };
+      },
+
       getFilteredUsers: () => {
         const state = get();
         let users = denormalizeEntities(state.users.byId, state.users.allIds);
@@ -373,6 +408,7 @@ export const useUserStore = create<UserStoreState>()(
         users: state.users,
         currentUserProfile: state.currentUserProfile,
         teamMembers: state.teamMembers,
+        teams: state.teams,
       }),
     }
   )

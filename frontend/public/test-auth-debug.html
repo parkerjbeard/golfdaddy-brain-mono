@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Debug</title>
+</head>
+<body>
+    <div id="root"></div>
+    <h1>Auth Debug Page</h1>
+    <div id="status">Loading...</div>
+    <pre id="output"></pre>
+
+    <script type="module">
+        const statusEl = document.getElementById('status');
+        const outputEl = document.getElementById('output');
+        
+        function log(message, data) {
+            console.log(message, data);
+            outputEl.textContent += `${message}: ${JSON.stringify(data, null, 2)}\n\n`;
+        }
+
+        // Check environment variables
+        log('Environment check', {
+            supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? 'Set' : 'Missing',
+            supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Set' : 'Missing'
+        });
+
+        try {
+            // Try to import Supabase client
+            const { supabase } = await import('/src/lib/supabaseClient.ts');
+            log('Supabase client imported successfully', true);
+            
+            // Check current session
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error) {
+                log('Session error', error);
+            } else {
+                log('Current session', session ? 'Active' : 'None');
+            }
+            
+            statusEl.textContent = 'Debug complete - check console and output below';
+        } catch (error) {
+            log('Import error', {
+                message: error.message,
+                stack: error.stack
+            });
+            statusEl.textContent = 'Error occurred - check output below';
+        }
+    </script>
+</body>
+</html>

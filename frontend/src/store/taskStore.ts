@@ -18,7 +18,7 @@ import {
   denormalizeEntities,
   populateRelationships,
 } from './utils/normalization';
-import { tasksApi } from '@/services/api';
+import api from '@/services/api';
 import { useUserStore } from './userStore';
 
 // Cache configuration for tasks
@@ -175,8 +175,7 @@ export const useTaskStore = create<TaskStoreState>()(
           if (status) queryParams.status = status;
           if (assignee) queryParams.assignee_id = assignee;
 
-          const response = await tasksApi.getTasks(queryParams);
-          const tasks = response.tasks;
+          const tasks = await api.tasks.getTasks(queryParams);
 
           // Update task relationships
           const tasksByUser: Record<string, string[]> = {};
@@ -223,7 +222,7 @@ export const useTaskStore = create<TaskStoreState>()(
         }
 
         try {
-          const task = await tasksApi.getTask(taskId);
+          const task = await api.tasks.get(taskId);
 
           set(state => ({
             tasks: updateEntity(state.tasks, task),
@@ -239,7 +238,7 @@ export const useTaskStore = create<TaskStoreState>()(
       // Create new task
       createTask: async (taskData: CreateTaskPayload) => {
         try {
-          const response = await tasksApi.createTask(taskData);
+          const response = await api.tasks.createTask(taskData);
           const { task, warnings } = response;
 
           set(state => ({
@@ -272,7 +271,7 @@ export const useTaskStore = create<TaskStoreState>()(
         }));
 
         try {
-          const updatedTask = await tasksApi.updateTask(taskId, updates);
+          const updatedTask = await api.tasks.updateTask(taskId, updates);
 
           set(state => ({
             tasks: updateEntity(state.tasks, updatedTask),
@@ -310,7 +309,7 @@ export const useTaskStore = create<TaskStoreState>()(
         }));
 
         try {
-          await tasksApi.deleteTask(taskId);
+          await api.tasks.deleteTask(taskId);
           get().refreshTaskRelationships();
           return { success: true, data: true };
         } catch (error) {

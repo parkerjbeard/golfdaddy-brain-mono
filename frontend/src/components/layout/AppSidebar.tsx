@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   BarChart, 
   FileText, 
@@ -37,7 +37,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsible }: AppSidebarProps) {
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const location = useLocation();
 
   const isActive = (path: string) => {
@@ -45,7 +45,7 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
   };
 
   const handleSignOut = () => {
-    logout();
+    signOut();
   };
 
   return (

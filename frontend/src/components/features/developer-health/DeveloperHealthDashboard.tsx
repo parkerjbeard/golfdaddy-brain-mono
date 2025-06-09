@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDeveloperDailySummary, DeveloperDailySummary, getUsers } from '@/services/developerInsightsApi';
+import { getDeveloperDailySummary, DeveloperDailySummary } from '@/services/developerInsightsApi';
+import api from '@/services/api';
 import DailySummaryCard from './DailySummaryCard';
 import CommitList from './CommitList';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,8 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { format, subDays } from 'date-fns'; // For date formatting and default value
 
-// Assume useAuth hook provides the token, replace with your actual auth mechanism
-// import { useAuth } from '@/hooks/useAuth'; 
+import { useAuth } from '@/contexts/AuthContext'; 
 
 interface User {
   id: string;
@@ -17,8 +17,8 @@ interface User {
 }
 
 const DeveloperHealthDashboard: React.FC = () => {
-  // const { token } = useAuth(); // Replace with your auth hook
-  const token = undefined; // TEMP: No auth for now
+  const { session } = useAuth();
+  const token = session?.access_token || null;
 
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -33,7 +33,7 @@ const DeveloperHealthDashboard: React.FC = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const fetchedUsers = await getUsers(token);
+        const fetchedUsers = await api.users.getUsers();
         setUsers(fetchedUsers);
         // Select the first user by default if available
         if (fetchedUsers.length > 0 && !selectedUserId) {

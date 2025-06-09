@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Static HTML Test</h1>
+    <p>If you see this, the server is working.</p>
+    <p>Time: <span id="time"></span></p>
+    
+    <h2>Vite Test</h2>
+    <div id="root">Root element exists</div>
+    
+    <script>
+        document.getElementById('time').textContent = new Date().toLocaleTimeString();
+        console.log('Static HTML loaded');
+        
+        // Try to load the Vite app
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/src/main.tsx';
+        script.onerror = (e) => {
+            console.error('Failed to load main.tsx:', e);
+            document.body.innerHTML += '<p style="color: red;">Failed to load main.tsx</p>';
+        };
+        script.onload = () => {
+            console.log('main.tsx loaded');
+        };
+        document.body.appendChild(script);
+    </script>
+</body>
+</html>

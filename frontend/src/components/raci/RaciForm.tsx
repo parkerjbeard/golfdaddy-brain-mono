@@ -28,8 +28,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { UserSelector } from "./UserSelector";
 import { MultiUserSelector } from "./MultiUserSelector";
 import { User, CreateTaskPayload, CreateTaskResponse } from "@/types/entities";
-import { createRaciTask, getUsers as fetchUsers } from "@/lib/apiService";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
+import api from "@/services/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Define the form schema using Zod
@@ -59,7 +59,8 @@ interface RaciFormProps {
 
 export function RaciForm({ currentUserId, onSubmitSuccess, className }: RaciFormProps) {
   const { toast } = useToast();
-  const { token, loading: authLoading } = useAuth();
+  const { session, loading: authLoading } = useAuth();
+  const token = session?.access_token || null;
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   
   const [allUsers, setAllUsers] = React.useState<User[]>([]);
@@ -81,13 +82,15 @@ export function RaciForm({ currentUserId, onSubmitSuccess, className }: RaciForm
   });
 
   React.useEffect(() => {
-    if (authLoading || !token) {
-      if (!authLoading && !token) {
-         console.warn("RaciForm: No token available, cannot fetch users for selectors.");
-         setUsersLoading(false);
-         setUsersError("Authentication token not available.");
-         setAllUsers([]);
-      }
+    if (authLoading) {
+      return;
+    }
+    
+    if (!session || !token) {
+      console.warn("RaciForm: No session/token available, cannot fetch users for selectors.");
+      setUsersLoading(false);
+      setUsersError("Authentication token not available.");
+      setAllUsers([]);
       return;
     }
 
@@ -96,7 +99,7 @@ export function RaciForm({ currentUserId, onSubmitSuccess, className }: RaciForm
       setUsersLoading(true);
       setUsersError(null);
       try {
-        const fetchedUsers = await fetchUsers(token);
+        const fetchedUsers = await api.users.getUsers();
         setAllUsers(fetchedUsers);
         console.log("RaciForm: Successfully fetched all users:", fetchedUsers.length);
       } catch (error) {
@@ -137,7 +140,7 @@ export function RaciForm({ currentUserId, onSubmitSuccess, className }: RaciForm
     };
 
     try {
-      const { task: createdTask, warnings: apiWarnings } = await createRaciTask(token, payload);
+      const { task: createdTask, warnings: apiWarnings } = await api.tasks.createRaciTask(payload);
       
       // Log the createdTask object to inspect its structure and values
       console.log("API Response - createdTask:", createdTask);

@@ -40,7 +40,7 @@ export type User = z.infer<typeof UserSchema>;
 
 // --- API Fetch Function ---
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'; // Get base URL from env or default
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'; // Changed from /api/v1 to /api
 
 /**
  * Fetches the developer daily summary from the backend.

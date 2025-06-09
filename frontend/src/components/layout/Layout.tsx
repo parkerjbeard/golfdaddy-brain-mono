@@ -1,35 +1,12 @@
-// import { Navbar } from "./Navbar"; // Removed Navbar import
 import { AppSidebar } from "./AppSidebar";
-import { useAuth } from "@/hooks/useAuth";
-import { Navigate } from "react-router-dom";
 import { ReactNode } from "react";
-// Removed SidebarTrigger from here as well, it was part of ui/sidebar, not Navbar itself
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 interface LayoutProps {
   children: ReactNode;
-  requireAuth?: boolean;
 }
 
-export function Layout({ children, requireAuth = true }: LayoutProps) {
-  const { user, loading } = useAuth();
-
-  // Loading state
-  if (loading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <div className="text-center">
-          <div className="h-12 w-12 rounded-full border-4 border-t-primary border-r-transparent border-b-transparent border-l-transparent animate-spin mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Redirect to login if not authenticated
-  if (requireAuth && !user) {
-    return <Navigate to="/login" replace />;
-  }
+export function Layout({ children }: LayoutProps) {
 
   return (
     <SidebarProvider defaultOpen={true}>
