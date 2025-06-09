@@ -3,7 +3,8 @@ import { apiClient } from './client'
 // Helper to create endpoint methods that unwrap API responses
 const createEndpoint = (basePath: string) => ({
   getAll: async (params?: any) => {
-    const result = await apiClient.get(`${basePath}`, params);
+    const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+    const result = await apiClient.get(`${basePath}${queryString}`);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
@@ -49,49 +50,50 @@ const auth = {
 
 // User endpoints
 const users = {
-  ...createEndpoint('/api/users'),
+  ...createEndpoint('/api/v1/users'),
   getCurrentUserProfile: async () => {
-    const result = await apiClient.get('/api/users/me');
+    const result = await apiClient.get('/api/v1/users/me');
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   updateCurrentUser: async (data: any) => {
-    const result = await apiClient.patch('/api/users/me', data);
+    const result = await apiClient.patch('/api/v1/users/me', data);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   getUsersByRole: async (role: string) => {
-    const result = await apiClient.get(`/api/users/by-role/${role}`);
+    const result = await apiClient.get(`/api/v1/users/by-role/${role}`);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   searchUsers: async (query: string) => {
-    const result = await apiClient.get(`/api/users/search?q=${query}`);
+    const result = await apiClient.get(`/api/v1/users/search?q=${query}`);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   getUsers: async (params?: any) => {
-    const result = await apiClient.get('/api/users', params);
+    const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+    const result = await apiClient.get(`/api/v1/users${queryString}`);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   getUser: async (id: string) => {
-    const result = await apiClient.get(`/api/users/${id}`);
+    const result = await apiClient.get(`/api/v1/users/${id}`);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   createUser: async (data: any) => {
-    const result = await apiClient.post('/api/users', data);
+    const result = await apiClient.post('/api/v1/users', data);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   updateUser: async (id: string, data: any) => {
-    const result = await apiClient.put(`/api/users/${id}`, data);
+    const result = await apiClient.put(`/api/v1/users/${id}`, data);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
   deleteUser: async (id: string) => {
-    const result = await apiClient.delete(`/api/users/${id}`);
+    const result = await apiClient.delete(`/api/v1/users/${id}`);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
@@ -106,7 +108,8 @@ const tasks = {
     return result.data;
   },
   getTasks: async (params?: any) => {
-    const result = await apiClient.get('/api/tasks', params);
+    const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+    const result = await apiClient.get(`/api/tasks${queryString}`);
     if (result.error) throw new Error(result.error);
     return result.data;
   },
@@ -134,7 +137,10 @@ const tasks = {
 // Daily reports endpoints
 const dailyReports = {
   ...createEndpoint('/api/daily-reports'),
-  getReports: (params?: any) => apiClient.get('/api/daily-reports', params),
+  getReports: (params?: any) => {
+    const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return apiClient.get(`/api/daily-reports${queryString}`);
+  },
   createReport: (data: any) => apiClient.post('/api/daily-reports', data),
   updateReport: (id: string, data: any) => apiClient.put(`/api/daily-reports/${id}`, data),
   deleteReport: (id: string) => apiClient.delete(`/api/daily-reports/${id}`),
@@ -166,7 +172,10 @@ const developerInsights = {
 const github = {
   getEvents: () => apiClient.get('/api/github/events'),
   syncRepository: (repo: string) => apiClient.post('/api/github/sync', { repository: repo }),
-  getCommits: (params?: any) => apiClient.get('/api/github/commits', params),
+  getCommits: (params?: any) => {
+    const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return apiClient.get(`/api/github/commits${queryString}`);
+  },
 };
 
 // Archive endpoints
@@ -195,12 +204,18 @@ const batch = {
 
 // Search endpoints
 const search = {
-  globalSearch: (query: string, params?: any) => 
-    apiClient.get(`/api/search?q=${query}`, params),
-  searchTasks: (query: string, params?: any) => 
-    apiClient.get(`/api/search/tasks?q=${query}`, params),
-  searchUsers: (query: string, params?: any) => 
-    apiClient.get(`/api/search/users?q=${query}`, params),
+  globalSearch: (query: string, params?: any) => {
+    const additionalParams = params ? `&${new URLSearchParams(params).toString()}` : '';
+    return apiClient.get(`/api/search?q=${query}${additionalParams}`);
+  },
+  searchTasks: (query: string, params?: any) => {
+    const additionalParams = params ? `&${new URLSearchParams(params).toString()}` : '';
+    return apiClient.get(`/api/search/tasks?q=${query}${additionalParams}`);
+  },
+  searchUsers: (query: string, params?: any) => {
+    const additionalParams = params ? `&${new URLSearchParams(params).toString()}` : '';
+    return apiClient.get(`/api/search/users?q=${query}${additionalParams}`);
+  },
 };
 
 export const api = {

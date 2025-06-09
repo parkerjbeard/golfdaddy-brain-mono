@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function CreateRaciTaskPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, session } = useAuth();
+  const token = session?.access_token;
 
   const handleFormSubmitSuccess = (createdTask: any, warnings: string[]) => {
     console.log("Task created:", createdTask);
