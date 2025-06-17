@@ -10,7 +10,13 @@ CREATE TABLE IF NOT EXISTS public.users (
   metadata JSONB DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  github_username TEXT -- Added column
+  github_username TEXT,
+  team_id UUID,
+  reports_to_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  personal_mastery JSONB DEFAULT '{}'::JSONB,
+  last_login_at TIMESTAMPTZ,
+  is_active BOOLEAN DEFAULT TRUE,
+  preferences JSONB DEFAULT '{}'::JSONB
 );
 
 -- Optional: Add a comment for the new column
@@ -73,3 +79,17 @@ DROP TRIGGER IF EXISTS users_updated_at ON public.users;
 CREATE TRIGGER users_updated_at
   BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at(); 
+-- Sync email changes from auth.users to public.users
+CREATE OR REPLACE FUNCTION public.sync_user_email()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE public.users SET email = NEW.email, updated_at = NOW()
+  WHERE id = NEW.id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_email_updated ON auth.users;
+CREATE TRIGGER on_auth_user_email_updated
+  AFTER UPDATE OF email ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.sync_user_email();

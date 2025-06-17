@@ -1,6 +1,7 @@
 from app.models.user import User, UserRole
-from app.models.task import Task, TaskStatus
+
 from app.models.commit import Commit
+from app.models.doc_metadata import DocMetadata
 from app.models.daily_report import (
     DailyReport, 
     DailyReportCreate, 
@@ -9,11 +10,30 @@ from app.models.daily_report import (
     ClarificationRequest,
     ClarificationStatus
 )
+from app.models.daily_commit_analysis import (
+    DailyCommitAnalysis,
+    DailyCommitAnalysisCreate,
+    DailyCommitAnalysisUpdate,
+    DailyCommitAnalysisWithDetails
+)
+from app.models.raci_matrix import (
+    RaciMatrix, 
+    RaciActivity, 
+    RaciRole, 
+    RaciAssignment, 
+    RaciRoleType, 
+    RaciMatrixType,
+    CreateRaciMatrixPayload,
+    UpdateRaciMatrixPayload
+)
 
 __all__ = [
     "User", "UserRole", 
-    "Task", "TaskStatus", 
-    "Commit",
+    "Task", "TaskStatus",
+    "Commit", "DocMetadata",
     "DailyReport", "DailyReportCreate", "DailyReportUpdate",
-    "AiAnalysis", "ClarificationRequest", "ClarificationStatus"
+    "AiAnalysis", "ClarificationRequest", "ClarificationStatus",
+    "DailyCommitAnalysis", "DailyCommitAnalysisCreate", "DailyCommitAnalysisUpdate", "DailyCommitAnalysisWithDetails",
+    "RaciMatrix", "RaciActivity", "RaciRole", "RaciAssignment", "RaciRoleType", "RaciMatrixType",
+    "CreateRaciMatrixPayload", "UpdateRaciMatrixPayload"
 ]

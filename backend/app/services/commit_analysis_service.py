@@ -6,6 +6,7 @@ import json
 import logging
 from uuid import UUID
 import requests
+import asyncio
 
 from app.repositories.commit_repository import CommitRepository
 from app.repositories.user_repository import UserRepository
@@ -14,12 +15,10 @@ from app.integrations.github_integration import GitHubIntegration
 from app.schemas.github_event import CommitPayload
 from app.models.commit import Commit
 from app.models.user import User
-from app.services.documentation_update_service import DocumentationUpdateService
 from app.services.daily_report_service import DailyReportService
 from app.models.daily_report import DailyReport
-# TODO: Import DailyReportService if direct interaction is needed, or pass data through other means
-# from app.services.daily_report_service import DailyReportService 
 from app.config.settings import settings
+# TODO: Import DailyReportService if direct interaction is needed, or pass data through other means
 from app.core.exceptions import ( # New imports for context and future use
     AppExceptionBase,
     ResourceNotFoundError,
@@ -42,7 +41,6 @@ class CommitAnalysisService:
         self.user_repository = UserRepository(supabase)
         self.ai_integration = AIIntegration()
         self.github_integration = GitHubIntegration()
-        self.docs_update_service = None  # Lazy-loaded when needed
         self.daily_report_service = DailyReportService() # Uncommented and initialized
         
         # Simplified point calculation weights
@@ -56,8 +54,8 @@ class CommitAnalysisService:
         }
         
         # Documentation repository name (format: "owner/repo")
-        self.docs_repository = settings.docs_repository
-        self.enable_docs_updates = settings.enable_docs_updates
+        # self.docs_repository = settings.docs_repository # Removed
+        # self.enable_docs_updates = settings.enable_docs_updates # Removed
     
     def _log_separator(self, message="", char="=", length=80):
         """Print a separator line with optional message for visual log grouping."""
@@ -185,9 +183,27 @@ class CommitAnalysisService:
                 "deletions": commit_data.get("deletions", 0)
             }
             
-            # Call AI integration with the structured data
-            logger.info("Sending commit data to AI for analysis...")
-            analysis_result = await self.ai_integration.analyze_commit_diff(ai_commit_data)
+            # Check if individual commit analysis should be skipped in favor of daily batch analysis
+            if settings.SKIP_INDIVIDUAL_COMMIT_ANALYSIS:
+                logger.info("Skipping individual commit AI analysis (daily batch analysis enabled)")
+                # Create a minimal analysis result without AI call
+                analysis_result = {
+                    "complexity_score": 5,  # Default value
+                    "estimated_hours": 0.0,  # Will be overridden by daily analysis
+                    "risk_level": "medium",
+                    "seniority_score": 5,
+                    "seniority_rationale": "Skipped individual analysis - will be analyzed in daily batch",
+                    "key_changes": [],
+                    "analyzed_at": datetime.now().isoformat(),
+                    "commit_hash": commit_hash,
+                    "repository": commit_data.get("repository", ""),
+                    "model_used": "none (batch analysis mode)",
+                    "batch_analysis_pending": True
+                }
+            else:
+                # Call AI integration with the structured data
+                logger.info("Sending commit data to AI for analysis...")
+                analysis_result = await self.ai_integration.analyze_commit_diff(ai_commit_data)
 
             # --- New EOD/Code Quality Integration Point --- 
             # TODO: Fetch relevant EOD report from DailyReportService for this user & date.
@@ -379,7 +395,9 @@ class CommitAnalysisService:
 
             # 5. Save analysis results to DB (Upsert)
             logger.info(f"Saving commit analysis to database...")
-            saved_commit = self.commit_repository.save_commit(commit_to_save)
+            saved_commit = await asyncio.to_thread(
+                self.commit_repository.save_commit, commit_to_save
+            )
             
             if saved_commit:
                 logger.info(f"✓ Successfully saved commit analysis to database")
@@ -587,7 +605,7 @@ class CommitAnalysisService:
             logger.info(f"Commit metadata: {json.dumps(metadata)}")
             
             # 1. Check if commit is already in DB
-            existing_commit = self.commit_repository.get_commit_by_hash(commit_hash)
+            existing_commit = await self.commit_repository.get_commit_by_hash(commit_hash)
             if existing_commit:
                 logger.info(f"✓ Commit {commit_hash} already exists in database")
                 # If existing and has analysis, we could skip or perform re-analysis 
@@ -628,7 +646,6 @@ class CommitAnalysisService:
             
             if analyzed_commit:
                 logger.info(f"✓ Commit analysis completed successfully")
-                self._scan_documentation_for_updates(analyzed_commit, commit_data.repository_name, commit_data_dict_for_analysis, scan_docs)
                 self._log_separator(f"END: COMMIT {commit_hash} PROCESSED", "=")
                 return analyzed_commit
             else:
@@ -648,94 +665,3 @@ class CommitAnalysisService:
                 logger.exception(f"❌ Error processing commit (unknown hash): {e}")
                 self._log_separator("ERROR PROCESSING UNKNOWN COMMIT", "=")
             return None
-    
-    def _scan_documentation_for_updates(self, analyzed_commit: Commit, repository: str, commit_data: Dict[str, Any], scan_docs: Optional[bool] = None) -> None:
-        """
-        Scan documentation and propose updates based on commit analysis.
-        
-        Args:
-            analyzed_commit: The analyzed commit object
-            repository: Repository name in owner/repo format
-            commit_data: Original commit data
-            scan_docs: Whether to scan documentation (None = use global setting, True = force enable, False = force disable)
-        """
-        try:
-            # Determine if we should scan documentation
-            should_scan = self.enable_docs_updates if scan_docs is None else scan_docs
-            
-            # Skip if documentation scanning is disabled
-            if not should_scan:
-                logger.info("Documentation scanning skipped - feature is disabled")
-                return
-                
-            # Skip if no docs repository is configured
-            docs_repo = self.docs_repository
-            if not docs_repo:
-                # Try to determine docs repository from environment or settings
-                # Format: If main repo is 'owner/repo', docs repo could be 'owner/repo-docs'
-                if repository:
-                    parts = repository.split('/')
-                    if len(parts) == 2:
-                        owner, repo = parts
-                        docs_repo = f"{owner}/{repo}-docs"
-                        logger.info(f"Using derived docs repository: {docs_repo}")
-                
-                if not docs_repo:
-                    logger.info("Documentation scanning skipped - no docs repository configured")
-                    return
-            
-            # Initialize documentation update service if not already done
-            if self.docs_update_service is None:
-                try:
-                    self.docs_update_service = DocumentationUpdateService()
-                except Exception as e:
-                    logger.error(f"❌ Could not initialize DocumentationUpdateService: {e}", exc_info=True)
-                    return
-            
-            logger.info(f"Scanning documentation in {docs_repo} for potential updates...")
-            
-            # Prepare the commit analysis result data for the documentation scan
-            analysis_data = {
-                "commit_hash": analyzed_commit.commit_hash,
-                "message": commit_data.get("message", ""),
-                "repository": repository,
-                "files_changed": commit_data.get("files_changed", []),
-                "complexity_score": analyzed_commit.ai_points,
-                "seniority_score": analyzed_commit.seniority_score,
-                "key_changes": commit_data.get("diff_data", {}).get("key_changes", []),
-                "technical_debt": commit_data.get("diff_data", {}).get("technical_debt", []),
-                "suggestions": commit_data.get("diff_data", {}).get("suggestions", [])
-            }
-            
-            # Call the documentation update service to analyze the documentation
-            docs_analysis = self.docs_update_service.analyze_documentation(
-                docs_repo_name=docs_repo,
-                commit_analysis_result=analysis_data,
-                source_repo_name=repository
-            )
-            
-            # If documentation changes are needed, create a pull request
-            if docs_analysis and docs_analysis.get("changes_needed", False):
-                proposed_changes = docs_analysis.get("proposed_changes", [])
-                if proposed_changes:
-                    logger.info(f"Documentation changes needed: {len(proposed_changes)} files")
-                    
-                    # Create a pull request with the proposed changes
-                    pr_result = self.docs_update_service.create_pull_request(
-                        docs_repo_name=docs_repo,
-                        proposed_changes=proposed_changes,
-                        commit_analysis=analysis_data
-                    )
-                    
-                    if pr_result.get("status") == "success":
-                        logger.info(f"✓ Created documentation update PR: {pr_result.get('pull_request_url')}")
-                    else:
-                        logger.warning(f"⚠ Failed to create documentation PR: {pr_result.get('message')}")
-                else:
-                    logger.info("No specific documentation changes proposed")
-            else:
-                logger.info("No documentation updates needed")
-        
-        except Exception as e:
-            logger.exception(f"❌ Error during documentation scan: {e}")
-            # Don't fail the whole process if documentation scanning fails

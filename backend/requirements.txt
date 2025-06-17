@@ -18,3 +18,5 @@ PyGithub>=2.1.0
 SQLAlchemy
 psycopg2-binary
 asyncpg
+PyYAML
+slack-sdk>=3.26.0

@@ -19,6 +19,10 @@ class CommitPayload(BaseModel):
     deletions: Optional[int] = Field(None, description="Number of deletions in the commit")
     parent_commit: Optional[str] = Field(None, description="SHA of the parent commit")
     
+    # Additional fields for compatibility
+    repository: Optional[str] = Field(None, description="Full repository name in owner/repo format")
+    diff_data: Optional[str] = Field(None, description="Alias for commit_diff")
+    
     class Config:
         from_attributes = True # Replaced orm_mode
         str_strip_whitespace = True

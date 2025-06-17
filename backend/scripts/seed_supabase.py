@@ -16,11 +16,9 @@ backend_app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 sys.path.append(backend_app_path)
 
 from app.models.user import User, UserRole
-from app.models.task import Task, TaskStatus
 # from app.models.commit import Commit # Not seeding commits in this version
 
 from app.repositories.user_repository import UserRepository
-from app.repositories.task_repository import TaskRepository
 
 # --- Configuration ---
 # Load .env from the backend directory (one level up from scripts directory)
@@ -48,7 +46,6 @@ except Exception as e:
     exit(1)
 
 user_repo = UserRepository(client=supabase_admin)
-task_repo = TaskRepository(client=supabase_admin)
 
 # --- Test Data Definitions ---
 test_users_data = [
@@ -184,64 +181,7 @@ async def seed_users():
     return created_user_objects
 
 
-async def seed_tasks(users: List[User]):
-    print("\\n--- Seeding Tasks ---")
-    if not users:
-        print("  No users provided to seed tasks. Skipping.")
-        return []
 
-    created_tasks_objects = []
-    
-    dev_user = next((u for u in users if u.role == UserRole.DEVELOPER), users[0] if users else None)
-    manager_user = next((u for u in users if u.role == UserRole.MANAGER), users[-1] if users else None)
-
-    if not dev_user or not manager_user:
-        print("  Could not find suitable developer/manager users for task assignment. Skipping task seeding.")
-        return []
-
-    sample_tasks_data = [
-        {
-            "title": "Implement Feature Alpha Login", "description": "Detailed description for feature Alpha login flow.",
-            "assignee_id": dev_user.id, "responsible_id": dev_user.id, "accountable_id": manager_user.id,
-            "creator_id": manager_user.id, "status": TaskStatus.ASSIGNED, "priority": "HIGH",
-            "due_date": datetime.now(timezone.utc) + timedelta(days=7)
-        },
-        {
-            "title": "Fix Bug #1024 - User Profile Crash", "description": "Investigate and fix critical bug causing profile page to crash.",
-            "assignee_id": dev_user.id, "responsible_id": dev_user.id, "accountable_id": manager_user.id,
-            "creator_id": manager_user.id, "status": TaskStatus.IN_PROGRESS, "priority": "CRITICAL",
-            "tags": ["bugfix", "critical", "profile"], "estimated_hours": Decimal("8.5")
-        },
-        {
-            "title": "Write API Documentation for /tasks", "description": "User and developer documentation for all /tasks API endpoints.",
-            "assignee_id": dev_user.id, "responsible_id": dev_user.id, "accountable_id": manager_user.id,
-            "creator_id": manager_user.id, "status": TaskStatus.BLOCKED, "priority": "MEDIUM",
-            "blocked": True, "blocked_reason": "Waiting for final API spec from Project Lead.",
-            "consulted_ids": [manager_user.id] 
-        }
-    ]
-
-    for task_data_dict in sample_tasks_data:
-        # Ensure all UUIDs are actual UUID objects from Pydantic model fields
-        task_data_dict["assignee_id"] = UUID(str(task_data_dict["assignee_id"]))
-        task_data_dict["responsible_id"] = UUID(str(task_data_dict["responsible_id"]))
-        task_data_dict["accountable_id"] = UUID(str(task_data_dict["accountable_id"]))
-        task_data_dict["creator_id"] = UUID(str(task_data_dict["creator_id"]))
-        if "consulted_ids" in task_data_dict and task_data_dict["consulted_ids"]:
-            task_data_dict["consulted_ids"] = [UUID(str(uid)) for uid in task_data_dict["consulted_ids"]]
-
-        # Create Task Pydantic model instance
-        task_to_create = Task(**task_data_dict)
-        
-        print(f"  Creating task: {task_to_create.title}...")
-        created_task_db = await task_repo.create_task(task_to_create)
-        if created_task_db:
-            print(f"    Successfully created task '{created_task_db.title}' (ID: {created_task_db.id})")
-            created_tasks_objects.append(created_task_db)
-        else:
-            print(f"    Failed to create task: {task_to_create.title}")
-            
-    return created_tasks_objects
 
 async def get_user_jwt(email, password):
     print(f"\\n--- Attempting to sign in user {email} to get JWT ---")
@@ -280,17 +220,7 @@ async def main():
             role_display = 'N/A'
         print(f"  - ID: {user_obj.id}, Email: {user_obj.email}, Name: {user_obj.name}, Role: {role_display}")
 
-    seeded_tasks = await seed_tasks(seeded_users)
-    if seeded_tasks:
-        print("\\nSuccessfully seeded tasks:")
-        for task_obj in seeded_tasks:
-            status_display = task_obj.status
-            if hasattr(task_obj.status, 'value'):
-                status_display = task_obj.status.value
-            if status_display is None:
-                status_display = 'N/A'
 
-            print(f"  - ID: {task_obj.id}, Title: {task_obj.title}, Status: {status_display}, Assignee: {task_obj.assignee_id}")
     
     if seeded_users:
         user_to_login_def = test_users_data[0] 

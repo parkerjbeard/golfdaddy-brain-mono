@@ -4,171 +4,187 @@ from uuid import UUID
 import logging
 from datetime import datetime
 
-from app.models.task import Task, TaskStatus
 from app.models.user import User
-from app.repositories.task_repository import TaskRepository
+from app.models.raci_matrix import (
+    RaciMatrix, CreateRaciMatrixPayload, UpdateRaciMatrixPayload,
+    RaciMatrixType, RaciActivity, RaciRole, RaciAssignment
+)
 from app.repositories.user_repository import UserRepository
+from app.repositories.raci_matrix_repository import RaciMatrixRepository
 from app.core.exceptions import ResourceNotFoundError, DatabaseError, BadRequestError
-# from app.services.notification_service import NotificationService # Potential circular dependency, handle carefully
 
 logger = logging.getLogger(__name__)
 
 class RaciService:
-    """Service for enforcing RACI rules for tasks."""
+    """Service for managing RACI matrices and validating RACI assignments."""
     
     def __init__(self):
         # Instantiate repositories directly
         # In a larger app, consider dependency injection framework
-        self.task_repo = TaskRepository()
         self.user_repo = UserRepository()
-        # self.notification_service = NotificationService() # Be careful with circular dependencies
+        self.matrix_repo = RaciMatrixRepository()
+
+    # RACI Matrix Management Methods
     
-    async def register_raci_assignments(
-        self,
-        title: str,
-        description: str,
-        assignee_id: UUID,
-        creator_id: UUID,
-        responsible_id: Optional[UUID] = None,
-        accountable_id: Optional[UUID] = None,
-        consulted_ids: Optional[List[UUID]] = None,
-        informed_ids: Optional[List[UUID]] = None,
-        due_date: Optional[datetime] = None,
-        task_type: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Optional[Task], List[str]]:
-        """Validates RACI roles, creates a Task object with all details, persists it, and returns task with warnings."""
+    async def get_all_matrices(self) -> List[RaciMatrix]:
+        """Get all active RACI matrices."""
+        return await self.matrix_repo.get_all_matrices()
+    
+    async def get_matrix_by_id(self, matrix_id: UUID) -> Optional[RaciMatrix]:
+        """Get a specific RACI matrix by ID."""
+        return await self.matrix_repo.get_matrix_by_id(matrix_id)
+    
+    async def get_matrices_by_type(self, matrix_type: RaciMatrixType) -> List[RaciMatrix]:
+        """Get RACI matrices by type."""
+        return await self.matrix_repo.get_matrices_by_type(matrix_type)
+    
+    async def create_matrix(self, payload: CreateRaciMatrixPayload, created_by: UUID) -> Tuple[RaciMatrix, List[str]]:
+        """Create a new RACI matrix with validation."""
         warnings = []
-
-        # Validate critical user IDs first
-        creator = await self.user_repo.get_user_by_id(creator_id)
+        
+        # Validate that the creator exists
+        creator = await self.user_repo.get_user_by_id(created_by)
         if not creator:
-            raise ResourceNotFoundError(resource_name="Creator User", resource_id=str(creator_id))
+            raise ResourceNotFoundError(resource_name="Creator User", resource_id=str(created_by))
         
-        assignee = await self.user_repo.get_user_by_id(assignee_id)
-        if not assignee:
-            raise ResourceNotFoundError(resource_name="Assignee User", resource_id=str(assignee_id))
-
-        # Defaulting logic for responsible and accountable
-        if not responsible_id:
-            responsible_id = assignee_id
-            warnings.append(f"Responsible ID not provided, defaulted to assignee ID: {assignee_id}")
-        else:
-            responsible_user = await self.user_repo.get_user_by_id(responsible_id)
-            if not responsible_user:
-                raise ResourceNotFoundError(resource_name="Responsible User", resource_id=str(responsible_id))
-        
-        if not accountable_id:
-            accountable_id = assignee_id # Example, might need better logic
-            warnings.append(f"Accountable ID not provided, defaulted to assignee ID: {assignee_id}. Review required.")
-        else:
-            accountable_user = await self.user_repo.get_user_by_id(accountable_id)
-            if not accountable_user:
-                raise ResourceNotFoundError(resource_name="Accountable User", resource_id=str(accountable_id))
-
-        # Validate non-critical user IDs (consulted, informed) and collect warnings
-        valid_consulted_ids = []
-        if consulted_ids:
-            for user_id_to_check in consulted_ids:
-                user = await self.user_repo.get_user_by_id(user_id_to_check)
+        # Validate role assignments against real users if user_id is specified
+        for role in payload.roles:
+            if role.user_id:
+                user = await self.user_repo.get_user_by_id(role.user_id)
                 if not user:
-                    warn_msg = f"Consulted user ID {user_id_to_check} not found and will be omitted."
+                    warn_msg = f"User ID {role.user_id} for role '{role.name}' not found. Role will be created but not linked to a user."
                     logger.warning(warn_msg)
                     warnings.append(warn_msg)
-                else:
-                    valid_consulted_ids.append(user_id_to_check)
         
-        valid_informed_ids = []
-        if informed_ids:
-            for user_id_to_check in informed_ids:
-                user = await self.user_repo.get_user_by_id(user_id_to_check)
-                if not user:
-                    warn_msg = f"Informed user ID {user_id_to_check} not found and will be omitted."
-                    logger.warning(warn_msg)
-                    warnings.append(warn_msg)
-                else:
-                    valid_informed_ids.append(user_id_to_check)
-
-        # Construct the Task Pydantic model
-        task_data = Task(
-            title=title,
-            description=description,
-            assignee_id=assignee_id,
-            responsible_id=responsible_id, # Already validated or defaulted from validated assignee
-            accountable_id=accountable_id, # Already validated or defaulted from validated assignee
-            consulted_ids=valid_consulted_ids, # Use validated list
-            informed_ids=valid_informed_ids,   # Use validated list
-            creator_id=creator_id, # Validated
-            due_date=due_date,
-            status=TaskStatus.ASSIGNED, # Default status
-            task_type=task_type,
-            metadata=metadata if metadata else {},
-            # id, created_at, updated_at will be set by DB or repo
-        )
+        # Validate that all assignments reference valid activities and roles
+        activity_ids = {activity.id for activity in payload.activities}
+        role_ids = {role.id for role in payload.roles}
         
-        # Persist the task
-        created_task = await self.task_repo.create_task(task_data)
+        valid_assignments = []
+        for assignment in payload.assignments:
+            if assignment.activity_id not in activity_ids:
+                warn_msg = f"Assignment references invalid activity ID: {assignment.activity_id}"
+                logger.warning(warn_msg)
+                warnings.append(warn_msg)
+                continue
+            
+            if assignment.role_id not in role_ids:
+                warn_msg = f"Assignment references invalid role ID: {assignment.role_id}"
+                logger.warning(warn_msg)
+                warnings.append(warn_msg)
+                continue
+            
+            valid_assignments.append(assignment)
         
-        if not created_task:
-            logger.error(f"Task persistence failed after RACI assignment for description: {description[:50]}...")
-            raise DatabaseError("Failed to save the task to the database after RACI assignment.")
-                
-        logger.info(f"RACI roles assigned and task {created_task.id} created successfully with {len(warnings)} warnings.")
-        return created_task, warnings
+        # Update payload with valid assignments
+        payload.assignments = valid_assignments
+        
+        # Create the matrix
+        matrix = await self.matrix_repo.create_matrix(payload, created_by)
+        
+        logger.info(f"RACI matrix '{matrix.name}' created successfully with {len(warnings)} warnings.")
+        return matrix, warnings
     
-    async def raci_validation(self, task_id: UUID) -> Tuple[bool, List[str]]:
-        """
-        Validate RACI roles for an existing task.
-        Returns: Tuple of (is_valid, List[str]) where the list contains errors
-        """
+    async def update_matrix(self, matrix_id: UUID, payload: UpdateRaciMatrixPayload) -> Tuple[Optional[RaciMatrix], List[str]]:
+        """Update an existing RACI matrix with validation."""
+        warnings = []
+        
+        # Check if matrix exists
+        existing_matrix = await self.matrix_repo.get_matrix_by_id(matrix_id)
+        if not existing_matrix:
+            raise ResourceNotFoundError(resource_name="RACI Matrix", resource_id=str(matrix_id))
+        
+        # Validate role assignments against real users if user_id is specified
+        if payload.roles:
+            for role in payload.roles:
+                if role.user_id:
+                    user = await self.user_repo.get_user_by_id(role.user_id)
+                    if not user:
+                        warn_msg = f"User ID {role.user_id} for role '{role.name}' not found. Role will be updated but not linked to a user."
+                        logger.warning(warn_msg)
+                        warnings.append(warn_msg)
+        
+        # Validate assignments if provided
+        if payload.assignments and payload.activities and payload.roles:
+            activity_ids = {activity.id for activity in payload.activities}
+            role_ids = {role.id for role in payload.roles}
+            
+            valid_assignments = []
+            for assignment in payload.assignments:
+                if assignment.activity_id not in activity_ids:
+                    warn_msg = f"Assignment references invalid activity ID: {assignment.activity_id}"
+                    logger.warning(warn_msg)
+                    warnings.append(warn_msg)
+                    continue
+                
+                if assignment.role_id not in role_ids:
+                    warn_msg = f"Assignment references invalid role ID: {assignment.role_id}"
+                    logger.warning(warn_msg)
+                    warnings.append(warn_msg)
+                    continue
+                
+                valid_assignments.append(assignment)
+            
+            payload.assignments = valid_assignments
+        
+        # Update the matrix
+        updated_matrix = await self.matrix_repo.update_matrix(matrix_id, payload)
+        
+        if updated_matrix:
+            logger.info(f"RACI matrix '{updated_matrix.name}' updated successfully with {len(warnings)} warnings.")
+        
+        return updated_matrix, warnings
+    
+    async def delete_matrix(self, matrix_id: UUID) -> bool:
+        """Soft delete a RACI matrix."""
+        existing_matrix = await self.matrix_repo.get_matrix_by_id(matrix_id)
+        if not existing_matrix:
+            raise ResourceNotFoundError(resource_name="RACI Matrix", resource_id=str(matrix_id))
+        
+        result = await self.matrix_repo.delete_matrix(matrix_id)
+        
+        if result:
+            logger.info(f"RACI matrix '{existing_matrix.name}' deleted successfully.")
+        
+        return result
+    
+    async def validate_matrix_assignments(self, matrix_id: UUID) -> Tuple[bool, List[str]]:
+        """Validate all assignments in a RACI matrix."""
         errors = []
-        task = await self.task_repo.get_task_by_id(task_id)
         
-        if not task:
-            return False, ["Task not found"]
+        matrix = await self.matrix_repo.get_matrix_by_id(matrix_id)
+        if not matrix:
+            return False, ["Matrix not found"]
         
-        if not task.responsible_id:
-            errors.append("Missing Responsible role")
-        if not task.accountable_id:
-            errors.append("Missing Accountable role")
+        activity_ids = {activity.id for activity in matrix.activities}
+        role_ids = {role.id for role in matrix.roles}
         
-        all_user_ids_to_check = set()
-        if task.assignee_id: all_user_ids_to_check.add(task.assignee_id)
-        if task.responsible_id: all_user_ids_to_check.add(task.responsible_id)
-        if task.accountable_id: all_user_ids_to_check.add(task.accountable_id)
-        if task.creator_id: all_user_ids_to_check.add(task.creator_id)
-        if task.consulted_ids: all_user_ids_to_check.update(task.consulted_ids)
-        if task.informed_ids: all_user_ids_to_check.update(task.informed_ids)
+        # Check for invalid references in assignments
+        for assignment in matrix.assignments:
+            if assignment.activity_id not in activity_ids:
+                errors.append(f"Assignment references invalid activity ID: {assignment.activity_id}")
+            
+            if assignment.role_id not in role_ids:
+                errors.append(f"Assignment references invalid role ID: {assignment.role_id}")
         
-        for user_id_val in filter(None, all_user_ids_to_check):
-            user = await self.user_repo.get_user_by_id(user_id_val)
-            if not user:
-                errors.append(f"User with ID {user_id_val} in RACI/task roles not found")
+        # Check for missing critical assignments (each activity should have at least one R and one A)
+        for activity in matrix.activities:
+            activity_assignments = [a for a in matrix.assignments if a.activity_id == activity.id]
+            
+            has_responsible = any(a.role == "R" for a in activity_assignments)
+            has_accountable = any(a.role == "A" for a in activity_assignments)
+            
+            if not has_responsible:
+                errors.append(f"Activity '{activity.name}' has no Responsible (R) assignment")
+            
+            if not has_accountable:
+                errors.append(f"Activity '{activity.name}' has no Accountable (A) assignment")
+        
+        # Check for user references that don't exist
+        for role in matrix.roles:
+            if role.user_id:
+                user = await self.user_repo.get_user_by_id(role.user_id)
+                if not user:
+                    errors.append(f"Role '{role.name}' references non-existent user ID: {role.user_id}")
         
         return len(errors) == 0, errors
-    
-    async def escalate_blocked_task(self, task_id: UUID):
-        """Handles escalation logic when a task is marked as blocked."""
-        task = await self.task_repo.get_task_by_id(task_id)
-        if not task or task.status != TaskStatus.BLOCKED:
-            logger.warning(f"Escalation requested for non-blocked or non-existent task {task_id}")
-            return
-
-        accountable_user: Optional[User] = None
-        if task.accountable_id:
-            accountable_user = await self.user_repo.get_user_by_id(task.accountable_id)
-            if not accountable_user:
-                # If accountable user is critical for escalation, this could be an error
-                logger.error(f"Accountable user {task.accountable_id} not found for escalating task {task.id}. Escalation cannot proceed.")
-                # Consider raising ResourceNotFoundError or handling as a critical failure of escalation
-                # For now, just logging and returning, as per original logic of not doing much more.
-                return 
-
-        if accountable_user: # This check is now more robust
-            logger.info(f"Escalating blocked task {task.id} to Accountable user {accountable_user.id} (Slack: {getattr(accountable_user, 'slack_id', 'N/A')})")
-            # TODO: Integrate with NotificationService.blocked_task_alert or a specific escalation notification
-            # This would require NotificationService to be injectable or accessible here.
-            # Example: await self.notification_service.notify_escalation(task, accountable_user, reason="Task Blocked")
-            pass 
-
-    # Add other RACI related business logic methods here

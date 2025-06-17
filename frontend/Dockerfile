@@ -4,7 +4,9 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
+# Clean install to avoid platform-specific module issues
+RUN rm -rf node_modules package-lock.json && \
+    npm install --legacy-peer-deps
 
 # Copy the rest of the application
 COPY . .

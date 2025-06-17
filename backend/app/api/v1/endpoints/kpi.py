@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from uuid import UUID
 from datetime import date, datetime, timedelta, timezone # Ensure timezone is imported for utcnow()
 
-from app.services.kpi_service import KpiService
+from app.services.kpi_service import KpiService, UserWidgetSummary # Added UserWidgetSummary
 from app.models.user import User, UserRole # For dependency injection and auth roles
 # from app.services.auth_service import get_current_active_user # Placeholder for auth
 from app.core.exceptions import PermissionDeniedError, BadRequestError, ResourceNotFoundError, DatabaseError # New import
@@ -15,6 +15,36 @@ router = APIRouter()
 # Create a function to get KpiService instance
 def get_kpi_service():
     return KpiService()
+
+@router.get("/test-kpi") # New test endpoint
+async def test_kpi_endpoint():
+    return {"message": "KPI router is working!"}
+
+@router.get("/performance/widget-summaries", response_model=List[UserWidgetSummary])
+async def get_all_user_widget_summaries(
+    startDate: date = Query(..., description="Start date for the summary period (YYYY-MM-DD)."),
+    endDate: date = Query(..., description="End date for the summary period (YYYY-MM-DD)."),
+    kpi_service: KpiService = Depends(get_kpi_service),
+    # current_user: User = Depends(get_current_active_user) # TODO: Add auth, ensure manager can view
+):
+    """
+    Retrieve widget summaries (total AI estimated commit hours) for all relevant users
+    within a specified date range.
+    """
+    if startDate > endDate:
+        raise HTTPException(status_code=400, detail="Start date cannot be after end date.")
+    
+    # KpiService expects datetime objects for its internal logic, ensure timezone awareness
+    # The service method get_bulk_widget_summaries now handles .date() conversion internally if needed by commit_repo
+    start_datetime = datetime.combine(startDate, datetime.min.time(), tzinfo=timezone.utc)
+    end_datetime = datetime.combine(endDate, datetime.max.time(), tzinfo=timezone.utc) # Use max time for inclusivity
+
+    try:
+        summaries = await kpi_service.get_bulk_widget_summaries(start_datetime, end_datetime)
+        return summaries
+    except Exception as e:
+        logger.error(f"Error fetching bulk widget summaries: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while fetching widget summaries.")
 
 @router.get("/user-summary/{user_id}", response_model=Dict[str, Any]) # Path updated for clarity
 async def get_user_kpi_summary(

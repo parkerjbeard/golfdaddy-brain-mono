@@ -1,6 +1,7 @@
 import logging
 import sys
 import types
+import asyncio
 from unittest.mock import MagicMock
 
 # Provide a stub 'github' module if PyGithub is unavailable
@@ -50,7 +51,7 @@ def test_auto_doc_flow(monkeypatch):
     client.github = MagicMock()
     client.github.get_repo.return_value = mock_repo
 
-    patch = client.analyze_diff(SAMPLE_DIFF)
+    patch = asyncio.run(client.analyze_diff(SAMPLE_DIFF))
     assert "New content added" in patch
 
     approved = client.propose_via_slack(patch)

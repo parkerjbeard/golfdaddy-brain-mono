@@ -20,7 +20,7 @@ class AIIntegration:
     
     def __init__(self):
         """Initialize the OpenAI integration with API key from settings."""
-        self.api_key = settings.openai_api_key
+        self.api_key = settings.OPENAI_API_KEY
         if not self.api_key:
             # In a production system, consider raising an error or having a clear fallback
             logger.error("OpenAI API key not configured in settings. AIIntegration may not function.")
@@ -29,9 +29,9 @@ class AIIntegration:
         else:
             self.client = AsyncOpenAI(api_key=self.api_key)
         
-        self.model = settings.openai_model or "gpt-4-0125-preview"  # General purpose model
-        self.code_quality_model = settings.code_quality_model or self.model # Use specific or fallback to general
-        self.eod_analysis_model = settings.eod_analysis_model or self.model # Model for EOD analysis
+        self.model = settings.OPENAI_MODEL or "gpt-4-0125-preview"  # General purpose model
+        self.code_quality_model = settings.CODE_QUALITY_MODEL or self.model # Use specific or fallback to general
+        self.eod_analysis_model = settings.OPENAI_MODEL or self.model # Model for EOD analysis
         
         # Models that might have different parameter support (e.g., for temperature)
         self.reasoning_models = [
@@ -380,6 +380,198 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
             "error_message": error_message
         }
 
+    async def process_eod_clarification(
+        self, 
+        original_report: str, 
+        user_message: str, 
+        conversation_history: List[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """
+        Process a user's clarification message in the context of their EOD report.
+        Determines if more clarification is needed or if the conversation is complete.
+        """
+        logger.info("Processing EOD clarification conversation")
+        if not self.client:
+            logger.error("AI client not available for EOD clarification")
+            return {
+                "response": "I'm having trouble processing your response. Please try again.",
+                "needs_clarification": False,
+                "conversation_complete": False,
+                "error": "AI client not initialized"
+            }
+        
+        # Build conversation context
+        conversation_context = f"Original EOD Report:\n{original_report}\n\n"
+        if conversation_history:
+            conversation_context += "Previous conversation:\n"
+            for exchange in conversation_history[-5:]:  # Last 5 exchanges
+                conversation_context += f"User: {exchange.get('user', '')}\n"
+                conversation_context += f"AI: {exchange.get('ai', '')}\n\n"
+        
+        prompt = f"""{conversation_context}
+        
+        Latest user message: {user_message}
+        
+        Based on the original report and conversation, please analyze the user's response and provide a JSON object with:
+        - "response": Your response to the user (be conversational and helpful)
+        - "needs_clarification": Boolean indicating if you still need more information
+        - "conversation_complete": Boolean indicating if you have all the information needed
+        - "updated_summary": If you now have enough information, provide an updated summary of their work
+        - "updated_hours": If you can now estimate hours more accurately, provide the updated estimate (float)
+        - "key_insights": List of any new key achievements or insights from the clarification
+        
+        Be friendly and conversational. If the user provides the requested clarification, acknowledge it and update your understanding.
+        """
+        
+        api_params = {
+            "model": self.eod_analysis_model,
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": "You are a helpful AI assistant processing end-of-day work reports. Be conversational and extract clear information about work completed."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.3
+        }
+        
+        try:
+            response = await self._make_openai_call(api_params)
+            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
+                result = json.loads(response.choices[0].message.content)
+                
+                # Ensure all expected fields exist
+                result.setdefault("response", "Thank you for the clarification.")
+                result.setdefault("needs_clarification", False)
+                result.setdefault("conversation_complete", True)
+                result.setdefault("updated_summary", None)
+                result.setdefault("updated_hours", None)
+                result.setdefault("key_insights", [])
+                
+                logger.info(f"EOD clarification processed. Needs more info: {result['needs_clarification']}")
+                return result
+            else:
+                logger.error("AI response for EOD clarification was empty")
+                return {
+                    "response": "I understand. Thank you for the information.",
+                    "needs_clarification": False,
+                    "conversation_complete": True,
+                    "error": "Empty AI response"
+                }
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse EOD clarification response: {e}", exc_info=True)
+            return {
+                "response": "I understand. Thank you for the clarification.",
+                "needs_clarification": False,
+                "conversation_complete": True,
+                "error": f"JSON decode error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Error processing EOD clarification: {e}", exc_info=True)
+            return {
+                "response": "I'm having trouble processing that. Could you please rephrase?",
+                "needs_clarification": True,
+                "conversation_complete": False,
+                "error": str(e)
+            }
+    
+    async def analyze_semantic_similarity(
+        self, 
+        text1: str, 
+        text2: str, 
+        context: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Analyze semantic similarity between two pieces of text.
+        Used for deduplication between commits and daily reports.
+        """
+        logger.info("Analyzing semantic similarity for deduplication")
+        if not self.client:
+            logger.error("AI client not available for similarity analysis")
+            return {"similarity_score": 0.0, "is_duplicate": False, "reasoning": "AI client not available"}
+        
+        prompt = f"""Compare these two work descriptions and determine if they describe the same work:
+
+        Text 1: {text1}
+        Text 2: {text2}
+        """
+        
+        if context:
+            prompt += f"\nAdditional context: {context}"
+        
+        prompt += """
+        
+        Provide a JSON response with:
+        - "similarity_score": A float between 0.0 (completely different) and 1.0 (identical work)
+        - "is_duplicate": Boolean indicating if these describe the same work (true if similarity > 0.7)
+        - "reasoning": Brief explanation of your assessment
+        - "overlapping_aspects": List of specific aspects that overlap
+        - "unique_to_text1": List of aspects unique to the first text
+        - "unique_to_text2": List of aspects unique to the second text
+        """
+        
+        api_params = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert at analyzing work descriptions and identifying duplicates. Be precise in identifying whether two descriptions refer to the same work."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.1  # Low temperature for consistency
+        }
+        
+        try:
+            response = await self._make_openai_call(api_params)
+            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
+                result = json.loads(response.choices[0].message.content)
+                
+                # Ensure all fields exist
+                result.setdefault("similarity_score", 0.0)
+                result.setdefault("is_duplicate", result["similarity_score"] > 0.7)
+                result.setdefault("reasoning", "")
+                result.setdefault("overlapping_aspects", [])
+                result.setdefault("unique_to_text1", [])
+                result.setdefault("unique_to_text2", [])
+                
+                logger.info(f"Similarity analysis complete. Score: {result['similarity_score']}")
+                return result
+            else:
+                logger.error("AI response for similarity analysis was empty")
+                return {
+                    "similarity_score": 0.0,
+                    "is_duplicate": False,
+                    "reasoning": "AI response was empty",
+                    "overlapping_aspects": [],
+                    "unique_to_text1": [],
+                    "unique_to_text2": []
+                }
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse similarity analysis response: {e}", exc_info=True)
+            return {
+                "similarity_score": 0.0,
+                "is_duplicate": False,
+                "reasoning": f"JSON decode error: {str(e)}",
+                "overlapping_aspects": [],
+                "unique_to_text1": [],
+                "unique_to_text2": []
+            }
+        except Exception as e:
+            logger.error(f"Error in similarity analysis: {e}", exc_info=True)
+            return {
+                "similarity_score": 0.0,
+                "is_duplicate": False,
+                "reasoning": f"Error: {str(e)}",
+                "overlapping_aspects": [],
+                "unique_to_text1": [],
+                "unique_to_text2": []
+            }
+
     async def analyze_commit_code_quality(self, commit_diff: str, commit_message: str) -> Dict[str, Any]:
         """
         Analyzes a commit diff and message for code quality using an LLM.
@@ -460,6 +652,169 @@ Ensure your entire response is a single, valid JSON object.
         except Exception as e:
             logger.error(f"Unexpected error during AI code quality analysis: {e}", exc_info=True)
             return self.error_handling(e)
+    
+    async def analyze_daily_work(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze a full day's worth of commits along with daily report for holistic hour estimation.
+        
+        Args:
+            context: Dictionary containing:
+                - analysis_date: ISO format date string
+                - user_name: Name of the developer
+                - commits: List of commit summaries
+                - total_commits: Number of commits
+                - repositories: List of unique repositories
+                - total_lines_changed: Sum of additions and deletions
+                - daily_report: Optional daily report data
+                
+        Returns:
+            Dictionary with analysis results including:
+                - total_estimated_hours: Total hours for the day
+                - average_complexity_score: Average complexity across commits
+                - average_seniority_score: Average seniority score
+                - work_summary: AI-generated summary of the day's work
+                - key_achievements: List of major accomplishments
+                - recommendations: Suggestions for improvement
+        """
+        logger.info(f"Analyzing daily work for {context.get('user_name')} on {context.get('analysis_date')}")
+        
+        if not self.client:
+            logger.error("AI client not available for daily work analysis")
+            return {
+                "total_estimated_hours": 0.0,
+                "error": "AI client not initialized"
+            }
+        
+        # Build the prompt using the same calibration guidelines from commit analysis
+        prompt = f"""You are analyzing a developer's complete work for {context.get('analysis_date')}.
+        
+Developer: {context.get('user_name')}
+Total Commits: {context.get('total_commits')}
+Repositories: {', '.join(context.get('repositories', []))}
+Total Lines Changed: {context.get('total_lines_changed')}
+
+"""
+        
+        # Add daily report context if available
+        if context.get('daily_report'):
+            report = context['daily_report']
+            prompt += f"""
+Daily Report Summary:
+- Summary: {report.get('summary', 'N/A')}
+- Hours Reported: {report.get('hours_reported', 0)}
+- Challenges: {report.get('challenges', 'None mentioned')}
+- Support Needed: {report.get('support_needed', 'None mentioned')}
+
+"""
+            if report.get('ai_analysis'):
+                ai_analysis = report['ai_analysis']
+                prompt += f"""Previous AI Analysis of Report:
+- Estimated Hours: {ai_analysis.get('estimated_hours', 0)}
+- Key Achievements: {', '.join(ai_analysis.get('key_achievements', []))}
+
+"""
+        
+        # Add commit details
+        prompt += "Commits for the day:\n"
+        for i, commit in enumerate(context.get('commits', []), 1):
+            prompt += f"""
+{i}. [{commit['timestamp']}] {commit['repository']}
+   Message: {commit['message']}
+   Changes: +{commit['additions']} -{commit['deletions']} ({len(commit.get('files_changed', []))} files)
+   Previous AI estimate: {commit.get('ai_estimated_hours', 'N/A')} hours
+"""
+        
+        prompt += """
+
+Based on all commits for the day and any daily report provided, estimate the TOTAL productive hours.
+
+IMPORTANT CALIBRATION GUIDELINES:
+- Consider the CUMULATIVE effort across all commits
+- Account for context switching between different repositories/features
+- Include time for: planning, implementation, testing, code review, documentation
+- If commits span different features/repos, add 10-20% overhead for context switching
+- If daily report hours differ significantly from commit analysis, provide reasoning
+
+Hours estimation baseline (for the ENTIRE day's work):
+• Light day (1-5 small commits, minor fixes): 2-4 hours
+• Moderate day (5-15 commits, feature work): 4-6 hours  
+• Full day (15-30 commits, complex features): 6-8 hours
+• Intensive day (30+ commits, major changes): 8-10 hours
+
+Adjustments:
++10% for work across multiple repositories
++15% for commits showing architectural changes
++20% for commits with extensive testing
+-20% for mostly mechanical/generated changes
+
+Respond with a JSON object containing:
+{
+    "total_estimated_hours": <float with 1 decimal>,
+    "average_complexity_score": <int 1-10>,
+    "average_seniority_score": <int 1-10>,
+    "work_summary": <string summarizing the day's work>,
+    "key_achievements": [<list of 3-5 major accomplishments>],
+    "hour_estimation_reasoning": <string explaining how you arrived at the total>,
+    "consistency_with_report": <boolean, true if aligned with daily report>,
+    "recommendations": [<list of 1-3 suggestions for the developer>]
+}
+"""
+        
+        api_params = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a senior engineering manager analyzing developer productivity. Provide accurate hour estimates based on actual work completed."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"}
+        }
+        
+        # Add temperature for non-reasoning models
+        if not self._is_reasoning_model(self.model):
+            api_params["temperature"] = 0.15
+        
+        try:
+            response = await self._make_openai_call(api_params)
+            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
+                result = json.loads(response.choices[0].message.content)
+                
+                # Ensure all expected fields exist
+                result.setdefault("total_estimated_hours", 0.0)
+                result.setdefault("average_complexity_score", 5)
+                result.setdefault("average_seniority_score", 5)
+                result.setdefault("work_summary", "No summary available")
+                result.setdefault("key_achievements", [])
+                result.setdefault("hour_estimation_reasoning", "")
+                result.setdefault("consistency_with_report", True)
+                result.setdefault("recommendations", [])
+                
+                # Round hours to 1 decimal place
+                result["total_estimated_hours"] = round(float(result["total_estimated_hours"]), 1)
+                
+                logger.info(f"✓ Daily work analysis complete: {result['total_estimated_hours']} hours estimated")
+                return result
+            else:
+                logger.error("AI response for daily work analysis was empty")
+                return {
+                    "total_estimated_hours": 0.0,
+                    "error": "Empty AI response"
+                }
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse daily work analysis response: {e}", exc_info=True)
+            return {
+                "total_estimated_hours": 0.0,
+                "error": f"JSON decode error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Error analyzing daily work: {e}", exc_info=True)
+            return {
+                "total_estimated_hours": 0.0,
+                "error": str(e)
+            }
 
 # Example of how to potentially get an instance (e.g., using FastAPI dependency injection pattern)
 # Needs to be adapted if settings are not directly accessible or if async init is needed.

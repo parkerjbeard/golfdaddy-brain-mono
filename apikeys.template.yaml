@@ -1,0 +1,23 @@
+development-key:
+  owner: developer-name
+  role: developer
+  rate_limit: 100
+  description: Development API key for local testing
+
+admin-key:
+  owner: admin-name
+  role: admin
+  rate_limit: 1000
+  description: Administrator API key with elevated privileges
+
+service-key:
+  owner: external-service
+  role: service
+  rate_limit: 500
+  description: Service-to-service API key for integrations
+
+readonly-key:
+  owner: readonly-user
+  role: readonly
+  rate_limit: 60
+  description: Read-only API key for monitoring tools

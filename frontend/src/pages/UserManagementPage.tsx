@@ -34,7 +34,7 @@ import {
 import { toast } from 'sonner';
 
 import { UserResponse, UserRole, UserUpdateByAdminPayload, UserListResponse } from '@/types/user';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 // Placeholder for your actual auth token retrieval - THIS WILL BE REMOVED
 /*
@@ -86,13 +86,21 @@ const userUpdateSchema = z.object({
   github_username: z.string().max(100, "GitHub username too long").optional().nullable(),
   role: z.nativeEnum(UserRole).optional().nullable(),
   team: z.string().max(100, "Team name too long").optional().nullable(),
+  team_id: z.string().uuid("Invalid UUID format for Team ID").optional().nullable(),
+  reports_to_id: z.string().uuid("Invalid UUID format for Reports To ID").optional().nullable(),
+  is_active: z.boolean().optional().nullable(),
+  // avatar_url, metadata, personal_mastery, preferences are not directly in this form for now
 });
 
 type UserUpdateFormData = z.infer<typeof userUpdateSchema>;
 
 const UserManagementPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { token, user, isAdmin, loading: authLoading } = useAuth(); // Use useAuth hook
+  const { session, loading: authLoading } = useAuth(); // Use useAuth hook
+  const token = session?.access_token || null;
+  const user = session?.user || null;
+  const userRole = user?.user_metadata?.role || user?.app_metadata?.role;
+  const isAdmin = userRole === UserRole.ADMIN || userRole === 'admin';
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserResponse | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -102,7 +110,7 @@ const UserManagementPage: React.FC = () => {
     queryKey: ['users', currentPage, usersPerPage, token], // Add token to queryKey
     queryFn: () => fetchUsers(token, currentPage, usersPerPage), // Pass token to fetchUsers
     enabled: !!token && isAdmin, // Only run query if token exists and user is admin
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData, // Keep previous data while loading new data
   });
 
   const mutation = useMutation<UserResponse, Error, { userId: string; data: UserUpdateByAdminPayload }>({
@@ -135,6 +143,9 @@ const UserManagementPage: React.FC = () => {
         github_username: null,
         role: null,
         team: null,
+        team_id: null,
+        reports_to_id: null,
+        is_active: null,
     }
   });
 
@@ -153,6 +164,9 @@ const UserManagementPage: React.FC = () => {
         github_username: selectedUser.github_username || null,
         role: selectedUser.role || null,
         team: selectedUser.team || null,
+        team_id: selectedUser.team_id || null,
+        reports_to_id: selectedUser.reports_to_id || null,
+        is_active: selectedUser.is_active === undefined ? null : selectedUser.is_active,
       });
     } else {
       reset({
@@ -161,6 +175,9 @@ const UserManagementPage: React.FC = () => {
         github_username: null,
         role: null,
         team: null,
+        team_id: null,
+        reports_to_id: null,
+        is_active: null,
       });
     }
   }, [selectedUser, reset]);
@@ -179,6 +196,9 @@ const UserManagementPage: React.FC = () => {
       if (data.github_username !== undefined && data.github_username !== null) payload.github_username = data.github_username.trim() === '' ? null : data.github_username.trim();
       if (data.role !== undefined && data.role !== null) payload.role = data.role;
       if (data.team !== undefined && data.team !== null) payload.team = data.team.trim() === '' ? null : data.team.trim();
+      if (data.team_id !== undefined && data.team_id !== null) payload.team_id = data.team_id.trim() === '' ? null : data.team_id.trim();
+      if (data.reports_to_id !== undefined && data.reports_to_id !== null) payload.reports_to_id = data.reports_to_id.trim() === '' ? null : data.reports_to_id.trim();
+      if (data.is_active !== undefined && data.is_active !== null) payload.is_active = data.is_active;
 
       // Check if there are actual changes compared to the selected user
       let hasChanges = false;
@@ -187,6 +207,9 @@ const UserManagementPage: React.FC = () => {
       if (payload.github_username !== (selectedUser.github_username || null)) hasChanges = true;
       if (payload.role !== (selectedUser.role || null)) hasChanges = true;
       if (payload.team !== (selectedUser.team || null)) hasChanges = true;
+      if (payload.team_id !== (selectedUser.team_id || null)) hasChanges = true;
+      if (payload.reports_to_id !== (selectedUser.reports_to_id || null)) hasChanges = true;
+      if (payload.is_active !== (selectedUser.is_active === undefined ? null : selectedUser.is_active)) hasChanges = true;
 
       if (!hasChanges && Object.keys(payload).length > 0) {
          // This case means fields were filled but they are same as original
@@ -336,6 +359,16 @@ const UserManagementPage: React.FC = () => {
                 {errors.team && <p className="text-sm text-red-500">{errors.team.message}</p>}
               </div>
               <div className="grid gap-2">
+                <Label htmlFor="team_id">Team ID (UUID)</Label>
+                <Input id="team_id" {...register('team_id')} placeholder="Optional: e.g., aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" />
+                {errors.team_id && <p className="text-sm text-red-500">{errors.team_id.message}</p>}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="reports_to_id">Reports To ID (UUID)</Label>
+                <Input id="reports_to_id" {...register('reports_to_id')} placeholder="Optional: e.g., aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" />
+                {errors.reports_to_id && <p className="text-sm text-red-500">{errors.reports_to_id.message}</p>}
+              </div>
+              <div className="grid gap-2">
                 <Label htmlFor="role">Role</Label>
                 <Select
                   onValueChange={(value) => setValue('role', value as UserRole, { shouldValidate: true })}
@@ -354,6 +387,24 @@ const UserManagementPage: React.FC = () => {
                   </SelectContent>
                 </Select>
                 {errors.role && <p className="text-sm text-red-500">{errors.role.message}</p>}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="is_active">Status</Label>
+                <Select
+                    onValueChange={(value) => setValue('is_active', value === 'true' ? true : value === 'false' ? false : null, { shouldValidate: true })}
+                    value={watch('is_active') === null || watch('is_active') === undefined ? '' : String(watch('is_active'))}
+                    name="is_active"
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="true">Active</SelectItem>
+                        <SelectItem value="false">Inactive</SelectItem>
+                        <SelectItem value="">Not Set</SelectItem> {/* Option for null/undefined */} 
+                    </SelectContent>
+                </Select>
+                {errors.is_active && <p className="text-sm text-red-500">{errors.is_active.message}</p>}
               </div>
               <DialogFooter className="mt-2">
                 <DialogClose asChild>

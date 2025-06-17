@@ -57,9 +57,13 @@ class UserUpdateByAdminPayload(BaseModel):
     github_username: Optional[str] = None
     role: Optional[UserRole] = None
     team: Optional[str] = None
+    team_id: Optional[UUID] = None
     avatar_url: Optional[HttpUrl] = None
-    # metadata: Optional[Dict[str, Any]] = None # If admin should manage full metadata
-    # personal_mastery: Optional[Dict[str, Any]] = None # If admin should manage this
+    reports_to_id: Optional[UUID] = None
+    metadata: Optional[Dict[str, Any]] = None
+    personal_mastery: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+    preferences: Optional[Dict[str, Any]] = None
 
     class Config:
         # Pydantic v2: if you want to accept enum names like "DEVELOPER" in payload
@@ -88,6 +92,7 @@ class UserSelfUpdatePayload(BaseModel):
     avatar_url: Optional[HttpUrl] = None
     team: Optional[str] = None
     github_username: Optional[str] = None
+    slack_id: Optional[str] = None
     preferences: Optional[Dict[str, Any]] = None
 
 

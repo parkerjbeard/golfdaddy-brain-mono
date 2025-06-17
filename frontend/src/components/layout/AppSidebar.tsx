@@ -1,11 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   BarChart, 
   FileText, 
   Home,
   ClipboardList,
-  ClipboardPlus,
   LogOut,
   User as UserIcon
 } from 'lucide-react';
@@ -37,7 +36,8 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsible }: AppSidebarProps) {
-  const { user, logout } = useAuth();
+  const { session, signOut } = useAuth();
+  const user = session?.user;
   const location = useLocation();
 
   const isActive = (path: string) => {
@@ -45,8 +45,12 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
   };
 
   const handleSignOut = () => {
-    logout();
+    signOut();
   };
+
+  // Get display name and avatar from user metadata or fallback to email/defaults
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const avatarUrl = user?.user_metadata?.avatar_url;
 
   return (
     <Sidebar collapsible={collapsible}>
@@ -87,29 +91,18 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
 
               <SidebarMenuItem>
                 <SidebarMenuButton 
-                  isActive={isActive('/manager-dashboard')} 
+                  isActive={isActive('/manager')} 
                   asChild 
                   tooltip="Manager Dashboard"
                 >
-                  <Link to="/manager-dashboard">
+                  <Link to="/manager">
                     <ClipboardList className="h-5 w-5" />
                     <span>Manager Dashboard</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={isActive('/create-raci-task')}
-                  asChild
-                  tooltip="Create RACI Task"
-                >
-                  <Link to="/create-raci-task">
-                    <ClipboardPlus className="h-5 w-5" />
-                    <span>Create RACI Task</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -120,11 +113,11 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton 
-                  isActive={isActive('/documentation')} 
+                  isActive={isActive('/docs')} 
                   asChild 
                   tooltip="Documentation"
                 >
-                  <Link to="/documentation">
+                  <Link to="/docs">
                     <FileText className="h-5 w-5" />
                     <span>Documentation</span>
                   </Link>
@@ -141,13 +134,13 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
             <DropdownMenuTrigger asChild className="w-full">
               <Button variant="ghost" className="flex items-center justify-start gap-3 w-full h-auto px-2 py-2 text-left">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user.avatar_url || undefined} alt={user.name || 'User'} />
+                  <AvatarImage src={avatarUrl || undefined} alt={displayName} />
                   <AvatarFallback>
-                    {(user.name || "U").charAt(0).toUpperCase()}
+                    {displayName.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 truncate">
-                  <div className="text-sm font-medium">{user.name}</div>
+                  <div className="text-sm font-medium">{displayName}</div>
                   <p className="text-xs leading-none text-muted-foreground truncate">{user.email}</p>
                 </div>
               </Button>
@@ -155,7 +148,7 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
             <DropdownMenuContent align="end" side="top" className="mb-1 w-[calc(var(--sidebar-width)_-_1rem)]">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.name}</p>
+                  <p className="text-sm font-medium leading-none">{displayName}</p>
                   <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
                 </div>
               </DropdownMenuLabel>

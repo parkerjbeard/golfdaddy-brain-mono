@@ -43,9 +43,9 @@ def set_test_mode():
             "Check your environment variables or .env file."
         )
     
-    if not settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_SERVICE_ROLE_KEY == "your-service-role-key-here":
+    if not settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_SERVICE_KEY == "your-service-role-key-here":
         raise ValueError(
-            "SUPABASE_SERVICE_ROLE_KEY must be set to a valid service role key. "
+            "SUPABASE_SERVICE_KEY must be set to a valid service role key. "
             "Check your environment variables or .env file."
         )
     

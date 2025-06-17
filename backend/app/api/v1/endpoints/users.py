@@ -35,6 +35,13 @@ class UserUpdatePayload(BaseModel):
     avatar_url: Optional[str] = None
     team: Optional[str] = None
     github_username: Optional[str] = None
+    slack_id: Optional[str] = None
+    role: Optional[UserRole] = None
+    team_id: Optional[UUID] = None
+    reports_to_id: Optional[UUID] = None
+    is_active: Optional[bool] = None
+    metadata: Optional[Dict[str, Any]] = None
+    personal_mastery: Optional[Dict[str, Any]] = None
     preferences: Optional[Dict[str, Any]] = None
 
 

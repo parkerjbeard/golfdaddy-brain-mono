@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, UserPerformanceSummary, PerformanceSummaryParams, UserWidgetSummary } from '@/types/managerDashboard';
-import { getUsers, getUserPerformanceSummary, getBulkWidgetSummaries } from '@/lib/apiService';
+import { getUserPerformanceSummary, getBulkWidgetSummaries } from '@/lib/apiService';
+import api from '@/services/api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableCaption, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { addDays, format, isEqual } from 'date-fns';
 import { DateRange } from 'react-day-picker';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const ManagerDashboardPage: React.FC = () => {
-  const { token } = useAuth();
+  const { session } = useAuth();
+  const token = session?.access_token || null;
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
 
@@ -52,7 +54,7 @@ const ManagerDashboardPage: React.FC = () => {
           setIsLoadingUsers(false);
           return;
         }
-        const fetchedUsers = await getUsers(token);
+        const fetchedUsers = await api.users.getUsers();
         setUsers(fetchedUsers);
         // Do not auto-select user, let manager choose
       } catch (err) {
@@ -78,7 +80,7 @@ const ManagerDashboardPage: React.FC = () => {
         startDate: format(dateRangeToUse.from, 'yyyy-MM-dd'),
         endDate: dateRangeToUse.to ? format(dateRangeToUse.to, 'yyyy-MM-dd') : format(dateRangeToUse.from, 'yyyy-MM-dd'),
       };
-      const summaries = await getBulkWidgetSummaries(token, params);
+      const summaries = await getBulkWidgetSummaries(params);
       setUserWidgetsData(summaries);
     } catch (err) {
       setErrorWidgets(err instanceof Error ? err.message : 'Failed to fetch bulk widget summaries.');
@@ -114,7 +116,7 @@ const ManagerDashboardPage: React.FC = () => {
         startDate: format(dateRangeToUse.from, 'yyyy-MM-dd'),
         endDate: dateRangeToUse.to ? format(dateRangeToUse.to, 'yyyy-MM-dd') : format(dateRangeToUse.from, 'yyyy-MM-dd'),
       };
-      const summary = await getUserPerformanceSummary(token, params);
+      const summary = await getUserPerformanceSummary(params);
       setFocusedUserPerformanceData(summary);
     } catch (err) {
       setErrorFocusedSummary(err instanceof Error ? err.message : 'Failed to fetch detailed performance summary.');

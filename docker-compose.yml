@@ -1,14 +1,14 @@
-version: '3.8'
-
 services:
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+      - ENABLE_API_AUTH=false
     depends_on:
       db:
         condition: service_healthy
@@ -16,12 +16,21 @@ services:
       - ./backend:/app
     networks:
       - golfdaddy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: golfdaddy_frontend_dev
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "8080:8080"
     volumes:
@@ -33,6 +42,8 @@ services:
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
       - VITE_API_KEY=${API_KEY}
+      - VITE_BYPASS_AUTH=true
+      - DOCKER_ENV=true
     restart: unless-stopped
     networks:
       - golfdaddy-network

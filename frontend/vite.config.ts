@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     proxy: {
       '/api': {
-        target: 'http://backend:8000', // For container-to-container communication
+        target: process.env.DOCKER_ENV ? 'http://backend:8000' : 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path,

@@ -3,8 +3,7 @@ from supabase import Client
 import uuid
 from datetime import datetime
 from app.integrations.ai_integration import AIIntegration
-from app.repositories.task_repository import TaskRepository
-from app.models.task import Task
+
 from uuid import UUID
 import logging
 from app.core.exceptions import (
@@ -21,7 +20,6 @@ class DocGenerationService:
     
     def __init__(self, supabase: Client):
         self.supabase = supabase
-        self.task_repository = TaskRepository(supabase)
         self.ai_integration = AIIntegration()
     
     def get_documentation_by_id(self, doc_id: str) -> Optional[Dict[str, Any]]:
@@ -39,10 +37,8 @@ class DocGenerationService:
             # Let caller handle this potential DB issue, or raise DatabaseError here
             raise DatabaseError(f"Failed to fetch document {doc_id}: {str(e)}")
 
-    def generate_documentation(self, context: Dict[str, Any], related_task_id: Optional[str] = None) -> Dict[str, Any]:
-        """Generates documentation using AI based on provided context.
-           Optionally links it to a task.
-        """
+    def generate_documentation(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Generates documentation using AI based on provided context."""
         try:
             logger.info(f"Generating documentation with context: {str(context)[:100]}...")
             description = context.get("description", "")
@@ -68,8 +64,7 @@ class DocGenerationService:
                 "title": title,
                 "content": generated_content,
                 "doc_type": doc_type,
-                "created_at": timestamp,
-                "related_task_id": related_task_id
+                "created_at": timestamp
             }
             
             try:
@@ -103,8 +98,7 @@ class DocGenerationService:
             logger.error(f"Error during documentation generation: {e}", exc_info=True)
             raise AppExceptionBase(f"An unexpected error occurred during documentation generation: {str(e)}")
     
-    def save_doc_reference(self, doc_id: str, doc_url: str, 
-                          related_task_id: Optional[str] = None) -> bool:
+    def save_doc_reference(self, doc_id: str, doc_url: str) -> bool:
         """
         Save a reference to a generated document.
         """
@@ -115,19 +109,7 @@ class DocGenerationService:
                  raise DatabaseError(f"Failed to save doc reference URL for {doc_id}: {update_resp.error.message}")
             # Some Supabase client versions might not return data on update, so check error primarily
             
-            if related_task_id:
-                task = self.task_repository.get_task_by_id(UUID(related_task_id)) # Ensure UUID
-                if not task:
-                    logger.warning(f"Task {related_task_id} not found when trying to link doc {doc_id}.")
-                    # Decide: raise ResourceNotFoundError or just log and return success for doc part?
-                    # For now, let's consider doc part successful and log task issue.
-                elif self.task_repository.update_task(
-                        task_id=UUID(related_task_id),
-                        update_data={"doc_references": [doc_url]} # This might be appended
-                    ) is None:
-                    logger.error(f"Failed to update task {related_task_id} with doc reference {doc_url}.")
-                    # This is a partial failure. Doc URL saved, task link failed.
-                    raise DatabaseError(f"Saved doc URL, but failed to link to task {related_task_id}.")
+
             return True
         except DatabaseError: # Re-raise if already a DatabaseError
             raise
