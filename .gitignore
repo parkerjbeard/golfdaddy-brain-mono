@@ -31,6 +31,15 @@ ENV/
 env.bak/
 venv.bak/
 
+# Environment files - SECURITY CRITICAL
+.env
+.env.local
+.env.*.local
+.env.development
+.env.staging
+.env.production
+.env.test
+
 # IDE
 .idea/
 .vscode/
@@ -62,9 +71,6 @@ logs/
 log/
 
 # Local development
-.env
-.env.local
-.env.*.local
 *.sqlite3
 *.db
 
@@ -113,10 +119,44 @@ dmypy.json
 # Pytest
 .pytest_cache/
 
-# folder for docs
+# folder for docs (allow versioned documentation)
 docs/
 
 CLAUDE.md
 
 # folder for data
 data/
+TODO.md
+
+# folder for node_modules
+node_modules/
+
+claude_docs/
+
+# SECURITY: Test files with credentials
+**/test-*auth*.html
+**/debug-auth*.html
+**/test-*token*.html
+
+# SECURITY: API key and secret files
+apikeys.json
+apikeys.yaml
+**/keys/**
+secrets/
+.secrets
+*.key
+*.pem
+*.p12
+*.pfx
+
+# SECURITY: Configuration files that might contain secrets
+config.json
+config.yaml
+credentials.json
+auth.json
+
+# SECURITY: Backup files that might contain sensitive data
+*.bak
+*.backup
+*.old
+*_backup

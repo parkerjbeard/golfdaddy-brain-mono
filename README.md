@@ -1,208 +1,163 @@
 # GolfDaddy Brain
 
-Backend API for task management with RACI framework, KPI tracking, and AI-powered features.
+GolfDaddy Brain is an AI-powered software engineering assistant that helps teams track work, manage tasks, and improve productivity through intelligent analysis of code commits and daily reports.
+
+## Key Features
+
+- **Daily Batch Commit Analysis**: Revolutionary AI-powered system that analyzes all daily commits together for 90% cost reduction and improved accuracy
+- **GitHub Commit Analysis**: AI-powered analysis of individual commits to estimate work hours and complexity
+- **Daily Report Collection**: Slack bot collects end-of-day reports with intelligent deduplication
+- **RACI Task Management**: Complete task tracking with Responsible, Accountable, Consulted, and Informed roles
+- **KPI Tracking**: Automated calculation of velocity, completion rates, and team performance
+- **Automatic Documentation**: AI generates and updates documentation based on code changes
+- **Manager Development**: Personal mastery tracking and AI-generated development plans
 
 ## Project Structure
 
-```
-project/
-├── app/
-│   ├── config/           # Configuration settings and database setup
-│   ├── middleware/       # API Gateway and security middleware
-│   ├── auth/             # Authentication with Slack
-│   ├── models/           # SQLAlchemy models
-│   ├── repositories/     # Database operations
-│   ├── services/         # Business logic
-│   ├── integrations/     # External service integrations
-│   ├── api/              # API endpoints
-│   ├── main.py           # Application entrypoint
-│   └── __init__.py
-└── tests/
-    ├── unit/             # Unit tests
-    ├── integration/      # Integration tests
-    └── __init__.py
-```
+The project is structured into two main parts:
 
-## Features
+- `backend/`: FastAPI-based backend API with AI integrations
+- `frontend/`: React/TypeScript frontend application with real-time updates
 
-- **Task Management with RACI Framework**: Assign Responsible, Accountable, Consulted, and Informed roles
-- **KPI Tracking**: Calculate performance metrics from tasks and commits
-- **AI-Powered Analytics**: Analyze GitHub commits and estimate points/time
-- **Documentation Generation**: Transform minimal input into robust documentation
-- **Slack Integration**: Notifications, task creation, and daily reminders
-- **Slack Authentication**: Log in with your Slack account
-- **Personal Mastery Tracking**: Manager-specific tasks with reminders
-- **API Gateway & Security**: API key authentication, rate limiting, and request metrics
-
-## Getting Started
+## Setup and Installation
 
 ### Prerequisites
 
-- Python 3.8+
-- PostgreSQL
-- Redis (optional, for caching)
-- Slack workspace with admin privileges to create an app
+- Python 3.11+
+- Node.js 20+
+- npm or yarn
+- Docker and Docker Compose (optional, for containerized setup)
 
-### Installation
+### Local Development Setup
 
-1. Clone the repository
-   ```
-   git clone https://github.com/yourusername/golfdaddy-brain.git
-   cd golfdaddy-brain
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/golfdaddy.git
+   cd golfdaddy
    ```
 
-2. Create a virtual environment
+2. **Set up environment variables**:
+   ```bash
+   # Create root .env file
+   cp .env.example .env
+   
+   # Create frontend .env file
+   echo "VITE_API_BASE_URL=http://localhost:8000" > frontend/.env
    ```
+
+3. **Install dependencies**:
+   ```bash
+   # Install root dependencies
+   npm install
+   
+   # Install frontend dependencies
+   npm install --prefix frontend
+   
+   # Install backend dependencies (preferably in a virtual environment)
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r backend/requirements.txt
    ```
 
-3. Install dependencies
-   ```
-   pip install -r requirements.txt
-   ```
-
-4. Create a Slack App for authentication
-   - Go to https://api.slack.com/apps
-   - Click "Create New App" and select "From scratch"
-   - Choose a name and select your workspace
-   - Under "OAuth & Permissions", add the redirect URL: `http://localhost:8000/auth/slack/callback`
-   - Add the following scopes:
-     - `identity.basic`
-     - `identity.email`
-   - Save changes and install the app to your workspace
-   - Note your Client ID and Client Secret from "Basic Information"
-
-5. Create a `.env` file with your configuration
-   ```
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=golfdaddy
-   DB_USER=postgres
-   DB_PASSWORD=yourpassword
+4. **Start development servers**:
+   ```bash
+   # Start both frontend and backend with one command
+   npm start
    
-   SLACK_TOKEN=your_slack_token
-   SLACK_SIGNING_SECRET=your_slack_signing_secret
+   # Or start them separately:
+   # Backend
+   npm run start:backend
    
-   # Slack OAuth for authentication
-   SLACK_CLIENT_ID=your_slack_client_id
-   SLACK_CLIENT_SECRET=your_slack_client_secret
-   SLACK_REDIRECT_URI=http://localhost:8000/auth/slack/callback
-   ALLOWED_SLACK_TEAMS=your_slack_team_id
-   
-   # JWT settings for authentication tokens
-   JWT_SECRET=random_secure_string
-   JWT_ALGORITHM=HS256
-   JWT_EXPIRY_HOURS=24
-   
-   GITHUB_TOKEN=your_github_token
-   CLICKUP_TOKEN=your_clickup_token
-   AI_SERVICE_KEY=your_ai_service_key
-   
-   # API Gateway settings
-   ENABLE_API_AUTH=true
-   ENABLE_RATE_LIMITING=true
-   API_KEY_HEADER=X-API-Key
-   DEFAULT_RATE_LIMIT=60
-   
-   # API keys for development (JSON string)
-   API_KEYS={"your-api-key": {"owner": "your-name", "role": "admin", "rate_limit": 1000}}
+   # Frontend
+   npm run start:frontend
    ```
 
-6. Run the application
-   ```
-   python -m app.main
+5. **Access the application**:
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:8000
+   - API Documentation: http://localhost:8000/docs
+
+### Docker Setup
+
+1. **Build and start the containers**:
+   ```bash
+   docker-compose up --build
    ```
 
-### Running Tests
+2. **Access the application**:
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:8000
+   - API Documentation: http://localhost:8000/docs
 
-```
-pytest tests/
+## Testing
+
+### Running Backend Tests
+
+```bash
+cd backend
+pytest
 ```
 
-## API Documentation
+### Running Frontend Tests
 
-Once the server is running, API documentation is available at:
-
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## Authentication
-
-### Slack Authentication
-
-The application uses Slack for user authentication:
-
-1. Direct users to `/auth/login/slack` to initiate authentication
-2. Users will be redirected to Slack to authorize the application
-3. After authorization, they'll be redirected back with a JWT token
-4. Use this token in the Authorization header for all API requests:
-   ```
-   Authorization: Bearer your.jwt.token
-   ```
-
-To get the currently authenticated user, call the `/auth/me` endpoint.
-
-### API Key Authentication
-
-For service-to-service communication, API key authentication is also available:
-
-1. Add your API key to the request header:
-   ```
-   X-API-Key: your-api-key
-   ```
-
-2. API keys can be configured with different roles and rate limits in the `.env` file.
-
-## API Gateway Features
-
-### Rate Limiting
-
-To prevent abuse, the API includes rate limiting:
-
-- Default: 60 requests per minute per client
-- Custom limits can be set for specific API keys
-- Rate limit headers are included in responses:
-  ```
-  X-RateLimit-Limit: 60
-  X-RateLimit-Remaining: 59
-  X-RateLimit-Reset: 1612345678
-  ```
-
-### Metrics
-
-API usage metrics are available at the `/metrics` endpoint (admin access only):
-
-- Request counts by endpoint
-- Response status codes
-- Average response time
-
-## Configuration
-
-API Gateway settings can be configured in your `.env` file:
-
+```bash
+cd frontend
+npm test
 ```
-# Enable/disable API authentication
-ENABLE_API_AUTH=true
 
-# Enable/disable rate limiting
-ENABLE_RATE_LIMITING=true
+## Daily Batch Commit Analysis
 
-# Custom header name for API keys
-API_KEY_HEADER=X-API-Key
+**NEW**: Revolutionary approach to commit analysis that provides 90% cost reduction and improved accuracy:
 
-# Default rate limit (requests per minute)
-DEFAULT_RATE_LIMIT=60
+### How It Works
+1. **Daily Report Submission**: When users submit daily reports, all commits from that day are analyzed together
+2. **Midnight Automatic Analysis**: Users without reports get automatic analysis at 12:05 AM
+3. **Holistic AI Analysis**: Single AI call analyzes entire day's work with full context
+4. **Smart Reconciliation**: Compares AI estimates with user-reported hours for accuracy
 
-# Paths excluded from authentication (comma-separated)
-AUTH_EXCLUDE_PATHS=/docs,/redoc,/openapi.json,/health,/auth
+### Benefits
+- **90% Cost Reduction**: One AI call per day instead of per commit
+- **Better Context**: AI sees full daily work patterns and context switching
+- **Improved Accuracy**: Holistic analysis provides more realistic hour estimates
+- **Automatic Coverage**: Works with or without daily reports
 
-# Paths excluded from rate limiting (comma-separated)
-RATE_LIMIT_EXCLUDE_PATHS=/health,/auth
-
-# JSON string of API keys and their properties
-API_KEYS={"api-key": {"owner": "name", "role": "role", "rate_limit": 100}}
-
-# Or path to a JSON file containing API keys (more secure)
-# API_KEYS_FILE=/path/to/api_keys.json
+### Configuration
+```bash
+ENABLE_DAILY_BATCH_ANALYSIS=true
+SKIP_INDIVIDUAL_COMMIT_ANALYSIS=false  # Gradual migration
+EOD_REMINDER_HOUR=17  # 5 PM
+EOD_REMINDER_MINUTE=30  # 5:30 PM
 ```
+
+See [DAILY_BATCH_COMMIT_ANALYSIS.md](./claude_docs/DAILY_BATCH_COMMIT_ANALYSIS.md) for complete documentation.
+
+## Daily Report Workflow
+
+The system combines GitHub commit analysis with daily reports collected via Slack:
+
+1. **Individual Analysis**: Each GitHub commit can be analyzed by AI to estimate work hours (optional)
+2. **Daily Batch Analysis**: All commits analyzed together when daily report is submitted
+3. **EOD Reports**: Slack bot prompts employees for daily reports at configurable times
+4. **Intelligent Deduplication**: AI prevents double-counting between commits and reports
+5. **Weekly Aggregation**: Combined view of all work performed with accurate hour tracking
+
+See [DAILY_REPORT_WORKFLOW.md](./DAILY_REPORT_WORKFLOW.md) for detailed information.
+
+## Deployment
+
+The application can be deployed using Docker Compose or separately for the frontend and backend.
+
+### Docker Deployment
+
+```bash
+docker-compose -f docker-compose.yml up -d
+```
+
+## Automated Documentation
+
+This repository includes an automated documentation system. A thin Python client (`doc_agent`) analyzes each commit and proposes documentation updates using OpenAI. The workflow runs both as a pre-commit hook and in CI. Proposed patches are delivered over Slack (placeholder) for manual approval before a pull request is opened automatically.
+
+
+## License
+
+[Your License]

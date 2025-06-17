@@ -1,0 +1,20 @@
+# Use an official Bun image
+FROM oven/bun:1 AS base
+
+WORKDIR /app
+
+# Copy package.json and bun.lockb
+COPY package.json bun.lockb ./
+
+# Install dependencies
+RUN bun install
+
+# Copy the rest of the application code
+COPY . .
+
+# Expose the port Vite runs on (as per vite.config.ts)
+EXPOSE 8080
+
+# Default command to start the dev server
+# Using --host to ensure it's accessible from outside the container
+CMD ["bun", "run", "dev", "--host"] 

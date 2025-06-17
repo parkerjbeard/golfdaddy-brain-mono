@@ -1,0 +1,25 @@
+{
+  "name": "golfdaddy",
+  "version": "1.0.0",
+  "description": "GolfDaddy Brain - AI assistant for software engineering",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "start:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "fastapi",
+    "react",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
