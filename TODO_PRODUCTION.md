@@ -1,59 +1,51 @@
-# GolfDaddy Production TODO - By Feature Area
+# GolfDaddy Production TODO - AWS Internal Deployment
 
-## 🔴 Slack Integration (Critical - Blocks Core Functionality)
+> **Updated for Startup Context**: Simplified for internal use at a small startup on AWS. 
+> Keeping Supabase for easier setup. Focus on getting core features working for ~10 users.
 
-### Service Method Fixes
-- [ ] Fix `slack_service.py` missing methods:
-  - [ ] Implement `open_modal()` method (called in conversation_handler.py:58)
-  - [ ] Rename all `post_message()` calls to `send_message()` or implement `post_message()`
-  - [ ] Fix method signature mismatches
+## 🔴 AWS Infrastructure & Deployment (Critical - Must Complete First)
 
-### Conversation Handler Completion
-- [ ] Complete "Update Report" functionality in conversation handler
-- [ ] Fix modal interactions for report updates
-- [ ] Test all slash commands end-to-end
-- [ ] Add error handling for failed Slack API calls
+### AWS Setup
+- [ ] Configure VPC with private subnets for internal access
+- [ ] Set up security groups (port 8000 for backend, 8080 for frontend)
+- [ ] Configure AWS Secrets Manager for environment variables
+- [ ] Set up ECS Fargate or EC2 with Docker
+- [ ] Configure Application Load Balancer with health checks
+- [ ] Set up CloudWatch logging for all containers
+- [ ] Configure auto-scaling policies
+- [ ] Set up AWS Backup for disaster recovery
 
-### User Mapping & Configuration
-- [ ] Implement Slack user ID to GolfDaddy user mapping
-- [ ] Create production Slack app in company workspace
-- [ ] Configure OAuth scopes: `chat:write`, `commands`, `users:read`
-- [ ] Set up slash commands: `/eod`, `/update-report`, `/view-reports`
-- [ ] Document Slack app installation process
+### Deployment Pipeline
+- [ ] Create production Dockerfile (already have dev versions)
+- [ ] Set up ECR (Elastic Container Registry) for Docker images
+- [ ] Create ECS task definitions
+- [ ] Configure GitHub Actions for AWS deployment
+- [ ] Set up staging environment on AWS
+- [ ] Document deployment rollback procedures
 
-## 🟡 Authentication & Security (High Priority)
+## 🟡 Authentication & Security (Simplified for Internal Use)
 
-### Internal SSO Integration
-- [ ] Integrate authentication approval by admin in employee management
-- [ ] Add role assignment UI for admin users
-- [ ] Map SSO groups to GolfDaddy roles
+### Simple Internal Authentication
+- [ ] Keep Supabase auth with email/password for startup team
+- [ ] Create simple admin approval flow for new users
+- [ ] Add basic role management (admin/user)
 
 ### Session Management
-- [ ] Configure 8-hour session timeout for workday
-- [ ] Implement "Remember me" option for internal network
-- [ ] Add session refresh mechanism
-- [ ] Create logout on browser close option
+- [ ] Configure 12-hour session timeout
+- [ ] Add "Remember me" for 30 days
+- [ ] Simple logout functionality
 
-### Security & Audit
-- [ ] Add security headers (CSP, X-Frame-Options, etc.)
-- [ ] Implement access audit logging
-- [ ] Create audit trail dashboard for admins
+### Security Essentials
+- [ ] Configure AWS security groups for internal access only
+- [ ] Basic audit logging to CloudWatch
 - [ ] Remove all debug console.log statements
-- [ ] Rotate API keys and document process
+- [ ] Store secrets in AWS Secrets Manager
+- [ ] Enable HTTPS with AWS Certificate Manager
 
 ## 🟢 Backend Services Completion
 
-### Daily Report Service (`daily_reports_service.py`)
-- [ ] Implement pagination for reports endpoint
-- [ ] Complete AI clarification flow
-- [ ] Add report submission validation
-- [ ] Fix integration with commit analysis
-- [ ] Add bulk report operations for managers
-
 ### Notification Service (`notification_service.py`)
-- [ ] Implement task reminder notifications
-- [ ] Set up EOD report reminders (configurable time)
-- [ ] Add notification preferences per user
+\-[ ] Add notification preferences per user
 - [ ] Create notification templates
 - [ ] Implement email fallback for critical notifications
 
@@ -74,9 +66,7 @@
 ## 🟢 GitHub Integration Enhancement
 
 ### Commit Analysis
-- [ ] Integrate with DailyReportService for EOD comparison
 - [ ] Implement code quality AI analysis
-- [ ] Add commit-to-EOD report linking
 - [ ] Create commit pattern analysis
 - [ ] Add PR review metrics
 
@@ -112,28 +102,21 @@
 - [ ] Implement error boundaries
 - [ ] Add offline mode support
 
-## 🟢 Infrastructure & Deployment
+## 🟢 Database & Configuration
 
-### Database Setup
-- [ ] Configure production Supabase or internal PostgreSQL
-- [ ] Set up connection pooling
-- [ ] Configure SSL certificates
-- [ ] Implement backup strategy
-- [ ] Create migration rollback procedures
-
-### Docker & Deployment
-- [ ] Create production Dockerfile
-- [ ] Configure for internal Docker registry
-- [ ] Set up health check endpoints
-- [ ] Create deployment scripts
-- [ ] Document rollback procedures
+### Supabase Production Setup
+- [ ] Create production Supabase project
+- [ ] Configure connection pooling in Supabase dashboard
+- [ ] Set up Row Level Security policies
+- [ ] Configure Supabase backups (automatic)
+- [ ] Document migration procedures
+- [ ] Set up staging Supabase project for testing
 
 ### Environment Configuration
-- [ ] Create comprehensive .env.example
-- [ ] Document all environment variables
-- [ ] Set up secret rotation
-- [ ] Configure feature flags
-- [ ] Create environment-specific configs
+- [ ] Move all secrets to AWS Secrets Manager
+- [ ] Create .env.production template
+- [ ] Set up environment variables in ECS task definitions
+- [ ] Configure different settings for staging/production
 
 ## 🟡 Testing & Quality
 
@@ -158,77 +141,60 @@
 - [ ] Create bug tracking process
 - [ ] Implement smoke test suite
 
-## 🟢 Monitoring & Support
+## 🟢 Monitoring & Observability (AWS-Native)
 
-### Logging Infrastructure
-- [ ] Integrate with company logging system
-- [ ] Add structured logging
-- [ ] Configure log retention (30 days)
-- [ ] Create log analysis dashboards
-- [ ] Set up error alerting
+### CloudWatch Setup
+- [ ] Configure CloudWatch log groups for backend/frontend
+- [ ] Set up log retention (30 days)
+- [ ] Create CloudWatch dashboards for key metrics
+- [ ] Set up CloudWatch alarms for errors/downtime
+- [ ] Configure SNS notifications for critical alerts
 
-### Monitoring Setup
-- [ ] Configure uptime monitoring
-- [ ] Add performance monitoring
-- [ ] Create system health dashboard
-- [ ] Set up alert rules
-- [ ] Implement SLA tracking
+### Simple Monitoring
+- [ ] Add health check endpoints (/health)
+- [ ] Monitor API response times
+- [ ] Track daily active users
+- [ ] Set up basic error rate monitoring
+- [ ] Create simple ops dashboard
 
-### Support Tools
-- [ ] Create admin troubleshooting dashboard
-- [ ] Add user activity reports
-- [ ] Build support ticket integration
-- [ ] Create runbook documentation
-- [ ] Add system status page
+### Internal Support
+- [ ] Basic admin dashboard for user management
+- [ ] Simple activity logs
+- [ ] Document common troubleshooting steps
 
-## 📚 Documentation
+## 📚 Documentation (Simplified for Startup)
 
-### Technical Documentation
-- [ ] Complete API documentation
-- [ ] Document integration patterns
-- [ ] Create architecture diagrams
-- [ ] Document data flow
-- [ ] Add troubleshooting guides
+### Essential Documentation
+- [ ] README with setup instructions
+- [ ] Basic API documentation
+- [ ] Slack command reference
+- [ ] AWS deployment guide
+- [ ] Environment variables documentation
 
-### User Documentation
-- [ ] Create employee quick start guide
-- [ ] Write manager dashboard guide
-- [ ] Document Slack commands
-- [ ] Create video tutorials
-- [ ] Build FAQ section
+### Quick Start Guides
+- [ ] One-page employee guide
+- [ ] Manager features overview
+- [ ] Common troubleshooting FAQ
 
-### Operations Documentation
-- [ ] Write deployment guide
-- [ ] Create maintenance procedures
-- [ ] Document backup/restore
-- [ ] Add security procedures
-- [ ] Create incident response plan
+### Ops Documentation
+- [ ] Deployment runbook
+- [ ] Rollback procedures
+- [ ] Incident response basics
 
-## Priority Matrix for Teams
+## Launch Checklist
 
-### Team 1: Backend/Integration Team
-**Week 1-2:** Slack Integration, GitHub Enhancement
-**Week 3-4:** Service Completions, API fixes
+- [ ] ✅ AWS infrastructure deployed and tested
+- [ ] ✅ All Slack commands working
+- [ ] ✅ Basic auth with Supabase functional
+- [ ] ✅ No hardcoded secrets or debug logs
+- [ ] ✅ CloudWatch monitoring active
+- [ ] ✅ Health checks passing
+- [ ] ✅ Core features tested by team
+- [ ] ✅ Pilot with founding team (5-10 users)
 
-### Team 2: Frontend Team
-**Week 1-2:** Dashboard Completion, Component Fixes
-**Week 3-4:** Testing Setup, Mobile Responsiveness
+## Post-Launch Priorities
 
-### Team 3: DevOps/Infrastructure Team
-**Week 1-2:** Authentication/Security, Database Setup
-**Week 3-4:** Deployment, Monitoring, Documentation
-
-### Team 4: QA/Documentation Team
-**Week 1-2:** Test Plan Creation, Manual Testing
-**Week 3-4:** Documentation, Training Materials
-
-## Success Metrics
-
-- [ ] All Slack commands working without errors
-- [ ] SSO/internal auth integrated
-- [ ] Zero mock data in production
-- [ ] All critical paths tested
-- [ ] Monitoring dashboard live
-- [ ] 95% uptime achieved
-- [ ] User documentation complete
-- [ ] Successful pilot with 2+ teams
+1. Monitor CloudWatch for first week
+2. Gather team feedback via Slack
+3. Fix critical bugs only
+4. Plan v2 features based on usage

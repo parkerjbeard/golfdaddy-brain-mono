@@ -169,12 +169,12 @@ class SlackMessageTemplates:
         }
     
     @staticmethod
-    def eod_reminder(
+    def task_summary_reminder(
         user_id: str,
         pending_tasks: List[Dict[str, Any]],
         completed_today: int = 0
     ) -> Dict[str, Any]:
-        """Template for end-of-day reminder."""
+        """Template for task summary reminder."""
         blocks = [
             {
                 "type": "header",
@@ -712,51 +712,75 @@ class SlackMessageTemplates:
     
     @staticmethod
     def eod_clarification(
-        question: str,
-        original_text: str,
-        suggestions: Optional[List[str]] = None
+        user_name: str,
+        report_id: str,
+        clarification_requests: List[Dict[str, Any]],
+        original_summary: str
     ) -> Dict[str, Any]:
         """Template for EOD report clarification request."""
         blocks = [
             {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🤔 Clarification Needed",
+                    "emoji": True
+                }
+            },
+            {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"I need a bit more information about:\n\n_{original_text}_\n\n**{question}**"
+                    "text": f"Thanks for your report, {user_name}! I need a bit more information to accurately track your work:"
                 }
             }
         ]
         
-        if suggestions:
-            elements = []
-            for suggestion in suggestions[:3]:
-                elements.append({
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": suggestion,
-                        "emoji": True
-                    },
-                    "action_id": f"clarify_suggestion_{suggestions.index(suggestion)}"
-                })
+        # Add clarification requests
+        for i, request in enumerate(clarification_requests[:5], 1):
+            question = request.get("question", "")
+            context = request.get("context", "")
             
+            block_text = f"*{i}.* {question}"
+            if context:
+                block_text += f"\n_Context: {context}_"
+                
             blocks.append({
-                "type": "actions",
-                "elements": elements
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": block_text
+                }
             })
         
+        blocks.append({
+            "type": "divider"
+        })
+        
+        blocks.append({
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "_Please reply to this message with clarifications, and I'll update your report._"
+                }
+            ]
+        })
+        
         return {
-            "text": question,
+            "text": "I need some clarification on your daily report",
             "blocks": blocks
         }
     
     @staticmethod
     def eod_summary(
-        total_hours: float,
+        user_name: str,
+        report_id: str,
+        summary: str,
+        estimated_hours: float,
         commit_hours: float,
         additional_hours: float,
-        key_achievements: List[str],
-        deduplication_count: int = 0
+        linked_commits: int = 0
     ) -> Dict[str, Any]:
         """Template for EOD report summary after processing."""
         blocks = [
@@ -772,7 +796,7 @@ class SlackMessageTemplates:
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "Thanks for submitting your report! Here's the summary:"
+                    "text": f"Thanks {user_name}! I've processed your report. Here's the summary:"
                 }
             },
             {
@@ -780,7 +804,7 @@ class SlackMessageTemplates:
                 "fields": [
                     {
                         "type": "mrkdwn",
-                        "text": f"*Total Hours:*\n{total_hours:.1f}"
+                        "text": f"*Total Estimated Hours:*\n{estimated_hours:.1f}"
                     },
                     {
                         "type": "mrkdwn",
@@ -794,24 +818,24 @@ class SlackMessageTemplates:
             }
         ]
         
-        if deduplication_count > 0:
+        if linked_commits > 0:
             blocks.append({
                 "type": "context",
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"_✨ Prevented double-counting of {deduplication_count} item{'s' if deduplication_count > 1 else ''}_"
+                        "text": f"_🔗 Linked to {linked_commits} commit{'s' if linked_commits != 1 else ''}_"
                     }
                 ]
             })
         
-        if key_achievements:
+        if summary:
             blocks.append({"type": "divider"})
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "*🎯 Key Achievements:*\n" + "\n".join([f"• {achievement}" for achievement in key_achievements[:5]])
+                    "text": f"*📝 Summary:*\n{summary}"
                 }
             })
         
@@ -826,7 +850,7 @@ class SlackMessageTemplates:
         })
         
         return {
-            "text": f"Daily report processed: {total_hours:.1f} hours total",
+            "text": f"Daily report processed: {estimated_hours:.1f} hours total",
             "blocks": blocks
         }
 

@@ -134,7 +134,7 @@ async def handle_interactive_message(
         if action_type == "view_submission":
             # Handle modal submission
             callback_id = payload.get("view", {}).get("callback_id", "")
-            if callback_id == "eod_report_submission":
+            if callback_id in ["eod_report_submission", "eod_report_update"]:
                 result = await conversation_handler.handle_modal_submission(
                     slack_user_id=slack_user_id,
                     view_data=payload.get("view", {})

@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     SLACK_CIRCUIT_BREAKER_TIMEOUT: int = Field(60, env="SLACK_CIRCUIT_BREAKER_TIMEOUT")
     
     # EOD Reminder Settings
-    EOD_REMINDER_TIME: str = Field("17:00", env="EOD_REMINDER_TIME")  # 24-hour format
+    EOD_REMINDER_TIME: str = Field("16:30", env="EOD_REMINDER_TIME")  # 24-hour format (4:30 PM)
     EOD_REMINDER_TIMEZONE: str = Field("America/Los_Angeles", env="EOD_REMINDER_TIMEZONE")
 
     # Integration Keys

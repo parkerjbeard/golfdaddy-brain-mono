@@ -10,6 +10,7 @@ services:
     environment:
       - ENABLE_API_AUTH=true
       - CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080,http://frontend:8080
+      - API_KEYS={"dev-api-key":{"role":"admin","name":"Development API Key"}}
     depends_on:
       db:
         condition: service_healthy

@@ -172,33 +172,55 @@ class DailyReportRepository:
     async def get_daily_reports_by_user_and_date(
         self, user_id: UUID, report_date: datetime
     ) -> Optional[DailyReport]:
+        """
+        Get daily report by user and date.
+        Uses date comparison that matches the database's unique constraint logic.
+        """
         report_date_str = report_date.strftime('%Y-%m-%d')
         try:
+            # Use RPC to call get_date_immutable to match the unique constraint
             response: PostgrestAPIResponse = await asyncio.to_thread(
-                self._client.table(self._table_name)
-                .select("*")
-                .eq("user_id", str(user_id))
-                .eq("report_date", report_date_str) 
-                .maybe_single()
-                .execute
+                self._client.rpc(
+                    'get_daily_report_by_user_date',
+                    {
+                        'p_user_id': str(user_id),
+                        'p_date': report_date_str
+                    }
+                ).execute
             )
-            if response and response.data:
-                return self._db_to_model(response.data)
-            elif response and (response.status_code == 406 or (not response.data and not response.error)):
+            if response and response.data and len(response.data) > 0:
+                return self._db_to_model(response.data[0])
+            else:
                 logger.info(f"Daily report for user {user_id} on date {report_date_str} not found.")
                 return None
-            elif response: # An error occurred if it's not data and not a clear not-found
-                self._handle_supabase_error(response, f"Error fetching daily report for user {user_id} on date {report_date_str}")
-                # _handle_supabase_error will raise, but as a fallback:
-                raise DatabaseError(f"Failed to fetch daily report for user {user_id}, date {report_date_str} for unknown reason.")
-            else: # response is None, which is unexpected
-                logger.error(f"Received None response from Supabase for user {user_id} on date {report_date_str}")
-                raise DatabaseError(f"Received None response from Supabase for daily report query.")
-        except DatabaseError:
-            raise
         except Exception as e:
-            logger.error(f"Unexpected error getting daily report for user {user_id} on date {report_date_str}: {e}", exc_info=True)
-            raise DatabaseError(f"Unexpected error getting daily report for user {user_id}, date {report_date_str}: {str(e)}")
+            logger.warning(f"RPC method not available, falling back to date string comparison: {e}")
+            # Fallback to original implementation
+            try:
+                response: PostgrestAPIResponse = await asyncio.to_thread(
+                    self._client.table(self._table_name)
+                    .select("*")
+                    .eq("user_id", str(user_id))
+                    .eq("report_date", report_date_str) 
+                    .maybe_single()
+                    .execute
+                )
+                if response and response.data:
+                    return self._db_to_model(response.data)
+                elif response and (response.status_code == 406 or (not response.data and not response.error)):
+                    logger.info(f"Daily report for user {user_id} on date {report_date_str} not found.")
+                    return None
+                elif response:
+                    self._handle_supabase_error(response, f"Error fetching daily report for user {user_id} on date {report_date_str}")
+                    raise DatabaseError(f"Failed to fetch daily report for user {user_id}, date {report_date_str} for unknown reason.")
+                else:
+                    logger.error(f"Received None response from Supabase for user {user_id} on date {report_date_str}")
+                    raise DatabaseError(f"Received None response from Supabase for daily report query.")
+            except DatabaseError:
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error getting daily report for user {user_id} on date {report_date_str}: {e}", exc_info=True)
+                raise DatabaseError(f"Unexpected error getting daily report for user {user_id}, date {report_date_str}: {str(e)}")
 
     async def get_reports_by_user_and_date_range(
         self, user_id: UUID, start_date: datetime, end_date: datetime

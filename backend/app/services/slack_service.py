@@ -253,3 +253,51 @@ class SlackService:
         except Exception as e:
             logger.error(f"Unexpected error scheduling message: {e}")
             return None
+    
+    async def post_message(
+        self,
+        channel: str,
+        text: str,
+        blocks: Optional[List[Dict[str, Any]]] = None,
+        thread_ts: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Alias for send_message to maintain backward compatibility.
+        Send a message to Slack channel or thread.
+        """
+        return await self.send_message(
+            channel=channel,
+            text=text,
+            blocks=blocks,
+            thread_ts=thread_ts
+        )
+    
+    async def open_modal(
+        self,
+        trigger_id: str,
+        view: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Open a modal dialog using a trigger_id received from user interaction.
+        
+        Args:
+            trigger_id: The trigger_id from a user interaction (valid for 3 seconds)
+            view: The view payload for the modal
+            
+        Returns:
+            The response data from Slack API if successful, None otherwise
+        """
+        try:
+            with self.circuit_breaker:
+                response = self.client.views_open(
+                    trigger_id=trigger_id,
+                    view=view
+                )
+                logger.info(f"Modal opened successfully")
+                return response.data
+        except SlackApiError as e:
+            logger.error(f"Failed to open modal: {e.response['error']}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error opening modal: {str(e)}")
+            return None

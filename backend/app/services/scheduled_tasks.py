@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from app.services.daily_commit_analysis_service import DailyCommitAnalysisService
 from app.services.eod_reminder_service import EODReminderService
+from app.services.report_processing_scheduler import ReportProcessingScheduler
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ class ScheduledTaskService:
     def __init__(self):
         self.daily_analysis_service = DailyCommitAnalysisService()
         self.eod_reminder_service = EODReminderService()
+        self.report_processing_scheduler = ReportProcessingScheduler()
         self.running_tasks = set()
     
     async def start_all_tasks(self):
@@ -34,11 +36,17 @@ class ScheduledTaskService:
             self.running_tasks.add(task)
             task.add_done_callback(self.running_tasks.discard)
         
+        # Start report processing scheduler
+        await self.report_processing_scheduler.start()
+        
         logger.info(f"Started {len(self.running_tasks)} scheduled tasks")
     
     async def stop_all_tasks(self):
         """Stop all running scheduled tasks"""
         logger.info("Stopping scheduled tasks...")
+        
+        # Stop report processing scheduler
+        await self.report_processing_scheduler.stop()
         
         for task in self.running_tasks:
             task.cancel()
@@ -86,9 +94,13 @@ class ScheduledTaskService:
         """Run EOD reminders at configured time every day"""
         while True:
             try:
-                # Get reminder time from settings (default 5:30 PM)
-                reminder_hour = getattr(settings, 'EOD_REMINDER_HOUR', 17)
-                reminder_minute = getattr(settings, 'EOD_REMINDER_MINUTE', 30)
+                # Parse reminder time from settings (default 4:30 PM)
+                reminder_time_str = getattr(settings, 'EOD_REMINDER_TIME', '16:30')
+                try:
+                    reminder_hour, reminder_minute = map(int, reminder_time_str.split(':'))
+                except ValueError:
+                    logger.warning(f"Invalid EOD_REMINDER_TIME format: {reminder_time_str}. Using default 4:30 PM")
+                    reminder_hour, reminder_minute = 16, 30
                 
                 # Calculate time until next reminder
                 now = datetime.now()

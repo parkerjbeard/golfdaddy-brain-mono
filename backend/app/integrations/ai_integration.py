@@ -115,8 +115,7 @@ class AIIntegration:
                 {"role": "system", "content": "You are an expert in leadership development and corporate training. Your goal is to create highly relevant and effective development tasks for managers."},
                 {"role": "user", "content": prompt}
             ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.6 # Moderate temperature for creative yet focused content
+            "response_format": {"type": "json_object"}
         }
 
         try:
@@ -224,9 +223,6 @@ class AIIntegration:
             "response_format": {"type": "json_object"}
         }
         
-        if not self._is_reasoning_model(self.model):
-            api_params["temperature"] = 0.7
-        
         try:
             response = await self._make_openai_call(api_params)
             if response and response.choices and response.choices[0].message and response.choices[0].message.content:
@@ -318,8 +314,7 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
                 {"role": "system", "content": "You are an AI assistant helping to process and understand employee End-of-Day reports."},
                 {"role": "user", "content": prompt}
             ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.2, 
+            "response_format": {"type": "json_object"}, 
         }
         raw_json_output = "" # Initialize for error logging
         try:
@@ -380,6 +375,65 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
             "error_message": error_message
         }
 
+    async def check_if_clarification_needed(
+        self,
+        report_text: str,
+        ai_analysis: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Simple check to determine if clarification is needed for a report.
+        Returns a single clarification question if needed, or None.
+        """
+        logger.info("Checking if clarification needed for EOD report")
+        if not self.client:
+            logger.error("AI client not available for clarification check")
+            return {"needs_clarification": False, "clarification_question": None}
+        
+        # If AI already found clarification requests, use the first one
+        if ai_analysis.get("clarification_requests") and len(ai_analysis["clarification_requests"]) > 0:
+            first_request = ai_analysis["clarification_requests"][0]
+            return {
+                "needs_clarification": True,
+                "clarification_question": first_request.get("question"),
+                "original_text": first_request.get("original_text")
+            }
+        
+        # Otherwise, do a quick check for clarity
+        prompt = f"""Review this EOD report and determine if ONE clarification is needed:
+
+{report_text}
+
+If the report is clear and complete, respond with needs_clarification: false.
+If ONE specific detail needs clarification to accurately assess the work, provide a single question.
+
+Respond with JSON:
+{{
+    "needs_clarification": boolean,
+    "clarification_question": "single question if needed, null otherwise",
+    "original_text": "the specific part needing clarification, null otherwise"
+}}
+"""
+        
+        api_params = {
+            "model": self.eod_analysis_model,
+            "messages": [
+                {"role": "system", "content": "You are reviewing end-of-day reports. Only ask for clarification if absolutely necessary for understanding the work done."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"}
+        }
+        
+        try:
+            response = await self._make_openai_call(api_params)
+            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
+                result = json.loads(response.choices[0].message.content)
+                return result
+            else:
+                return {"needs_clarification": False, "clarification_question": None}
+        except Exception as e:
+            logger.error(f"Error checking for clarification: {e}", exc_info=True)
+            return {"needs_clarification": False, "clarification_question": None}
+
     async def process_eod_clarification(
         self, 
         original_report: str, 
@@ -432,8 +486,7 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
                 },
                 {"role": "user", "content": prompt}
             ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.3
+            "response_format": {"type": "json_object"}
         }
         
         try:
@@ -521,8 +574,7 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
                 },
                 {"role": "user", "content": prompt}
             ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.1  # Low temperature for consistency
+            "response_format": {"type": "json_object"}
         }
         
         try:
@@ -623,8 +675,6 @@ Ensure your entire response is a single, valid JSON object.
             "response_format": {"type": "json_object"}
         }
 
-        if not self._is_reasoning_model(self.code_quality_model):
-            api_params["temperature"] = 0.5
 
         logger.debug(f"Sending request to LLM for code quality analysis. Model: {self.code_quality_model}")
         raw_json_output = "" # Initialize for error logging
@@ -772,9 +822,6 @@ Respond with a JSON object containing:
             "response_format": {"type": "json_object"}
         }
         
-        # Add temperature for non-reasoning models
-        if not self._is_reasoning_model(self.model):
-            api_params["temperature"] = 0.15
         
         try:
             response = await self._make_openai_call(api_params)
@@ -814,6 +861,100 @@ Respond with a JSON object containing:
             return {
                 "total_estimated_hours": 0.0,
                 "error": str(e)
+            }
+
+    async def analyze_unified_daily_work(self, prompt: str) -> Dict[str, Any]:
+        """
+        Analyze unified daily work using a custom prompt provided by the caller.
+        This method is designed for flexible analysis of daily work data.
+        
+        Args:
+            prompt: The complete prompt to send to the AI model
+            
+        Returns:
+            Dictionary containing the structured response from the AI model
+        """
+        logger.info("Analyzing unified daily work with custom prompt")
+        
+        if not self.client:
+            logger.error("AI client not available for unified daily work analysis")
+            return {
+                "error": "AI client not initialized",
+                "message": "OpenAI client is not available. Please check API key configuration.",
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Use gpt-4 for complex reasoning tasks
+        model_to_use = "gpt-4" if "gpt-4" in self.model else self.model
+        
+        api_params = {
+            "model": model_to_use,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert at analyzing developer work patterns and productivity. Provide detailed, structured analysis based on the data provided."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"}
+        }
+        
+        # Check if model supports temperature parameter
+        if not self._is_reasoning_model(model_to_use):
+            api_params["temperature"] = 0.7
+        
+        try:
+            logger.debug(f"Sending unified daily work analysis request to model: {model_to_use}")
+            response = await self._make_openai_call(api_params)
+            
+            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
+                raw_json_output = response.choices[0].message.content
+                logger.debug(f"Raw AI response for unified daily work (first 500 chars): {raw_json_output[:500]}...")
+                
+                try:
+                    result = json.loads(raw_json_output)
+                    
+                    # Add metadata to the response
+                    result["_metadata"] = {
+                        "generated_at": datetime.now().isoformat(),
+                        "model_used": model_to_use,
+                        "analysis_type": "unified_daily_work"
+                    }
+                    
+                    logger.info("Successfully completed unified daily work analysis")
+                    return result
+                    
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"Failed to parse JSON response: {json_err}. Raw output: {raw_json_output}", exc_info=True)
+                    return {
+                        "error": "JSON parsing error",
+                        "message": f"Failed to parse AI response as JSON: {str(json_err)}",
+                        "raw_response": raw_json_output[:1000],  # Include first 1000 chars for debugging
+                        "timestamp": datetime.now().isoformat()
+                    }
+            else:
+                logger.error("AI response for unified daily work analysis was empty or malformed")
+                return {
+                    "error": "Empty response",
+                    "message": "AI model returned an empty or malformed response",
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+        except openai.APIError as api_err:
+            logger.error(f"OpenAI API error during unified daily work analysis: {api_err}", exc_info=True)
+            return {
+                "error": "API error",
+                "message": f"OpenAI API error: {str(api_err)}",
+                "error_type": type(api_err).__name__,
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error during unified daily work analysis: {e}", exc_info=True)
+            return {
+                "error": "Unexpected error",
+                "message": f"An unexpected error occurred: {str(e)}",
+                "error_type": type(e).__name__,
+                "timestamp": datetime.now().isoformat()
             }
 
 # Example of how to potentially get an instance (e.g., using FastAPI dependency injection pattern)

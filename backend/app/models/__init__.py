@@ -26,6 +26,11 @@ from app.models.raci_matrix import (
     CreateRaciMatrixPayload,
     UpdateRaciMatrixPayload
 )
+from app.models.daily_work_analysis import (
+    DailyWorkAnalysis,
+    WorkItem,
+    DeduplicationResult
+)
 
 __all__ = [
     "User", "UserRole", 
@@ -35,5 +40,6 @@ __all__ = [
     "AiAnalysis", "ClarificationRequest", "ClarificationStatus",
     "DailyCommitAnalysis", "DailyCommitAnalysisCreate", "DailyCommitAnalysisUpdate", "DailyCommitAnalysisWithDetails",
     "RaciMatrix", "RaciActivity", "RaciRole", "RaciAssignment", "RaciRoleType", "RaciMatrixType",
-    "CreateRaciMatrixPayload", "UpdateRaciMatrixPayload"
+    "CreateRaciMatrixPayload", "UpdateRaciMatrixPayload",
+    "DailyWorkAnalysis", "WorkItem", "DeduplicationResult"
 ]
