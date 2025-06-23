@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     ZAPIER_WEEKLY_ANALYTICS_URL: Optional[str] = Field(None, env="ZAPIER_WEEKLY_ANALYTICS_URL")
     ZAPIER_OBJECTIVES_URL: Optional[str] = Field(None, env="ZAPIER_OBJECTIVES_URL")
     ZAPIER_API_KEY: Optional[str] = Field(None, env="ZAPIER_API_KEY")
+    
+    # Zapier Webhook Settings
+    ZAPIER_API_KEYS: Optional[str] = Field(None, env="ZAPIER_API_KEYS")  # Comma-separated list of valid API keys
+    ZAPIER_WEBHOOK_SECRET: Optional[str] = Field(None, env="ZAPIER_WEBHOOK_SECRET")  # For HMAC signature verification
+    ZAPIER_REQUIRE_AUTH: bool = Field(True, env="ZAPIER_REQUIRE_AUTH")  # Require authentication for webhooks
+    ENVIRONMENT: str = Field("production", env="ENVIRONMENT")  # development, staging, production
 
     # API Gateway Settings
     ENABLE_API_AUTH: bool = Field(True, env="ENABLE_API_AUTH")
@@ -85,6 +91,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_EXCLUDE_PATHS: str = Field("/health,/auth/login", env="RATE_LIMIT_EXCLUDE_PATHS") # Adjusted exclude paths
     API_KEYS: Optional[Dict[str, Dict[str, Any]]] = Field(None, env="API_KEYS")
     API_KEYS_FILE_PATH: Optional[str] = Field(None, env="API_KEYS_FILE_PATH")
+    
+    # CORS Settings
+    CORS_ALLOWED_ORIGINS: str = Field("http://localhost:5173,http://localhost:8080,http://frontend:8080", env="CORS_ALLOWED_ORIGINS")
+    CORS_ALLOW_CREDENTIALS: bool = Field(True, env="CORS_ALLOW_CREDENTIALS")
+    CORS_ALLOW_METHODS: str = Field("*", env="CORS_ALLOW_METHODS")
+    CORS_ALLOW_HEADERS: str = Field("*", env="CORS_ALLOW_HEADERS")
 
     @field_validator('API_KEYS', mode='before')
     @classmethod
@@ -247,6 +259,22 @@ class Settings(BaseSettings):
     @property
     def api_keys_file_path(self):
         return self.API_KEYS_FILE_PATH
+    
+    @property
+    def cors_allowed_origins(self):
+        return self.CORS_ALLOWED_ORIGINS.split(',')
+    
+    @property
+    def cors_allow_credentials(self):
+        return self.CORS_ALLOW_CREDENTIALS
+    
+    @property
+    def cors_allow_methods(self):
+        return self.CORS_ALLOW_METHODS.split(',') if ',' in self.CORS_ALLOW_METHODS else [self.CORS_ALLOW_METHODS]
+    
+    @property
+    def cors_allow_headers(self):
+        return self.CORS_ALLOW_HEADERS.split(',') if ',' in self.CORS_ALLOW_HEADERS else [self.CORS_ALLOW_HEADERS]
     
     @property
     def docs_repository(self):

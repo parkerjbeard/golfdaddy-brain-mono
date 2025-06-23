@@ -46,6 +46,12 @@ class ApiClient {
         headers['Authorization'] = `Bearer ${token}`
       }
 
+      // Add API key if configured
+      const apiKey = import.meta.env.VITE_API_KEY
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey
+      }
+
       const url = getApiUrl(endpoint);
       const response = await fetch(url, {
         ...options,

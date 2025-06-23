@@ -148,6 +148,8 @@ secrets/
 *.pem
 *.p12
 *.pfx
+*.crt
+*.cer
 
 # SECURITY: Configuration files that might contain secrets
 config.json

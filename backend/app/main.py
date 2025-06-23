@@ -27,6 +27,7 @@ from app.api.weekly_hours_endpoints import router as weekly_hours_router
 from app.api.daily_commit_analysis_endpoints import router as daily_analysis_router
 from app.api.zapier_endpoints import router as zapier_router
 from app.api.raci_matrix import router as raci_matrix_router
+from app.api.zapier_webhooks import router as zapier_webhooks_router
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
 from app.services.archive_service import ArchiveService
@@ -60,10 +61,10 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:8080", "http://frontend:8080"],  # Frontend Vite dev server
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allow_methods,
+    allow_headers=settings.cors_allow_headers,
 )
 
 # Add custom middleware
@@ -96,6 +97,7 @@ app.include_router(weekly_hours_router)
 app.include_router(daily_analysis_router)
 app.include_router(zapier_router, prefix="/api/v1")
 app.include_router(raci_matrix_router, prefix="/api/v1")
+app.include_router(zapier_webhooks_router)  # Zapier webhooks already have /api/zapier prefix
 
 # Register custom exception handlers
 add_exception_handlers(app)

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# python backend/scripts/seed_historical_commits.py --repo owner/repo
+# --days 30
 """
 Seed historical commit data from GitHub repositories.
 Analyzes commits from the past month and estimates hours worked per user per day.
@@ -22,13 +24,16 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", os.getenv("SUPABASE_SERVICE_KEY", "dummy_key_for_testing"))
 os.environ.setdefault("SUPABASE_URL", os.getenv("SUPABASE_URL", "https://dummy.supabase.co"))
 
-# Add the app directory to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Add the backend directory to the Python path
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, backend_dir)
 
 from app.integrations.commit_analysis import CommitAnalyzer
-from app.database import get_async_session
-from app.crud.commit_analysis import crud_commit_analysis
-from app.schemas.commit_analysis import CommitAnalysisCreate
+from app.config.supabase_client import get_supabase_client_safe
+from app.repositories.commit_repository import CommitRepository
+from app.models.commit import Commit
+from app.repositories.user_repository import UserRepository
+from app.models.user import User, UserRole
 
 
 class HistoricalCommitSeeder:
@@ -41,6 +46,9 @@ class HistoricalCommitSeeder:
             self.commit_analyzer.commit_analysis_model = model
         self.rate_limit_remaining = 5000
         self.rate_limit_reset = None
+        self.user_cache = {}  # Cache to avoid repeated lookups
+        # Initialize Supabase client
+        self.supabase_client = get_supabase_client_safe()
         
     def _make_github_request(self, url: str, accept_header: str = "application/vnd.github.v3+json") -> requests.Response:
         """Make a GitHub API request with proper headers and rate limit handling."""
@@ -120,6 +128,46 @@ class HistoricalCommitSeeder:
             
         return commits
     
+    async def get_or_create_user(self, github_username: str, author_email: str, author_name: str) -> Optional[User]:
+        """Get existing user by GitHub username or create a new one."""
+        # Check cache first
+        if github_username in self.user_cache:
+            return self.user_cache[github_username]
+        
+        user_repo = UserRepository(self.supabase_client)
+        
+        # Try to find user by GitHub username first
+        user = await user_repo.get_user_by_github_username(github_username)
+        
+        # If not found, try by email
+        if not user:
+            user = await user_repo.get_user_by_email(author_email)
+        
+        # Create new user if not found
+        if not user:
+            print(f"  👤 Creating new user for GitHub username: {github_username}")
+            try:
+                user_data = User(
+                    email=author_email,
+                    name=author_name or github_username,  # Use GitHub username as name if no name provided
+                    github_username=github_username,
+                    role=UserRole.DEVELOPER,
+                    is_active=True,
+                    metadata={
+                        "source": "historical_commit_seeder",
+                        "created_from": "github_commits"
+                    }
+                )
+                user = await user_repo.create_user(user_data)
+                print(f"    ✅ Created user: {user.name} ({user.email})")
+            except Exception as e:
+                print(f"    ❌ Failed to create user: {e}")
+                return None
+        
+        # Cache the user
+        self.user_cache[github_username] = user
+        return user
+    
     def get_commit_diff(self, repository: str, commit_sha: str) -> Optional[str]:
         """Get the diff for a specific commit."""
         owner, repo = repository.split("/")
@@ -151,6 +199,8 @@ class HistoricalCommitSeeder:
         total_hours = 0.0
         total_complexity = 0.0
         analyses = []
+        github_username = None
+        author_name = None
         
         print(f"\n📅 Analyzing {len(commits)} commits for {author_email} on {date.strftime('%Y-%m-%d')}")
         
@@ -165,6 +215,14 @@ class HistoricalCommitSeeder:
             diff = self.get_commit_diff(repository, sha)
             if not diff:
                 continue
+            
+            # Extract GitHub username from author data
+            if not github_username and details.get('author'):
+                github_username = details['author'].get('login')
+            
+            # Keep author name for user creation
+            if not author_name:
+                author_name = commit['commit']['author']['name']
             
             # Extract file information
             files_changed = []
@@ -187,6 +245,8 @@ class HistoricalCommitSeeder:
                 "files_changed": files_changed,
                 "additions": additions,
                 "deletions": deletions,
+                "timestamp": commit['commit']['author']['date'],
+                "commit_url": details.get('html_url', '')
             }
             
             try:
@@ -195,6 +255,16 @@ class HistoricalCommitSeeder:
                 analysis = await self.commit_analyzer.analyze_commit_diff(commit_data)
                 
                 if analysis and not analysis.get('error'):
+                    # Merge original commit data with analysis results
+                    analysis.update({
+                        "commit_hash": sha,
+                        "message": commit_data["message"],
+                        "commit_url": commit_data["commit_url"],
+                        "timestamp": commit_data["timestamp"],
+                        "additions": commit_data["additions"],
+                        "deletions": commit_data["deletions"],
+                        "files_changed": commit_data["files_changed"]
+                    })
                     analyses.append(analysis)
                     total_hours += float(analysis.get('estimated_hours', 0))
                     total_complexity += float(analysis.get('complexity_score', 0))
@@ -212,6 +282,8 @@ class HistoricalCommitSeeder:
         return {
             "date": date.strftime('%Y-%m-%d'),
             "author_email": author_email,
+            "github_username": github_username,
+            "author_name": author_name,
             "total_commits": len(commits),
             "analyzed_commits": len(analyses),
             "total_hours": round(total_hours, 1),
@@ -300,7 +372,7 @@ class HistoricalCommitSeeder:
                 
                 # Store in database if not dry run
                 if not dry_run and day_analysis["analyzed_commits"] > 0:
-                    await self.store_daily_analysis(repository, author_email, day_analysis)
+                    await self.store_daily_analysis(repository, day_analysis)
         
         # Sort daily summaries by date
         results["summary"]["daily_summaries"].sort(key=lambda x: x["date"])
@@ -308,32 +380,68 @@ class HistoricalCommitSeeder:
         
         return results
     
-    async def store_daily_analysis(self, repository: str, author_email: str, day_analysis: Dict):
+    async def store_daily_analysis(self, repository: str, day_analysis: Dict):
         """Store the daily analysis results in the database."""
-        async for session in get_async_session():
-            try:
-                # Store each individual commit analysis
-                for analysis in day_analysis["analyses"]:
-                    commit_data = CommitAnalysisCreate(
-                        commit_hash=analysis["commit_hash"],
-                        repository=repository,
-                        author_email=author_email,
-                        complexity_score=analysis["complexity_score"],
-                        estimated_hours=analysis["estimated_hours"],
-                        risk_level=analysis["risk_level"],
-                        seniority_score=analysis["seniority_score"],
-                        seniority_rationale=analysis["seniority_rationale"],
-                        key_changes=analysis["key_changes"],
-                        analyzed_at=datetime.fromisoformat(analysis["analyzed_at"]),
-                        model_used=analysis.get("model_used", "gpt-4o-mini")
-                    )
-                    
-                    await crud_commit_analysis.create(session, obj_in=commit_data)
+        try:
+            # Get or create user first
+            github_username = day_analysis.get("github_username")
+            author_email = day_analysis["author_email"]
+            author_name = day_analysis.get("author_name", github_username)
+            
+            user = None
+            if github_username:
+                user = await self.get_or_create_user(github_username, author_email, author_name)
+            
+            # Create commit repository instance
+            commit_repo = CommitRepository(self.supabase_client)
+            
+            # Store each individual commit analysis
+            for analysis in day_analysis["analyses"]:
+                # Store analysis metadata in code_quality_analysis JSON field
+                analysis_metadata = {
+                    "key_changes": analysis.get("key_changes", []),
+                    "seniority_rationale": analysis.get("seniority_rationale", ""),
+                    "model_used": analysis.get("model_used", "gpt-4o-mini"),
+                    "analyzed_at": analysis.get("analyzed_at")
+                }
                 
-                print(f"  💾 Stored {len(day_analysis['analyses'])} analyses for {author_email} on {day_analysis['date']}")
+                # Parse commit timestamp
+                commit_timestamp = datetime.now(timezone.utc)
+                if analysis.get("timestamp"):
+                    try:
+                        commit_timestamp = datetime.fromisoformat(analysis["timestamp"].replace('Z', '+00:00'))
+                    except:
+                        pass
                 
-            except Exception as e:
-                print(f"  ❌ Error storing data: {e}")
+                commit_data = Commit(
+                    commit_hash=analysis["commit_hash"],
+                    commit_message=analysis.get("message", ""),
+                    commit_url=analysis.get("commit_url", ""),
+                    repository_name=repository,
+                    repository_url=f"https://github.com/{repository}",
+                    author_email=author_email,
+                    author_github_username=github_username,
+                    author_id=user.id if user else None,
+                    complexity_score=analysis["complexity_score"],
+                    ai_estimated_hours=analysis["estimated_hours"],
+                    risk_level=analysis["risk_level"],
+                    seniority_score=analysis["seniority_score"],
+                    ai_analysis_notes=analysis.get("seniority_rationale", ""),
+                    code_quality_analysis=analysis_metadata,
+                    lines_added=analysis.get("additions", 0),
+                    lines_deleted=analysis.get("deletions", 0),
+                    changed_files=analysis.get("files_changed", []),
+                    commit_timestamp=commit_timestamp,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc)
+                )
+                
+                await commit_repo.save_commit(commit_data)
+            
+            print(f"  💾 Stored {len(day_analysis['analyses'])} analyses for {author_email} on {day_analysis['date']}")
+            
+        except Exception as e:
+            print(f"  ❌ Error storing data: {e}")
 
 
 async def main():

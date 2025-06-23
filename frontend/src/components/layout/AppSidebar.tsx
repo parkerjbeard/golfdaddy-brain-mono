@@ -65,11 +65,11 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton 
-                  isActive={isActive('/')} 
+                  isActive={isActive('/dashboard')} 
                   asChild 
                   tooltip="Company Dashboard"
                 >
-                  <Link to="/">
+                  <Link to="/dashboard">
                     <Home className="h-5 w-5" />
                     <span>Executive Overview</span>
                   </Link>

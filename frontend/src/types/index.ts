@@ -8,4 +8,7 @@ export interface Team {
   id: string;
   name: string;
   members: User[];
-} 
+}
+
+// Export dashboard types
+export * from './dashboard'; 
