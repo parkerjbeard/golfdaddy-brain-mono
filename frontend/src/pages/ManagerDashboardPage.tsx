@@ -10,6 +10,8 @@ import { addDays, format, isEqual } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DailyReportsView } from "@/components/DailyReportsView";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const ManagerDashboardPage: React.FC = () => {
   const { session } = useAuth();
@@ -335,6 +337,17 @@ const ManagerDashboardPage: React.FC = () => {
                       </Card>
                     ))
                   ) : <p>No commit comparison insights available for this period.</p>}
+                </CardContent>
+              </Card>
+              
+              {/* Daily Reports Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Daily Reports History</CardTitle>
+                  <CardDescription>View all submitted EOD reports with full details</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <DailyReportsView userId={showFocusedViewForUserId} userName={focusedUserName} />
                 </CardContent>
               </Card>
             </div>

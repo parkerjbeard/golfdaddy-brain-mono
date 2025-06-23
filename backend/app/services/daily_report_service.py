@@ -90,6 +90,35 @@ class DailyReportService:
     async def get_reports_for_user(self, user_id: UUID) -> List[DailyReport]:
         # TODO: Add pagination
         return await self.report_repository.get_daily_reports_by_user_id(user_id)
+    
+    async def get_reports_for_user_paginated(self, user_id: UUID, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+        """Get paginated daily reports for a specific user."""
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = await self.report_repository.get_user_reports_count(user_id)
+        
+        # Get paginated reports
+        reports = await self.report_repository.get_daily_reports_by_user_id_paginated(
+            user_id=user_id,
+            offset=offset,
+            limit=page_size
+        )
+        
+        # Calculate pagination metadata
+        total_pages = (total_count + page_size - 1) // page_size
+        has_next = page < total_pages
+        has_previous = page > 1
+        
+        return {
+            "items": reports,
+            "total": total_count,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_previous": has_previous
+        }
 
     async def get_user_report_for_date(self, user_id: UUID, report_date: datetime, user_timezone: Optional[str] = None) -> Optional[DailyReport]:
         """
@@ -118,6 +147,34 @@ class DailyReportService:
         """Retrieves all daily reports. For admin use."""
         # TODO: Add pagination for admin view
         return await self.report_repository.get_all_daily_reports()
+    
+    async def get_all_reports_paginated(self, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+        """Get all daily reports with pagination. For admin use."""
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = await self.report_repository.get_total_reports_count()
+        
+        # Get paginated reports
+        reports = await self.report_repository.get_all_daily_reports_paginated(
+            offset=offset,
+            limit=page_size
+        )
+        
+        # Calculate pagination metadata
+        total_pages = (total_count + page_size - 1) // page_size
+        has_next = page < total_pages
+        has_previous = page > 1
+        
+        return {
+            "items": reports,
+            "total": total_count,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_previous": has_previous
+        }
     
     async def process_report_with_ai(self, report: DailyReport) -> DailyReport:
         """

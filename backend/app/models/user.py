@@ -5,10 +5,9 @@ from datetime import datetime
 from enum import Enum
 
 class UserRole(str, Enum):
-    USER = "USER"
-    DEVELOPER = "DEVELOPER"
-    MANAGER = "MANAGER"
-    ADMIN = "ADMIN"
+    EMPLOYEE = "employee"
+    MANAGER = "manager"
+    ADMIN = "admin"
 
 class User(BaseModel):
     id: UUID = Field(..., description="Corresponds to the Supabase auth.users id")
@@ -17,7 +16,7 @@ class User(BaseModel):
     email: Optional[EmailStr] = None # This should ideally be consistently sourced from auth or kept in sync
     slack_id: Optional[str] = Field(None, unique=True, description="User's Slack ID")
     github_username: Optional[str] = Field(None, description="User's GitHub username")
-    role: UserRole = UserRole.USER
+    role: UserRole = UserRole.EMPLOYEE
     team: Optional[str] = None
     team_id: Optional[UUID] = None # Foreign key to Team model
     reports_to_id: Optional[UUID] = Field(None, description="ID of the user this user reports to")
@@ -33,9 +32,22 @@ class User(BaseModel):
 
     @field_validator('role', mode='before')
     @classmethod
-    def uppercase_role(cls, v):
+    def normalize_role(cls, v):
         if isinstance(v, str):
-            return v.upper()
+            # Convert to lowercase for comparison
+            v_lower = v.lower()
+            # Map legacy roles and uppercase roles to normalized roles
+            role_mapping = {
+                'user': 'employee',
+                'developer': 'employee',
+                'viewer': 'employee',
+                'lead': 'manager',
+                'service_account': 'employee',
+                'employee': 'employee',
+                'manager': 'manager',
+                'admin': 'admin'
+            }
+            return role_mapping.get(v_lower, 'employee')  # Default to employee if unknown
         return v
 
     class Config:

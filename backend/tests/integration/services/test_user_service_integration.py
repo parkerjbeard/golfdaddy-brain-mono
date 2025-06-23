@@ -80,7 +80,7 @@ class TestUserServiceIntegration:
             id=self.test_user_id,
             name="Test User",
             email="test@example.com",
-            role=UserRole.USER,
+            role=UserRole.EMPLOYEE,
             created_at=datetime.now(),
             updated_at=datetime.now(),
             is_active=True
@@ -103,7 +103,7 @@ class TestUserServiceIntegration:
             id=uuid.uuid4(),
             name="New User",
             email="new@example.com",
-            role=UserRole.USER,
+            role=UserRole.EMPLOYEE,
             created_at=datetime.now(),
             updated_at=datetime.now(),
             is_active=True

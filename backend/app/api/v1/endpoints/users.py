@@ -25,7 +25,7 @@ class UserCreatePayload(BaseModel):
     name: Optional[str] = None
     slack_id: Optional[str] = None
     github_username: Optional[str] = None
-    role: UserRole = UserRole.USER
+    role: UserRole = UserRole.EMPLOYEE
     team: Optional[str] = None
     avatar_url: Optional[str] = None
 
@@ -59,7 +59,7 @@ async def list_users(
     role: Optional[UserRole] = Query(
         None, description="Filter users by role (e.g., DEVELOPER, MANAGER)"
     ),
-    # current_user: User = Depends(get_current_active_user), # Optional: Add auth if needed
+    current_user: User = Depends(get_current_user),  # Require authentication
     user_repo: UserRepository = Depends(get_user_repository),
 ):
     """

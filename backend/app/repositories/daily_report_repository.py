@@ -309,4 +309,70 @@ class DailyReportRepository:
             raise
         except Exception as e:
             logger.error(f"Unexpected error getting all daily reports: {e}", exc_info=True)
-            raise DatabaseError(f"Unexpected error getting all daily reports: {str(e)}") 
+            raise DatabaseError(f"Unexpected error getting all daily reports: {str(e)}")
+    
+    async def get_daily_reports_by_user_id_paginated(self, user_id: UUID, offset: int = 0, limit: int = 10) -> List[DailyReport]:
+        """
+        Get paginated daily reports for a specific user.
+        """
+        try:
+            response: PostgrestAPIResponse = await asyncio.to_thread(
+                self._client.table(self._table_name)
+                .select("*")
+                .eq("user_id", str(user_id))
+                .order("report_date", desc=True)
+                .range(offset, offset + limit - 1)
+                .execute
+            )
+            self._handle_supabase_error(response, f"Error fetching paginated daily reports for user {user_id}")
+            return [self._db_to_model(row) for row in response.data] if response.data else []
+        except DatabaseError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error getting paginated daily reports for user {user_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error getting paginated daily reports for user {user_id}: {str(e)}")
+    
+    async def get_user_reports_count(self, user_id: UUID) -> int:
+        """
+        Get the total count of reports for a specific user.
+        """
+        try:
+            # Supabase doesn't have a direct count method, so we use select with count option
+            response: PostgrestAPIResponse = await asyncio.to_thread(
+                self._client.table(self._table_name)
+                .select("id", count='exact')
+                .eq("user_id", str(user_id))
+                .execute
+            )
+            self._handle_supabase_error(response, f"Error counting reports for user {user_id}")
+            # The count is returned in the response.count attribute when count='exact' is used
+            return response.count if response.count is not None else 0
+        except DatabaseError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error counting reports for user {user_id}: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error counting reports for user {user_id}: {str(e)}")
+    
+    async def get_all_daily_reports_paginated(self, offset: int = 0, limit: int = 10) -> List[DailyReport]:
+        """
+        Get all daily reports with pagination (admin use).
+        """
+        return await self.get_all_daily_reports(limit=limit, offset=offset)
+    
+    async def get_total_reports_count(self) -> int:
+        """
+        Get the total count of all daily reports.
+        """
+        try:
+            response: PostgrestAPIResponse = await asyncio.to_thread(
+                self._client.table(self._table_name)
+                .select("id", count='exact')
+                .execute
+            )
+            self._handle_supabase_error(response, "Error counting all reports")
+            return response.count if response.count is not None else 0
+        except DatabaseError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error counting all reports: {e}", exc_info=True)
+            raise DatabaseError(f"Unexpected error counting all reports: {str(e)}") 

@@ -61,13 +61,13 @@ async def get_current_user(
         if not user_profile:
             logger.info(f"User profile not found for authenticated ID: {user_id}. Creating new profile.")
             
-            # Use VIEWER as default role, which is the lowest permission role
+            # Use EMPLOYEE as default role, which is the lowest permission role
             # This can be changed later by an admin if needed
             new_user_data = {
                 "id": user_id,
                 "email": auth_user.email,
                 "name": auth_user.email.split('@')[0] if auth_user.email else None, 
-                "role": UserRole.USER,
+                "role": UserRole.EMPLOYEE,
             }
             
             try:
@@ -128,4 +128,30 @@ async def get_admin_user(
         )
     
     logger.info(f"Admin access granted to user {current_user.id}")    
+    return current_user
+
+async def get_manager_or_admin_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """
+    Verify that the current user is a manager or admin.
+    
+    Args:
+        current_user: Current user data from token
+        
+    Returns:
+        User information if manager or admin
+        
+    Raises:
+        HTTPException: If user is not a manager or admin
+    """
+    allowed_roles = [UserRole.MANAGER, UserRole.ADMIN]
+    if not current_user.role or current_user.role not in allowed_roles:
+        logger.warning(f"User {current_user.id} with role {current_user.role} attempted to access manager-only endpoint")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager or admin privileges required"
+        )
+    
+    logger.info(f"Manager/admin access granted to user {current_user.id}")    
     return current_user 

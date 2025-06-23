@@ -36,7 +36,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsible }: AppSidebarProps) {
-  const { session, signOut } = useAuth();
+  const { session, signOut, userProfile } = useAuth();
   const user = session?.user;
   const location = useLocation();
 
@@ -82,7 +82,11 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
                   asChild 
                   tooltip="Admin Dashboard"
                 >
-                  <Link to="/admin">
+                  <Link to="/admin" onClick={(e) => {
+                    console.log('Admin link clicked!');
+                    console.log('Event:', e);
+                    console.log('Current location before:', location.pathname);
+                  }}>
                     <BarChart className="h-5 w-5" />
                     <span>Admin Dashboard</span>
                   </Link>
@@ -95,7 +99,11 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
                   asChild 
                   tooltip="Manager Dashboard"
                 >
-                  <Link to="/manager">
+                  <Link to="/manager" onClick={(e) => {
+                    console.log('Manager link clicked!');
+                    console.log('Event:', e);
+                    console.log('Current location before:', location.pathname);
+                  }}>
                     <ClipboardList className="h-5 w-5" />
                     <span>Manager Dashboard</span>
                   </Link>

@@ -8,9 +8,13 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - ENABLE_API_AUTH=true
+      - ENABLE_API_AUTH=false
       - CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080,http://frontend:8080
       - API_KEYS={"dev-api-key":{"role":"admin","name":"Development API Key"}}
+      - AUTH_EXCLUDE_PATHS=/docs,/redoc,/openapi.json,/health,/auth,/api/auth/
+      - USE_LOCAL_DB=false
+      - SUPABASE_URL=https://xfnxafbsmqowzvuwmhvi.supabase.co
+      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhmbnhhZmJzbXFvd3p2dXdtaHZpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDc1Mzg5NCwiZXhwIjoyMDYwMzI5ODk0fQ.9goqNxj7bm_OFD_ueVwwvEJeQkF9S6tK7iXYa_8HfAM
     depends_on:
       db:
         condition: service_healthy

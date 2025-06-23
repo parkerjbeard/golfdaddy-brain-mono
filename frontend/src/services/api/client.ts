@@ -1,11 +1,11 @@
 import { supabase } from '../../lib/supabaseClient'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 // Use proxy in development
 const getApiUrl = (endpoint: string) => {
-  // In development, use the Vite proxy
-  if (import.meta.env.DEV && endpoint.startsWith('/api')) {
+  // In development, use the Vite proxy for /api, /auth, /dev, /test paths
+  if (import.meta.env.DEV && (endpoint.startsWith('/api') || endpoint.startsWith('/auth') || endpoint.startsWith('/dev') || endpoint.startsWith('/test'))) {
     return endpoint;
   }
   // In production or for non-proxied requests, use full URL

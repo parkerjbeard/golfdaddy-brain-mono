@@ -8,12 +8,25 @@ import logging
 import json
 from datetime import datetime # For potential datetime fields in User model
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
+import os
 
 logger = logging.getLogger(__name__)
 
+# Check if we should use local development database
+USE_LOCAL_DB = os.getenv("USE_LOCAL_DB", "false").lower() == "true"
+
+if USE_LOCAL_DB:
+    from app.repositories.user_repository_local import LocalUserRepository
+
 class UserRepository:
     def __init__(self, client: Client = None):
-        self._client = client if client is not None else get_supabase_client_safe()
+        if USE_LOCAL_DB:
+            # Use local repository for development
+            self._local_repo = LocalUserRepository()
+            self._client = None
+        else:
+            self._client = client if client is not None else get_supabase_client_safe()
+            self._local_repo = None
         self._table = "users"
 
     def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
@@ -42,6 +55,9 @@ class UserRepository:
            Assumes the corresponding auth.users entry already exists.
            The user_data.id MUST match the auth.users.id.
         """
+        if USE_LOCAL_DB:
+            return await self._local_repo.create_user(user_data)
+        
         try:
             user_dict_initial = user_data.model_dump(exclude_unset=True, by_alias=False)
             user_dict = self._process_user_dict_for_supabase(user_dict_initial)
@@ -70,6 +86,9 @@ class UserRepository:
 
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
         """Retrieves a user by their UUID."""
+        if USE_LOCAL_DB:
+            return await self._local_repo.get_user_by_id(user_id)
+            
         try:
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("id", str(user_id)).maybe_single().execute
@@ -154,6 +173,9 @@ class UserRepository:
 
     async def list_users_by_role(self, role: UserRole) -> List[User]:
         """Lists all users with a specific role."""
+        if USE_LOCAL_DB:
+            return await self._local_repo.get_users_by_role(role)
+            
         try:
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("role", role.value).execute
@@ -168,6 +190,11 @@ class UserRepository:
 
     async def list_all_users(self, skip: int = 0, limit: int = 100) -> Tuple[List[User], int]:
         """Lists all users in the profile table with pagination."""
+        if USE_LOCAL_DB:
+            users = await self._local_repo.get_all_users(limit, skip)
+            # For now, return the length as total count
+            return users, len(users)
+            
         try:
             count_response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*", count='exact').limit(0).execute
@@ -189,6 +216,9 @@ class UserRepository:
 
     async def update_user(self, user_id: UUID, update_data: Dict[str, Any]) -> Optional[User]:
         """Updates a user's profile data."""
+        if USE_LOCAL_DB:
+            return await self._local_repo.update_user(user_id, update_data)
+            
         try:
             if 'id' in update_data:
                 del update_data['id']

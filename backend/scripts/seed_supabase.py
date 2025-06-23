@@ -145,7 +145,7 @@ async def seed_users():
         profile_update_data = {
             "name": profile_data.get("name"),
             "slack_id": profile_data.get("slack_id"),
-            "role": profile_data.get("role", UserRole.USER),
+            "role": profile_data.get("role", UserRole.EMPLOYEE),
             "team": profile_data.get("team"),
             "avatar_url": profile_data.get("avatar_url"),
             "email": email

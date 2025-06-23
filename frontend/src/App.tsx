@@ -69,7 +69,7 @@ function App() {
                 <Route
                   path="admin"
                   element={
-                    <ProtectedRoute allowedRoles={['admin']}>
+                    <ProtectedRoute requiredRoles={['admin']}>
                       <AdminDashboard />
                     </ProtectedRoute>
                   }
@@ -77,7 +77,7 @@ function App() {
                 <Route
                   path="users"
                   element={
-                    <ProtectedRoute allowedRoles={['admin']}>
+                    <ProtectedRoute requiredRoles={['admin']}>
                       <UserManagementPage />
                     </ProtectedRoute>
                   }
@@ -85,7 +85,7 @@ function App() {
                 <Route
                   path="teams"
                   element={
-                    <ProtectedRoute allowedRoles={['admin']}>
+                    <ProtectedRoute requiredRoles={['admin']}>
                       <TeamManagementPage />
                     </ProtectedRoute>
                   }
@@ -95,7 +95,7 @@ function App() {
                 <Route
                   path="manager"
                   element={
-                    <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                    <ProtectedRoute requiredRoles={['manager', 'admin']}>
                       <ManagerDashboardPage />
                     </ProtectedRoute>
                   }
@@ -103,7 +103,7 @@ function App() {
                 <Route
                   path="department"
                   element={
-                    <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                    <ProtectedRoute requiredRoles={['manager', 'admin']}>
                       <DepartmentDashboard />
                     </ProtectedRoute>
                   }
@@ -111,7 +111,7 @@ function App() {
                 <Route
                   path="employees/:id"
                   element={
-                    <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                    <ProtectedRoute requiredRoles={['manager', 'admin']}>
                       <EmployeeDetail />
                     </ProtectedRoute>
                   }

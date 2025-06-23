@@ -1,6 +1,7 @@
 import { AppSidebar } from "./AppSidebar";
 import { ReactNode } from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { DevRoleSelector } from "../DevRoleSelector";
 
 interface LayoutProps {
   children: ReactNode;
@@ -24,6 +25,7 @@ export function Layout({ children }: LayoutProps) {
           </SidebarInset>
         </div>
       </div>
+      <DevRoleSelector />
     </SidebarProvider>
   );
 }

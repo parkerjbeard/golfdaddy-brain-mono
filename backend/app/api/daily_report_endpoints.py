@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, status
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Body, status, Query
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 import logging
@@ -54,13 +54,20 @@ async def submit_eod_report(
         logger.error(f"Error submitting EOD report: {e}", exc_info=True)
         raise DatabaseError(message=f"An unexpected error occurred while submitting the report: {str(e)}")
 
-@router.get("/me", response_model=List[DailyReport])
+@router.get("/me", response_model=Dict[str, Any])
 async def get_my_daily_reports(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
     current_user: User = Depends(get_current_user), # Updated dependency
     report_service: DailyReportService = Depends(get_daily_report_service)
 ):
-    """Get all EOD reports for the currently authenticated user."""
-    return await report_service.get_reports_for_user(current_user.id)
+    """Get EOD reports for the currently authenticated user with pagination."""
+    reports = await report_service.get_reports_for_user_paginated(
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size
+    )
+    return reports
 
 @router.get("/me/{report_date_str}", response_model=Optional[DailyReport])
 async def get_my_daily_report_for_date(
@@ -102,17 +109,19 @@ async def get_daily_report(
     return report
 
 # Admin endpoint to view all reports
-@router.get("/admin/all", response_model=List[DailyReport])
+@router.get("/admin/all", response_model=Dict[str, Any])
 async def get_all_daily_reports_admin(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
     current_user: User = Depends(get_current_user),
     report_service: DailyReportService = Depends(get_daily_report_service)
 ):
-    """(Admin) Get all EOD reports."""
+    """(Admin) Get all EOD reports with pagination."""
     # Placeholder for admin check
     # Replace with actual admin role check
     if current_user.role != UserRole.ADMIN: # Assumes an is_admin attribute on User model
         raise PermissionDeniedError(message="User does not have admin privileges")
-    return await report_service.get_all_reports()
+    return await report_service.get_all_reports_paginated(page=page, page_size=page_size)
 
 @router.put("/{report_id}", response_model=DailyReport)
 async def update_my_daily_report(
@@ -171,5 +180,28 @@ async def delete_my_daily_report(
         raise DatabaseError(message=f"An unexpected error occurred while deleting the report: {str(e)}")
     # No content to return on successful delete, per HTTP 204
     return
+
+@router.get("/user/{user_id}", response_model=Dict[str, Any])
+async def get_user_daily_reports(
+    user_id: UUID,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    current_user: User = Depends(get_current_user),
+    report_service: DailyReportService = Depends(get_daily_report_service)
+):
+    """Get daily reports for a specific user with pagination. For managers to view their team's reports."""
+    # Check if current user is a manager or admin
+    # For now, we'll assume managers have a specific role
+    if current_user.role not in [UserRole.MANAGER, UserRole.ADMIN]:
+        raise PermissionDeniedError(message="Only managers and admins can view other users' reports")
+    
+    # TODO: Add check that the requested user is actually in the manager's team
+    
+    reports = await report_service.get_reports_for_user_paginated(
+        user_id=user_id,
+        page=page,
+        page_size=page_size
+    )
+    return reports
 
 # Add more endpoints as needed, e.g., for admins to view reports, or for users to update/delete. 

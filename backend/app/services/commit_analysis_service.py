@@ -559,7 +559,7 @@ class CommitAnalysisService:
                     name=payload.author_name or payload.author_github_username, # Use provided name or fallback to username
                     email=payload.author_email if payload.author_email else None,
                     github_username=payload.author_github_username,
-                    role=UserRole.USER, # Default role for new users
+                    role=UserRole.EMPLOYEE, # Default role for new users
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow(),
                     is_active=True # New users are active by default

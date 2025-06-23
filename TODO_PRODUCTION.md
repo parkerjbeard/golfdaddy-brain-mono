@@ -26,14 +26,8 @@
 ## 🟡 Authentication & Security (Simplified for Internal Use)
 
 ### Simple Internal Authentication
-- [ ] Keep Supabase auth with email/password for startup team
 - [ ] Create simple admin approval flow for new users
-- [ ] Add basic role management (admin/user)
-
-### Session Management
-- [ ] Configure 12-hour session timeout
-- [ ] Add "Remember me" for 30 days
-- [ ] Simple logout functionality
+- [ ] Add UI for admins to manage user roles
 
 ### Security Essentials
 - [ ] Configure AWS security groups for internal access only
@@ -45,9 +39,7 @@
 ## 🟢 Backend Services Completion
 
 ### Notification Service (`notification_service.py`)
-\-[ ] Add notification preferences per user
-- [ ] Create notification templates
-- [ ] Implement email fallback for critical notifications
+\-[ ] Add notification preferences per user (time the EOD report reminder is sent, timezone). make this configurable with a slash command /preferences (or something similar). also create a slash command /help to show all of the slash commands possible and then add this to the slack setup guide so i will remember to create those slash commands in the slash setup
 
 ### RACI Matrix Service (`raci_service.py`)
 - [ ] Implement `update_assignments()` method
@@ -68,7 +60,6 @@
 ### Commit Analysis
 - [ ] Implement code quality AI analysis
 - [ ] Create commit pattern analysis
-- [ ] Add PR review metrics
 
 ### Webhook Configuration
 - [ ] Set up production webhook URL
@@ -97,8 +88,7 @@
 
 ### Component Fixes
 - [ ] Complete placeholder components in `/documentation/*`
-- [ ] Fix ProtectedRoute auth TODOs
-- [ ] Add loading states for all async operations
+- [ ] Add loading states for other async operations
 - [ ] Implement error boundaries
 - [ ] Add offline mode support
 
@@ -107,10 +97,11 @@
 ### Supabase Production Setup
 - [ ] Create production Supabase project
 - [ ] Configure connection pooling in Supabase dashboard
-- [ ] Set up Row Level Security policies
-- [ ] Configure Supabase backups (automatic)
+- [ ] ~~Set up Row Level Security policies~~ (Not using - roles stored in PostgreSQL)
+- [ ] Configure Supabase backups (automatic for auth data only)
 - [ ] Document migration procedures
 - [ ] Set up staging Supabase project for testing
+- [ ] Run role migration script in production
 
 ### Environment Configuration
 - [ ] Move all secrets to AWS Secrets Manager
@@ -123,7 +114,8 @@
 ### Frontend Testing
 - [ ] Set up Jest/React Testing Library
 - [ ] Test authentication flows
-- [ ] Test role-based access
+- [ ] Test role-based access (employee/manager/admin)
+- [ ] Test role caching mechanism
 - [ ] Create E2E test suite
 - [ ] Add visual regression tests
 
@@ -159,8 +151,10 @@
 
 ### Internal Support
 - [ ] Basic admin dashboard for user management
+- [ ] Add UI for role assignment (employee/manager/admin)
 - [ ] Simple activity logs
 - [ ] Document common troubleshooting steps
+- [ ] Add role change audit logging
 
 ## 📚 Documentation (Simplified for Startup)
 
@@ -170,6 +164,7 @@
 - [ ] Slack command reference
 - [ ] AWS deployment guide
 - [ ] Environment variables documentation
+- [x] Role-based authentication guide (see claude_docs/simplified-auth-setup-guide.md)
 
 ### Quick Start Guides
 - [ ] One-page employee guide
@@ -183,14 +178,14 @@
 
 ## Launch Checklist
 
-- [ ] ✅ AWS infrastructure deployed and tested
-- [ ] ✅ All Slack commands working
-- [ ] ✅ Basic auth with Supabase functional
-- [ ] ✅ No hardcoded secrets or debug logs
-- [ ] ✅ CloudWatch monitoring active
-- [ ] ✅ Health checks passing
-- [ ] ✅ Core features tested by team
-- [ ] ✅ Pilot with founding team (5-10 users)
+- [ ] AWS infrastructure deployed and tested
+- [ ] All Slack commands working
+- [ ] No hardcoded secrets or debug logs
+- [ ] CloudWatch monitoring active
+- [ ] Health checks passing
+- [ ] Core features tested by team
+- [ ] Run role migration script on production database
+- [ ] Pilot with founding team (5-10 users)
 
 ## Post-Launch Priorities
 

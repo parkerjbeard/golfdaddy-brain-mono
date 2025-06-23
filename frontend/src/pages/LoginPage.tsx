@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2 } from 'lucide-react'
 
 export const LoginPage: React.FC = () => {
@@ -13,6 +14,7 @@ export const LoginPage: React.FC = () => {
   const { signIn, session } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -29,7 +31,7 @@ export const LoginPage: React.FC = () => {
     setLoading(true)
 
     try {
-      const { error } = await signIn(email, password)
+      const { error } = await signIn(email, password, rememberMe)
       
       if (error) {
         setError(error.message)
@@ -81,6 +83,21 @@ export const LoginPage: React.FC = () => {
                 required
                 disabled={loading}
               />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                disabled={loading}
+              />
+              <Label
+                htmlFor="remember"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Remember me for 30 days
+              </Label>
             </div>
           </CardContent>
           
