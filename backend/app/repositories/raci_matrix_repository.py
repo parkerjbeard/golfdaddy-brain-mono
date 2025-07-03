@@ -5,7 +5,8 @@ from datetime import datetime
 
 from app.models.raci_matrix import (
     RaciMatrix, CreateRaciMatrixPayload, UpdateRaciMatrixPayload,
-    RaciMatrixType, RaciActivity, RaciRole, RaciAssignment
+    RaciMatrixType, RaciActivity, RaciRole, RaciAssignment,
+    UpdateAssignmentsPayload
 )
 from app.config.supabase_client import get_supabase_client
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
@@ -241,6 +242,77 @@ class RaciMatrixRepository:
         except Exception as e:
             logger.error(f"Failed to delete RACI matrix {matrix_id}: {e}")
             raise DatabaseError(f"Failed to delete RACI matrix {matrix_id}")
+    
+    async def update_assignments(self, matrix_id: UUID, assignments: List[RaciAssignment]) -> bool:
+        """Update specific RACI assignments for a matrix."""
+        try:
+            # Verify matrix exists
+            matrix_exists = self.supabase.table('raci_matrices').select('id').eq('id', str(matrix_id)).execute()
+            if not matrix_exists.data:
+                raise ResourceNotFoundError(resource_name="RACI Matrix", resource_id=str(matrix_id))
+            
+            # Update assignments
+            for assignment in assignments:
+                # Delete existing assignment if any
+                self.supabase.table('raci_assignments').delete().eq('matrix_id', str(matrix_id)).eq('activity_id', assignment.activity_id).eq('role_id', assignment.role_id).execute()
+                
+                # Insert new assignment
+                assignment_data = {
+                    'matrix_id': str(matrix_id),
+                    'activity_id': assignment.activity_id,
+                    'role_id': assignment.role_id,
+                    'role': assignment.role.value,
+                    'notes': assignment.notes
+                }
+                self.supabase.table('raci_assignments').insert(assignment_data).execute()
+            
+            logger.info(f"Updated {len(assignments)} assignments for RACI matrix: {matrix_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update assignments for RACI matrix {matrix_id}: {e}")
+            raise DatabaseError(f"Failed to update assignments for RACI matrix {matrix_id}")
+    
+    async def bulk_update_assignments(self, matrix_id: UUID, activity_ids: List[str], role_ids: List[str], role_type: str, notes: Optional[str], clear_existing: bool) -> int:
+        """Bulk update assignments for multiple activity-role combinations."""
+        try:
+            # Verify matrix exists
+            matrix_exists = self.supabase.table('raci_matrices').select('id').eq('id', str(matrix_id)).execute()
+            if not matrix_exists.data:
+                raise ResourceNotFoundError(resource_name="RACI Matrix", resource_id=str(matrix_id))
+            
+            updated_count = 0
+            
+            # Clear existing assignments if requested
+            if clear_existing:
+                for activity_id in activity_ids:
+                    for role_id in role_ids:
+                        self.supabase.table('raci_assignments').delete().eq('matrix_id', str(matrix_id)).eq('activity_id', activity_id).eq('role_id', role_id).execute()
+            
+            # Create new assignments
+            for activity_id in activity_ids:
+                for role_id in role_ids:
+                    # Delete existing assignment if any (in case clear_existing is False)
+                    if not clear_existing:
+                        self.supabase.table('raci_assignments').delete().eq('matrix_id', str(matrix_id)).eq('activity_id', activity_id).eq('role_id', role_id).execute()
+                    
+                    # Insert new assignment
+                    assignment_data = {
+                        'matrix_id': str(matrix_id),
+                        'activity_id': activity_id,
+                        'role_id': role_id,
+                        'role': role_type,
+                        'notes': notes
+                    }
+                    self.supabase.table('raci_assignments').insert(assignment_data).execute()
+                    updated_count += 1
+            
+            logger.info(f"Bulk updated {updated_count} assignments for RACI matrix: {matrix_id}")
+            return updated_count
+            
+        except Exception as e:
+            logger.error(f"Failed to bulk update assignments for RACI matrix {matrix_id}: {e}")
+            raise DatabaseError(f"Failed to bulk update assignments for RACI matrix {matrix_id}")
     
     async def _build_complete_matrix(self, matrix_data: Dict[str, Any]) -> Optional[RaciMatrix]:
         """Build a complete RaciMatrix object with activities, roles, and assignments."""

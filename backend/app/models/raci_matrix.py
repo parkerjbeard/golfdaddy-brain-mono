@@ -77,4 +77,26 @@ class UpdateRaciMatrixPayload(BaseModel):
     roles: Optional[List[RaciRole]] = None
     assignments: Optional[List[RaciAssignment]] = None
     metadata: Optional[Dict[str, Any]] = None
-    is_active: Optional[bool] = None 
+    is_active: Optional[bool] = None
+
+class UpdateAssignmentsPayload(BaseModel):
+    """Payload for updating individual RACI assignments."""
+    assignments: List[RaciAssignment] = Field(description="List of assignments to update")
+
+class BulkAssignmentPayload(BaseModel):
+    """Payload for bulk assignment operations."""
+    activity_ids: List[str] = Field(description="List of activity IDs to apply assignments to")
+    role_ids: List[str] = Field(description="List of role IDs to apply assignments to")
+    role_type: RaciRoleType = Field(description="RACI role type to assign")
+    notes: Optional[str] = Field(None, description="Notes to apply to all assignments")
+    clear_existing: bool = Field(default=False, description="Whether to clear existing assignments first")
+
+class RaciMatrixTemplate(BaseModel):
+    """Template for a predefined RACI matrix."""
+    template_id: str = Field(description="Unique identifier for the template")
+    name: str = Field(description="Name of the template")
+    description: str = Field(description="Description of what this template is for")
+    matrix_type: RaciMatrixType = Field(description="Type of matrix this template creates")
+    activities: List[RaciActivity] = Field(description="Predefined activities")
+    roles: List[RaciRole] = Field(description="Predefined roles")
+    assignments: List[RaciAssignment] = Field(description="Predefined assignments") 

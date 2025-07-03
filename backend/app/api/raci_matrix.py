@@ -4,7 +4,8 @@ from uuid import UUID
 
 from app.models.raci_matrix import (
     RaciMatrix, CreateRaciMatrixPayload, UpdateRaciMatrixPayload,
-    RaciMatrixType
+    RaciMatrixType, UpdateAssignmentsPayload, BulkAssignmentPayload,
+    RaciMatrixTemplate
 )
 from app.services.raci_service import RaciService
 from app.auth.dependencies import get_current_user
@@ -181,6 +182,131 @@ async def validate_matrix(
             "is_valid": is_valid,
             "errors": errors
         }
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+# New endpoints for enhanced RACI functionality
+
+@router.patch("/{matrix_id}/assignments", response_model=dict)
+async def update_assignments(
+    matrix_id: UUID,
+    payload: UpdateAssignmentsPayload,
+    current_user: User = Depends(get_current_user)
+):
+    """Update specific assignments in a RACI matrix."""
+    try:
+        raci_service = RaciService()
+        success, warnings = await raci_service.update_assignments(matrix_id, payload)
+        
+        return {
+            "success": success,
+            "warnings": warnings
+        }
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.post("/{matrix_id}/bulk-assign", response_model=dict)
+async def bulk_assign(
+    matrix_id: UUID,
+    payload: BulkAssignmentPayload,
+    current_user: User = Depends(get_current_user)
+):
+    """Perform bulk assignment operations on a RACI matrix."""
+    try:
+        raci_service = RaciService()
+        updated_count, warnings = await raci_service.bulk_assign(matrix_id, payload)
+        
+        return {
+            "updated_count": updated_count,
+            "warnings": warnings
+        }
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.post("/{matrix_id}/validate-complete", response_model=dict)
+async def validate_matrix_complete(
+    matrix_id: UUID,
+    current_user: User = Depends(get_current_user)
+):
+    """Perform comprehensive validation of a RACI matrix."""
+    try:
+        raci_service = RaciService()
+        is_valid, result = await raci_service.validate_matrix_complete(matrix_id)
+        
+        return result
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.get("/templates", response_model=List[RaciMatrixTemplate])
+async def get_templates(
+    current_user: User = Depends(get_current_user)
+):
+    """Get all available RACI matrix templates."""
+    try:
+        raci_service = RaciService()
+        templates = raci_service.get_matrix_templates()
+        return templates
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch templates"
+        )
+
+@router.post("/templates/{template_id}", response_model=dict)
+async def create_from_template(
+    template_id: str,
+    name: str,
+    description: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new RACI matrix from a template."""
+    try:
+        raci_service = RaciService()
+        matrix, warnings = await raci_service.create_matrix_from_template(
+            template_id, name, description, current_user.id
+        )
+        
+        return {
+            "matrix": matrix,
+            "warnings": warnings
+        }
+    except BadRequestError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
