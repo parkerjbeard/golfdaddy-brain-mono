@@ -1,11 +1,11 @@
-# GolfDaddy Production TODO - AWS Internal Deployment
+# GolfDaddy Production TODO - Feature-Based Organization
 
-> **Updated for Startup Context**: Simplified for internal use at a small startup on AWS. 
-> Keeping Supabase for easier setup. Focus on getting core features working for ~10 users.
+> **Updated for Feature-Based Tracking**: Organized by feature areas rather than deployment phases. 
+> Focus on completing features end-to-end for internal startup use (~10 users).
 
-## 🔴 AWS Infrastructure & Deployment (Critical - Must Complete First)
+## 🔴 Critical Infrastructure & Security
 
-### AWS Setup
+### AWS Infrastructure & Deployment
 - [ ] Configure VPC with private subnets for internal access
 - [ ] Set up security groups (port 8000 for backend, 8080 for frontend)
 - [ ] Configure AWS Secrets Manager for environment variables
@@ -23,85 +23,124 @@
 - [ ] Set up staging environment on AWS
 - [ ] Document deployment rollback procedures
 
-## 🟡 Authentication & Security (Simplified for Internal Use)
-
-### Simple Internal Authentication
-- [ ] Create simple admin approval flow for new users
-- [ ] Add UI for admins to manage user roles
-
 ### Security Essentials
 - [ ] Configure AWS security groups for internal access only
-- [ ] Basic audit logging to CloudWatch
+- [ ] Enable audit logging to CloudWatch
 - [ ] Remove all debug console.log statements
 - [ ] Store secrets in AWS Secrets Manager
 - [ ] Enable HTTPS with AWS Certificate Manager
 
-## 🟢 Backend Services Completion
+### Database Production Setup
+- [ ] Create production Supabase project
+- [ ] Configure connection pooling in Supabase dashboard
+- [ ] Configure Supabase backups (automatic for auth data only)
+- [ ] Document migration procedures
+- [ ] Set up staging Supabase project for testing
+- [ ] Run role migration script in production
 
-### Notification Service (`notification_service.py`)
-\-[ ] Add notification preferences per user (time the EOD report reminder is sent, timezone). make this configurable with a slash command /preferences (or something similar). also create a slash command /help to show all of the slash commands possible and then add this to the slack setup guide so i will remember to create those slash commands in the slash setup
+### Monitoring & Observability
+- [ ] Configure CloudWatch log groups for backend/frontend
+- [ ] Set up log retention (30 days)
+- [ ] Create CloudWatch dashboards for key metrics
+- [ ] Set up CloudWatch alarms for errors/downtime
+- [ ] Configure SNS notifications for critical alerts
+- [ ] Add health check endpoints (/health)
+- [ ] Monitor API response times
+- [ ] Track daily active users
+- [ ] Set up basic error rate monitoring
 
-### RACI Matrix Service (`raci_service.py`)
-- [ ] Implement `update_assignments()` method
-- [ ] Add RACI matrix templates for common scenarios
-- [ ] Complete matrix validation logic
-- [ ] Add bulk assignment features
-- [ ] Create RACI change history tracking
+## 🟡 Authentication & User Management
 
-### KPI Service (`kpi_metrics_service.py`)
+### Authentication System
+- [ ] Create admin approval flow for new users
+- [ ] Add UI for admins to manage user roles
+- [ ] Add role change audit logging
+- [ ] Implement role-based access control UI
+
+## 🟢 Backend Services
+
+### Notification Service
+- [ ] Add user notification preferences (EOD reminder time, timezone)
+- [ ] Create /preferences slash command for configuration
+- [ ] Create /help slash command to show all available commands
+- [ ] Update Slack setup guide with slash command documentation
+
+### KPI Service
 - [ ] Add cycle time metrics calculation
 - [ ] Implement code churn analysis
 - [ ] Add test pass rate metrics
 - [ ] Create team performance aggregations
 - [ ] Build KPI export functionality
+- [ ] Ensure completed_at field is reliably populated
+- [ ] Implement story_points and task_type filtering
 
-## 🟢 GitHub Integration Enhancement
+### Daily Report Service
+- [ ] Implement UserService.get_user_by_id validation
+- [ ] Add pagination for get_reports_for_user and get_all_reports
+- [ ] Implement clarification flow (request_clarification method)
+- [ ] Implement submit_clarification method
+- [ ] Define necessary database schema changes for clarifications
 
-### Commit Analysis
+### Scheduled Tasks & Maintenance
+- [ ] Implement data archiving for old records
+- [ ] Create weekly summary reports for managers
+- [ ] Add health checks for external services (AI, Slack, GitHub)
+- [ ] Implement stale task reminders
+
+## 🟢 Integrations
+
+### GitHub Integration
 - [ ] Implement code quality AI analysis
 - [ ] Create commit pattern analysis
-
-### Webhook Configuration
 - [ ] Set up production webhook URL
 - [ ] Configure webhook secret in environment
 - [ ] Add webhook health monitoring
 - [ ] Implement webhook retry logic
 - [ ] Create webhook event logging
 
-## 🟢 Documentation Agent
-
-### Approval Workflow
-- [ ] Replace placeholder with actual Slack approval flow
+### Documentation Agent
+- [ ] Replace placeholder propose_via_slack with functional Slack integration
+- [ ] Implement approval/rejection signal handling
+- [ ] Define approval actions (merge PR, close PR, notify)
 - [ ] Add approval tracking and history
 - [ ] Create approval notification system
-- [ ] Implement approval delegation
 - [ ] Add approval metrics dashboard
 
-### Reliability Improvements
-- [ ] Add retry logic for failed generations
-- [ ] Implement better error reporting
-- [ ] Add generation monitoring
-- [ ] Create fallback templates
-- [ ] Add generation queue management
+### Doc Agent Resilience
+- [ ] Enhance error handling for Git operations (patch conflicts, auth issues)
+- [ ] Implement retry mechanisms with exponential backoff
+- [ ] Improve logging with contextual information
+- [ ] Make configuration parameters flexible (repos, branches, reviewers)
+- [ ] Add selective documentation processing (.docignore support)
+- [ ] Support commit message keywords ([skip-docs], [force-docs])
 
-## 🟡 Frontend Completion
+### Semantic Search
+- [ ] Create Doc model if needed (TODO in semantic_search_service.py:14)
+- [ ] Complete repository structure analysis implementation
+- [ ] Implement feedback loop for AI-generated docs
+- [ ] Add support for complex doc structures
+- [ ] Implement batch processing/queueing for high volume
+- [ ] Integrate documentation updates with Task objects
 
-### Component Fixes
+## 🟡 Frontend Development
+
+### API Integration
+- [ ] Connect all components to backend APIs for data fetching and mutations
+- [ ] Implement robust state management (Context API, Redux, or Zustand)
+- [ ] Add user-friendly error handling for API request failures
+- [ ] Add loading indicators for all asynchronous operations
+- [ ] Fully implement login flow with JWT token management
+- [ ] Use tokens for authenticated API requests
+
+### Component Completion
 - [ ] Complete placeholder components in `/documentation/*`
-- [ ] Add loading states for other async operations
-- [ ] Implement error boundaries
+- [ ] Replace mock data in EmployeeList component
+- [ ] Replace mock data in TaskOverview component
+- [ ] Replace mock data in WorkSummaries component
+- [ ] Complete ApprovalQueue component (TODO at line 76)
+- [ ] Implement error boundaries for all major components
 - [ ] Add offline mode support
-
-## 🟢 Database & Configuration
-
-### Supabase Production Setup
-- [ ] Create production Supabase project
-- [ ] Configure connection pooling in Supabase dashboard
-- [ ] ~~Set up Row Level Security policies~~ (Not using - roles stored in PostgreSQL)
-- [ ] Configure Supabase backups (automatic for auth data only)
-- [ ] Document migration procedures
-- [ ] Set up staging Supabase project for testing
-- [ ] Run role migration script in production
+- [ ] Integrate notification system with real-time updates
 
 ### Environment Configuration
 - [ ] Move all secrets to AWS Secrets Manager
@@ -109,7 +148,7 @@
 - [ ] Set up environment variables in ECS task definitions
 - [ ] Configure different settings for staging/production
 
-## 🟡 Testing & Quality
+## 🟡 Testing & Quality Assurance
 
 ### Frontend Testing
 - [ ] Set up Jest/React Testing Library
@@ -121,63 +160,40 @@
 
 ### Backend Testing
 - [ ] Fix failing tests
-- [ ] Add integration tests for Slack
-- [ ] Add integration tests for GitHub
+- [ ] Write unit tests for service methods with mocked dependencies
+- [ ] Add integration tests for Slack API interactions
+- [ ] Add integration tests for GitHub webhook handling
 - [ ] Create load testing scenarios
 - [ ] Add API contract tests
+- [ ] Set up pytest with GitHub Actions CI/CD
+- [ ] Configure code coverage target (80% for critical logic)
 
-### QA Process
-- [ ] Create manual test plan
-- [ ] Document test scenarios
-- [ ] Set up staging environment
-- [ ] Create bug tracking process
-- [ ] Implement smoke test suite
+### API Endpoint Tasks
+- [ ] Modify PUT /tasks/{task_id} to use RaciService.update_raci_assignments
+- [ ] Add notifications for RACI role changes
+- [ ] Create GET /tasks/{task_id}/raci-validation endpoint
+- [ ] Add comprehensive API documentation with OpenAPI/Swagger
 
-## 🟢 Monitoring & Observability (AWS-Native)
-
-### CloudWatch Setup
-- [ ] Configure CloudWatch log groups for backend/frontend
-- [ ] Set up log retention (30 days)
-- [ ] Create CloudWatch dashboards for key metrics
-- [ ] Set up CloudWatch alarms for errors/downtime
-- [ ] Configure SNS notifications for critical alerts
-
-### Simple Monitoring
-- [ ] Add health check endpoints (/health)
-- [ ] Monitor API response times
-- [ ] Track daily active users
-- [ ] Set up basic error rate monitoring
-- [ ] Create simple ops dashboard
-
-### Internal Support
-- [ ] Basic admin dashboard for user management
-- [ ] Add UI for role assignment (employee/manager/admin)
-- [ ] Simple activity logs
-- [ ] Document common troubleshooting steps
-- [ ] Add role change audit logging
-
-## 📚 Documentation (Simplified for Startup)
+## 📚 Documentation
 
 ### Essential Documentation
-- [ ] README with setup instructions
-- [ ] Basic API documentation
-- [ ] Slack command reference
-- [ ] AWS deployment guide
+- [ ] Complete README with comprehensive setup instructions
+- [ ] API documentation with request/response examples
+- [ ] Slack command reference guide
+- [ ] AWS deployment guide with step-by-step instructions
 - [ ] Environment variables documentation
 - [x] Role-based authentication guide (see claude_docs/simplified-auth-setup-guide.md)
 
-### Quick Start Guides
-- [ ] One-page employee guide
-- [ ] Manager features overview
-- [ ] Common troubleshooting FAQ
+### Developer Documentation
+- [ ] Backend architecture overview
+- [ ] Frontend component hierarchy
+- [ ] Database schema documentation
+- [ ] Integration guide for external services
+- [ ] Testing strategy documentation
 
-### Ops Documentation
-- [ ] Deployment runbook
-- [ ] Rollback procedures
-- [ ] Incident response basics
+## 🚀 Launch Readiness
 
-## Launch Checklist
-
+### Pre-Launch Checklist
 - [ ] AWS infrastructure deployed and tested
 - [ ] All Slack commands working
 - [ ] No hardcoded secrets or debug logs
@@ -185,11 +201,18 @@
 - [ ] Health checks passing
 - [ ] Core features tested by team
 - [ ] Run role migration script on production database
+- [ ] All critical and high priority items completed
+
+### Launch Plan
+- [ ] Deploy to staging environment first
+- [ ] Run smoke tests on staging
+- [ ] Deploy to production
+- [ ] Verify all integrations working
+- [ ] Monitor logs for first 24 hours
 - [ ] Pilot with founding team (5-10 users)
 
-## Post-Launch Priorities
-
-1. Monitor CloudWatch for first week
-2. Gather team feedback via Slack
-3. Fix critical bugs only
-4. Plan v2 features based on usage
+### Post-Launch Monitoring
+- [ ] Set up daily CloudWatch report review
+- [ ] Create feedback collection process
+- [ ] Plan weekly bug triage meetings
+- [ ] Document known issues and workarounds
