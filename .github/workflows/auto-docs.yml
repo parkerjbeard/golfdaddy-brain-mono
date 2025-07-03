@@ -1,0 +1,147 @@
+name: Automated Documentation Updates
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    # Ignore documentation commits to avoid loops
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'claude_docs/**'
+      
+  workflow_dispatch:
+    inputs:
+      commit_hash:
+        description: 'Specific commit hash to analyze'
+        required: false
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  analyze-and-update-docs:
+    name: Analyze commits and update documentation
+    runs-on: ubuntu-latest
+    # Skip if commit message contains [skip-docs]
+    if: "!contains(github.event.head_commit.message, '[skip-docs]')"
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Need previous commit for diff
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Configure Git
+        run: |
+          git config --global user.name "Doc Agent Bot"
+          git config --global user.email "bot@golfdaddy.ai"
+          
+      - name: Run documentation agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.DOC_AGENT_GITHUB_TOKEN }}
+          DOCS_REPOSITORY: ${{ vars.DOCS_REPOSITORY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: ${{ vars.SLACK_DOC_CHANNEL }}
+          COMMIT_HASH: ${{ github.event.inputs.commit_hash || github.sha }}
+          REPO_DIR: ${{ github.workspace }}
+          # Backend settings for database access
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          cd ${{ github.workspace }}
+          python scripts/auto_docs.py
+          
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: doc-agent-logs
+          path: |
+            *.log
+            doc_agent/*.log
+            
+  notify-on-failure:
+    name: Notify on failure
+    runs-on: ubuntu-latest
+    needs: analyze-and-update-docs
+    if: failure()
+    
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "Documentation agent failed for commit ${{ github.sha }}",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ Documentation Agent Failed",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n`${{ github.sha }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Author:*\n${{ github.actor }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Run",
+                        "emoji": true
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
