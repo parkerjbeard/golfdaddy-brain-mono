@@ -30,6 +30,7 @@ from app.api.raci_matrix import router as raci_matrix_router
 from app.api.zapier_webhooks import router as zapier_webhooks_router
 from app.repositories.user_repository import UserRepository
 from app.api.dev_endpoints import router as dev_router
+from app.api.semantic_search import router as semantic_search_router
 from app.services.notification_service import NotificationService
 from app.services.archive_service import ArchiveService
 from app.middleware.api_key_auth import ApiKeyMiddleware
@@ -98,7 +99,8 @@ app.include_router(weekly_hours_router)
 app.include_router(daily_analysis_router)
 app.include_router(zapier_router, prefix="/api/v1")
 app.include_router(raci_matrix_router, prefix="/api/v1")
-app.include_router(zapier_webhooks_router)  # Zapier webhooks already have /api/zapier prefix
+app.include_router(zapier_webhooks_router)
+app.include_router(semantic_search_router)  # Zapier webhooks already have /api/zapier prefix
 
 # Development endpoints (should be disabled in production)
 if os.getenv("ENVIRONMENT", "development") == "development":

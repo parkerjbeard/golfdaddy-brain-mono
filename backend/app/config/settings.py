@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # Service-specific AI models
     COMMIT_ANALYSIS_MODEL: Optional[str] = Field("o4-mini-2025-04-16", env="COMMIT_ANALYSIS_MODEL")
     CODE_QUALITY_MODEL: Optional[str] = Field("o4-mini-2025-04-16", env="CODE_QUALITY_MODEL")
+    
+    # Embedding settings for semantic search
+    EMBEDDING_MODEL: str = Field("text-embedding-ada-002", env="EMBEDDING_MODEL")
+    EMBEDDING_RATE_LIMIT: int = Field(3000, env="EMBEDDING_RATE_LIMIT")
 
     # Data Retention and Archiving Settings
     DAILY_REPORTS_RETENTION_MONTHS: int = Field(12, env="DAILY_REPORTS_RETENTION_MONTHS")

@@ -442,6 +442,122 @@ class SlackMessageTemplates:
         }
     
     @staticmethod
+    def doc_agent_approval(
+        approval_id: str,
+        commit_hash: str,
+        repository: str,
+        commit_message: str,
+        diff_preview: str,
+        files_affected: int,
+        additions: int,
+        deletions: int
+    ) -> Dict[str, Any]:
+        """Template for doc agent approval request with interactive buttons."""
+        # Truncate diff preview if too long
+        if len(diff_preview) > 2000:
+            diff_preview = diff_preview[:2000] + "\n... (truncated)"
+        
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "📝 Documentation Update Request",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Repository:* `{repository}`\n*Commit:* `{commit_hash[:8]}`\n*Message:* _{commit_message}_"
+                }
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Files Affected:*\n{files_affected}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Changes:*\n+{additions} -{deletions}"
+                    }
+                ]
+            },
+            {
+                "type": "divider"
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*📋 Proposed Documentation Changes:*"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"```\n{diff_preview}\n```"
+                }
+            },
+            {
+                "type": "actions",
+                "block_id": f"doc_approval_{approval_id}",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "✅ Approve & Create PR",
+                            "emoji": True
+                        },
+                        "style": "primary",
+                        "action_id": "approve_doc_update",
+                        "value": approval_id
+                    },
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "❌ Reject",
+                            "emoji": True
+                        },
+                        "style": "danger",
+                        "action_id": "reject_doc_update",
+                        "value": approval_id
+                    },
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "👀 View Full Diff",
+                            "emoji": True
+                        },
+                        "action_id": "view_full_diff",
+                        "value": approval_id
+                    }
+                ]
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "_This request will expire in 24 hours if no action is taken._"
+                    }
+                ]
+            }
+        ]
+        
+        return {
+            "text": f"Documentation update request for {repository}@{commit_hash[:8]}",
+            "blocks": blocks
+        }
+    
+    @staticmethod
     def documentation_proposal(
         author_user_id: str,
         commit_sha: str,

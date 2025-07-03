@@ -81,15 +81,21 @@ class DocCacheService:
         
         # Background cleanup task
         self._cleanup_task = None
-        self._start_cleanup_task()
+        self._cleanup_started = False
         
         logger.info(f"DocCacheService initialized with TTL={self.default_ttl_seconds}s, "
                    f"max_entries={self.max_memory_entries}")
     
     def _start_cleanup_task(self):
         """Start background cleanup task."""
-        if self._cleanup_task is None:
-            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        if self._cleanup_task is None and not self._cleanup_started:
+            try:
+                loop = asyncio.get_running_loop()
+                self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+                self._cleanup_started = True
+            except RuntimeError:
+                # No event loop running, skip cleanup task
+                logger.debug("No event loop available for cleanup task")
     
     async def _cleanup_loop(self):
         """Background task to clean up expired cache entries."""
@@ -157,6 +163,9 @@ class DocCacheService:
         if not self.enable_cache:
             return None
         
+        # Ensure cleanup task is started
+        self._start_cleanup_task()
+        
         cache_key = self._generate_cache_key(operation, **kwargs)
         
         entry = self._memory_cache.get(cache_key)
@@ -191,6 +200,9 @@ class DocCacheService:
         """
         if not self.enable_cache:
             return
+        
+        # Ensure cleanup task is started
+        self._start_cleanup_task()
         
         cache_key = self._generate_cache_key(operation, **kwargs)
         ttl = ttl_seconds or self.default_ttl_seconds

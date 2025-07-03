@@ -15,7 +15,7 @@ from enum import Enum
 from openai import OpenAI, APIError as OpenAIAPIError
 
 from app.config.settings import settings
-from app.core.exceptions import AIIntegrationError, ValidationError
+from app.core.exceptions import AIIntegrationError, BadRequestError
 from app.core.circuit_breaker import create_openai_circuit_breaker
 from app.core.rate_limiter import create_openai_rate_limiter
 from app.services.doc_cache_service import cached, cache_service
@@ -184,7 +184,7 @@ class DocQualityService:
             
         except Exception as e:
             logger.error(f"Error during documentation quality validation: {e}", exc_info=True)
-            raise ValidationError(f"Quality validation failed: {str(e)}")
+            raise BadRequestError(f"Quality validation failed: {str(e)}")
     
     def _apply_validation_rules(self, content: str) -> Dict[str, Any]:
         """Apply rule-based validation to documentation content."""

@@ -349,7 +349,7 @@ class CommitAnalysisService:
             author_id = commit_data.get('author_id') 
             if not author_id:
                 author_data = commit_data.get("author", {})
-                author_id = self._map_commit_author(author_data)
+                author_id = await self._map_commit_author(author_data)
             
             if not author_id:
                 logger.warning(f"⚠ Could not map author to internal user for commit {commit_hash}")
@@ -363,7 +363,7 @@ class CommitAnalysisService:
                 ai_estimated_hours=ai_hours,
                 seniority_score=seniority_score,
                 commit_timestamp=commit_data.get("timestamp") or commit_data.get("commit_timestamp") or 
-                                diff_data.get("author", {}).get("date"),
+                                (diff_data.get("author", {}).get("date") if diff_data else None),
                 # Populate fields from AI analysis (including newly added ones)
                 complexity_score=complexity_score,
                 risk_level=risk_level,
@@ -395,9 +395,7 @@ class CommitAnalysisService:
 
             # 5. Save analysis results to DB (Upsert)
             logger.info(f"Saving commit analysis to database...")
-            saved_commit = await asyncio.to_thread(
-                self.commit_repository.save_commit, commit_to_save
-            )
+            saved_commit = await self.commit_repository.save_commit(commit_to_save)
             
             if saved_commit:
                 logger.info(f"✓ Successfully saved commit analysis to database")

@@ -170,7 +170,7 @@ class DocGenerationService:
             for line in lines:
                 # Look for markdown headings
                 if line.startswith('# '):
-                    return line.replace('# ', '')
+                    return line.replace('# ', '').strip()
             return None
         except Exception:
             return None

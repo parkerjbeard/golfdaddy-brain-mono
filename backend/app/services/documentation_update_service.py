@@ -574,4 +574,206 @@ IMPORTANT: Be conservative in suggesting changes. Only propose documentation upd
                 raise ExternalServiceError(service_name="GitHub", original_message=f"Failed to save to Git repo {repo_name}: {e.data.get('message', str(e))}")
         except Exception as e:
             logger.error(f"Error saving to Git repository {repo_name}/{file_path}: {e}", exc_info=True)
-            raise AppExceptionBase(f"Unexpected error saving to Git repository {repo_name}: {str(e)}") 
+            raise AppExceptionBase(f"Unexpected error saving to Git repository {repo_name}: {str(e)}")
+    
+    async def analyze_commit_and_suggest_updates(self, 
+                                                 commit: Any, 
+                                                 docs_content: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Analyze a commit and suggest documentation updates.
+        
+        Args:
+            commit: GitHub commit object
+            docs_content: List of documentation files
+            
+        Returns:
+            List of suggested documentation updates
+        """
+        try:
+            # Get commit details
+            commit_message = commit.commit.message
+            files_changed = [f.filename for f in commit.files] if hasattr(commit, 'files') else []
+            
+            # Create a simplified commit analysis
+            commit_analysis = {
+                "commit_hash": commit.sha,
+                "message": commit_message,
+                "files_changed": files_changed,
+                "stats": {
+                    "additions": commit.stats.additions if hasattr(commit, 'stats') else 0,
+                    "deletions": commit.stats.deletions if hasattr(commit, 'stats') else 0
+                }
+            }
+            
+            # Use the analyze_documentation method
+            result = await self.analyze_documentation(
+                "docs-repo",  # Placeholder docs repo
+                commit_analysis,  # Commit analysis result
+                "source-repo"  # Placeholder source repo
+            )
+            
+            # Convert to expected format
+            suggestions = []
+            for change in result.get("proposed_changes", []):
+                suggestions.append({
+                    "file": change.get("file_path"),
+                    "original": change.get("current_content", ""),
+                    "updated": change.get("proposed_content", ""),
+                    "reason": change.get("change_summary", "")
+                })
+            
+            return suggestions
+            
+        except Exception as e:
+            logger.error(f"Error analyzing commit {commit.sha}: {e}")
+            return []
+    
+    async def scan_repository_for_updates(self, 
+                                         repo_name: str, 
+                                         days_back: int = 7) -> Dict[str, Any]:
+        """
+        Scan repository commits and suggest documentation updates.
+        
+        Args:
+            repo_name: Repository name in format 'owner/repo'
+            days_back: Number of days to look back for commits
+            
+        Returns:
+            Dictionary with scan results and suggested updates
+        """
+        from datetime import timedelta
+        
+        try:
+            # Get repository
+            repo = self.github_client.get_repo(repo_name)
+            
+            # Get recent commits
+            since = datetime.now() - timedelta(days=days_back)
+            commits = list(repo.get_commits(since=since))
+            
+            # Get documentation content
+            docs_content = await self.get_repository_content(repo_name)
+            
+            # Analyze commits
+            all_suggestions = []
+            commits_analyzed = 0
+            
+            for commit in commits:
+                # Skip docs commits
+                msg_lower = commit.commit.message.lower()
+                if any(skip in msg_lower for skip in ['[skip-docs]', 'docs:', 'doc:']):
+                    continue
+                
+                suggestions = await self.analyze_commit_and_suggest_updates(commit, docs_content)
+                all_suggestions.extend(suggestions)
+                commits_analyzed += 1
+            
+            # Deduplicate suggestions
+            unique_suggestions = []
+            seen = set()
+            for suggestion in all_suggestions:
+                key = (suggestion['file'], suggestion['reason'])
+                if key not in seen:
+                    seen.add(key)
+                    unique_suggestions.append(suggestion)
+            
+            return {
+                "repository": repo_name,
+                "commits_analyzed": commits_analyzed,
+                "suggested_updates": unique_suggestions,
+                "scan_date": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error scanning repository {repo_name}: {e}")
+            raise ExternalServiceError("GitHub", str(e))
+    
+    async def create_documentation_pr(self, 
+                                     repo_name: str, 
+                                     updates: List[Dict[str, Any]],
+                                     branch_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a pull request with documentation updates.
+        
+        Args:
+            repo_name: Repository name in format 'owner/repo'
+            updates: List of file updates to apply
+            branch_name: Optional branch name (auto-generated if not provided)
+            
+        Returns:
+            Dictionary with PR creation results
+        """
+        if not updates:
+            return {
+                "success": False,
+                "error": "No updates provided"
+            }
+        
+        try:
+            # Get repository
+            repo = self.github_client.get_repo(repo_name)
+            
+            # Create branch name if not provided
+            if not branch_name:
+                from datetime import datetime
+                branch_name = f"docs-update-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            
+            # Get default branch
+            default_branch = repo.default_branch
+            base_sha = repo.get_branch(default_branch).commit.sha
+            
+            # Create new branch
+            try:
+                repo.create_git_ref(f"refs/heads/{branch_name}", base_sha)
+            except GithubException as e:
+                if "Reference already exists" in str(e):
+                    # Branch already exists
+                    pass
+                else:
+                    raise
+            
+            # Apply updates
+            for update in updates:
+                file_path = update['file']
+                content = update['updated']
+                
+                # Get current file (if exists)
+                try:
+                    file_content = repo.get_contents(file_path, ref=branch_name)
+                    repo.update_file(
+                        file_path,
+                        f"Update {file_path}",
+                        content,
+                        file_content.sha,
+                        branch=branch_name
+                    )
+                except GithubException:
+                    # File doesn't exist, create it
+                    repo.create_file(
+                        file_path,
+                        f"Create {file_path}",
+                        content,
+                        branch=branch_name
+                    )
+            
+            # Create pull request
+            pr = repo.create_pull(
+                title="Update documentation",
+                body="Automated documentation updates based on recent code changes.",
+                head=branch_name,
+                base=default_branch
+            )
+            
+            return {
+                "success": True,
+                "pr_url": pr.html_url,
+                "pr_number": pr.number,
+                "branch": branch_name
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating documentation PR: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            } 

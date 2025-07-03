@@ -300,10 +300,9 @@ class DailyCommitAnalysisService:
         # Add daily report context if available
         if daily_report:
             context["daily_report"] = {
-                "summary": daily_report.summary,
+                "summary": daily_report.clarified_tasks_summary or daily_report.raw_text_input,
                 "hours_reported": float(daily_report.additional_hours) if daily_report.additional_hours else 0,
-                "challenges": daily_report.challenges,
-                "support_needed": daily_report.support_needed,
+                "raw_text": daily_report.raw_text_input,
                 "ai_analysis": daily_report.ai_analysis.model_dump() if daily_report.ai_analysis else None
             }
         
