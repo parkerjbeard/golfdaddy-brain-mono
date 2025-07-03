@@ -1,0 +1,158 @@
+{
+  "dashboard": {
+    "lastUpdated": "2025-06-18T14:54:43.220Z",
+    "kpis": {
+      "csat": {
+        "current": 4.79,
+        "previous": 3.8,
+        "trend": "up",
+        "change": 0.99
+      },
+      "socialMedia": {
+        "totalViews": 19663000,
+        "platforms": [
+          { "id": "platform1", "views": 7940000 },
+          { "id": "platform2", "views": 3872000 },
+          { "id": "platform3", "views": 3872000 },
+          { "id": "platform4", "views": 3979000 }
+        ]
+      },
+      "retention": {
+        "week0": 100.00,
+        "week1": 11.97,
+        "week2": 7.68,
+        "week1Target": 17.0
+      }
+    },
+    "projects": {
+      "active": [
+        {
+          "id": "86b546vzq",
+          "name": "Prepare for new product customer support",
+          "owner": {
+            "name": "Mark Aliwalas",
+            "initials": "MA",
+            "email": "mark.a@golfdaddy.com"
+          },
+          "team": "Customer Service",
+          "progress": 0,
+          "status": "working on it",
+          "dueDate": "2025-06-17T00:00:00Z",
+          "keyResults": [
+            "CSAT 4.5",
+            "SLA 8 hours",
+            "Avg Response Time 8 hours",
+            "Avg Ticket handling time <1m40s"
+          ],
+          "sparkline": "=SPARKLINE(0, {\"charttype\",\"bar\"; \"max\",100; \"color1\",\"#FF5905\"})"
+        },
+        {
+          "id": "86b4k5x5c",
+          "name": "Launch new ai customer support + help center",
+          "owner": {
+            "name": "Jon Cruz",
+            "initials": "JC",
+            "email": "jon@golfdaddy.com"
+          },
+          "team": "Customer Service",
+          "progress": 40,
+          "status": "working on it",
+          "dueDate": "2025-06-06T00:00:00Z",
+          "keyResults": [
+            "AI automation rate of 50%",
+            "CSAT 4.5",
+            "SLA 8hr",
+            "Responses till ticket resolved <2.9",
+            "Avg Ticket handling time <1m40s"
+          ],
+          "sparkline": "=SPARKLINE(40, {\"charttype\",\"bar\"; \"max\",100; \"color1\",\"#2DFF00\"})",
+          "checklist": {
+            "total": 5,
+            "completed": 1,
+            "items": [
+              { "name": "Submit and obtain feedback from Gorgias for Automate troubleshooting", "completed": false },
+              { "name": "Real-time DSAT reviews", "completed": false },
+              { "name": "Keep the queues zeroed out every 10 minutes or less", "completed": false },
+              { "name": "Intercom email automation testing", "completed": false },
+              { "name": "Undergo training for the new CS tool for customer issue mapping", "completed": true }
+            ]
+          }
+        },
+        {
+          "id": "86b4yg8m0",
+          "name": "Generate better results via intentional usage of characters / social media channels & external UGC",
+          "owner": {
+            "name": "Paul Boranian",
+            "initials": "PB",
+            "email": "paul@golfdaddy.com"
+          },
+          "team": "Marketing",
+          "progress": 50,
+          "status": "working on it",
+          "dueDate": "2025-07-25T00:00:00Z",
+          "keyResults": [
+            "Give consistent characters a set name, persona, and identity",
+            "Make a channel for Golf Mommy or another UGC creator",
+            "Develop external UGC creator pipeline"
+          ],
+          "sparkline": "=SPARKLINE(50, {\"charttype\",\"bar\"; \"max\",100; \"color1\",\"#00ffff\"})"
+        },
+        {
+          "id": "86b50ymzx",
+          "name": "Update logistics systems to manage new programs",
+          "owner": {
+            "name": "Laura Obregon",
+            "initials": "LO",
+            "email": "laura@golfdaddy.com"
+          },
+          "team": "Logistics",
+          "progress": 0,
+          "status": "working on it",
+          "dueDate": "2025-07-30T00:00:00Z",
+          "keyResults": [
+            "Successfully fulfill first batch of Divot Pro orders",
+            "New swing collection lab documentation",
+            "Warehouse expansion to Canada, Australia, and EU"
+          ],
+          "sparkline": "=SPARKLINE(0, {\"charttype\",\"bar\"; \"max\",100; \"color1\",\"#f75eb8\"; \"color2\",\"#D9D9D9\"})"
+        }
+      ],
+      "archived": [
+        {
+          "id": "86b4cch5p",
+          "name": "Double Week 1 retention to 17% via ML improvements",
+          "owner": {
+            "name": "Jonathan Cefalu",
+            "initials": "JC",
+            "email": "jonathan.c@golfdaddy.com"
+          },
+          "team": "Product",
+          "progress": 0,
+          "status": "archived",
+          "originalDueDate": "2025-04-30T00:00:00Z",
+          "sparkline": "=SPARKLINE(0, {\"charttype\",\"bar\"; \"max\",100; \"color1\",\"#C6FF04\"; \"color2\",\"#D9D9D9\"})"
+        }
+      ]
+    },
+    "issues": {
+      "customerSupport": [
+        "Delayed expedited shipping orders",
+        "Delayed standard shipping orders",
+        "Address change / order cancellation requests",
+        "OTP issues",
+        "Slow swing analysis time",
+        "Swing simulation issues",
+        "Swing accuracy issues"
+      ]
+    },
+    "insights": {
+      "weekly": "Special thanks to Hyram for breaking the limits of Cursor usage this week (I 5'xed the limits thereafter). Let's use it more. Great idea from Leandro to create a channel dedicated to helping the team learn how to use AI for coding. Anyone want a general how to use AI channel? Great job to those who are following suit with AI adoption."
+    },
+    "teamStats": {
+      "Customer Service": { "active": 2, "archived": 0 },
+      "Marketing": { "active": 1, "archived": 0 },
+      "Logistics": { "active": 1, "archived": 0 },
+      "Product": { "active": 0, "archived": 1 }
+    }
+  }
+} 

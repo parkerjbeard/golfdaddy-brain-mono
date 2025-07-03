@@ -19,9 +19,11 @@ import {
 // Import documentation management components
 import { QualityValidation } from '@/components/documentation/QualityValidation';
 import { ApprovalWorkflow } from '@/components/documentation/ApprovalWorkflow';
+import { ApprovalQueue } from '@/components/documentation/ApprovalQueue';
 import { VersionControl } from '@/components/documentation/VersionControl';
 import { CacheManagement } from '@/components/documentation/CacheManagement';
 import { DocumentationOverview } from '@/components/documentation/DocumentationOverview';
+import { SemanticSearch } from '@/components/documentation/SemanticSearch';
 
 export default function DocumentationPage() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -126,8 +128,10 @@ export default function DocumentationPage() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="search">Search</TabsTrigger>
+          <TabsTrigger value="agent-approvals">AI Updates</TabsTrigger>
           <TabsTrigger value="quality">Quality</TabsTrigger>
           <TabsTrigger value="approvals">Approvals</TabsTrigger>
           <TabsTrigger value="versions">Versions</TabsTrigger>
@@ -136,6 +140,14 @@ export default function DocumentationPage() {
 
         <TabsContent value="overview" className="space-y-4">
           <DocumentationOverview />
+        </TabsContent>
+
+        <TabsContent value="search" className="space-y-4">
+          <SemanticSearch />
+        </TabsContent>
+
+        <TabsContent value="agent-approvals" className="space-y-4">
+          <ApprovalQueue />
         </TabsContent>
 
         <TabsContent value="quality" className="space-y-4">

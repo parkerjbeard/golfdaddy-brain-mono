@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { DocumentViewer } from './DocumentViewer';
 
 interface Document {
   id: string;
@@ -49,6 +50,7 @@ export function DocumentationOverview() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDocuments();
@@ -141,6 +143,30 @@ export function DocumentationOverview() {
     return matchesSearch && matchesStatus;
   });
 
+  const handleViewDocument = (documentId: string) => {
+    setSelectedDocumentId(documentId);
+  };
+
+  const handleEditDocument = (documentId: string) => {
+    // TODO: Implement edit functionality
+    console.log('Edit document:', documentId);
+  };
+
+  const handleBackToList = () => {
+    setSelectedDocumentId(null);
+  };
+
+  // Show document viewer if a document is selected
+  if (selectedDocumentId) {
+    return (
+      <DocumentViewer
+        documentId={selectedDocumentId}
+        onBack={handleBackToList}
+        onEdit={handleEditDocument}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <Card>
@@ -220,7 +246,11 @@ export function DocumentationOverview() {
               </TableHeader>
               <TableBody>
                 {filteredDocuments.map((doc) => (
-                  <TableRow key={doc.id}>
+                  <TableRow 
+                    key={doc.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleViewDocument(doc.id)}
+                  >
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />
@@ -260,17 +290,21 @@ export function DocumentationOverview() {
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
+                          <Button 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <span className="sr-only">Open menu</span>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewDocument(doc.id)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditDocument(doc.id)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
