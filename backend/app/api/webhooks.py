@@ -20,8 +20,14 @@ from app.core.exceptions import (
 )
 from supabase import Client
 
+# Import Slack interactions router
+from app.api.webhooks.slack_interactions import router as slack_interactions_router
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
+
+# Include Slack interactions sub-router
+router.include_router(slack_interactions_router, tags=["Slack Webhooks"])
 
 
 def get_github_webhook_handler(db: Client = Depends(get_db)) -> GitHubWebhookHandler:
