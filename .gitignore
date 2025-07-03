@@ -133,6 +133,11 @@ node_modules/
 
 claude_docs/
 
+# Backend documentation files (except TODO_PRODUCTION.md)
+backend/*.md
+backend/**/*.md
+!TODO_PRODUCTION.md
+
 # SECURITY: Test files with credentials
 **/test-*auth*.html
 **/debug-auth*.html
