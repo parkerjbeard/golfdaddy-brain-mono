@@ -364,8 +364,30 @@ class CommitAnalysisService:
                 # Continue without author mapping if it fails
 
             # 4. Prepare commit data for saving
-            # Store impact scoring data in ai_analysis_notes as JSON for now
-            impact_data = {
+            # Store ALL analysis data in ai_analysis_notes as JSON for full flexibility
+            analysis_notes_data = {
+                # Traditional hours-based scoring
+                "estimated_hours": ai_hours,
+                "complexity_score": complexity_score,
+                "seniority_score": seniority_score,
+                "risk_level": risk_level,
+                "key_changes": key_changes,
+                "seniority_rationale": seniority_rationale,
+                
+                # New structured anchor fields
+                "total_lines": analysis_result.get("total_lines"),
+                "total_files": analysis_result.get("total_files"),
+                "initial_anchor": analysis_result.get("initial_anchor"),
+                "major_change_checks": analysis_result.get("major_change_checks"),
+                "major_change_count": analysis_result.get("major_change_count"),
+                "file_count_override": analysis_result.get("file_count_override"),
+                "simplicity_reduction_checks": analysis_result.get("simplicity_reduction_checks"),
+                "complexity_cap_applied": analysis_result.get("complexity_cap_applied"),
+                "final_anchor": analysis_result.get("final_anchor"),
+                "base_hours": analysis_result.get("base_hours"),
+                "multipliers_applied": analysis_result.get("multipliers_applied"),
+                
+                # Impact scoring data
                 "impact_score": impact_score,
                 "impact_business_value": impact_business_value,
                 "impact_technical_complexity": impact_technical_complexity,
@@ -375,7 +397,14 @@ class CommitAnalysisService:
                 "impact_technical_complexity_reasoning": analysis_result.get("impact_technical_complexity_reasoning"),
                 "impact_code_quality_reasoning": analysis_result.get("impact_code_quality_reasoning"),
                 "impact_risk_factor_reasoning": analysis_result.get("impact_risk_factor_reasoning"),
-                "impact_dominant_category": analysis_result.get("impact_dominant_category")
+                "impact_dominant_category": analysis_result.get("impact_dominant_category"),
+                "impact_classification": analysis_result.get("impact_classification"),
+                "impact_calculation_breakdown": analysis_result.get("impact_calculation_breakdown"),
+                
+                # Metadata
+                "model_used": model_used,
+                "analyzed_at": analyzed_at.isoformat() if isinstance(analyzed_at, datetime) else analyzed_at,
+                "analysis_version": "2.0"  # Version tracking for future changes
             }
             
             commit_to_save = Commit(
@@ -392,8 +421,8 @@ class CommitAnalysisService:
                 seniority_rationale=seniority_rationale,
                 model_used=model_used,
                 analyzed_at=analyzed_at,
-                # Store impact scoring data in ai_analysis_notes as JSON
-                ai_analysis_notes=json.dumps(impact_data),
+                # Store ALL analysis data in ai_analysis_notes as JSON
+                ai_analysis_notes=json.dumps(analysis_notes_data),
                 # Populate fields from EOD/Code Quality integration
                 eod_report_id=eod_report.id if eod_report else None,
                 eod_report_summary=eod_report.summary if eod_report and hasattr(eod_report, 'summary') else (eod_report.raw_text_input[:250] + "..." if eod_report and eod_report.raw_text_input else None),

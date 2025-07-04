@@ -147,30 +147,39 @@ class CommitAnalyzer:
         header = f"╔{horizontal_line}╗"
         footer = f"╚{horizontal_line}╝"
         
+        # Extract values from nested structure
+        bv_score = result.get('business_value', {}).get('score', 'N/A')
+        tc_score = result.get('technical_complexity', {}).get('score', 'N/A')
+        cq_score = result.get('code_quality_points', {}).get('score', 'N/A')
+        risk_score = result.get('risk_penalty', {}).get('score', 'N/A')
+        impact_score = result.get('impact_score', 0)
+        
+        # Get classification info
+        classification = result.get('classification', {})
+        category = classification.get('primary_category', 'N/A')
+        
         # Format the main sections
         title = f"║ IMPACT ANALYSIS: {commit_hash[:8]} - {repository}"
         title = f"{title}{' ' * (79 - len(title))}║"
         
-        business_value = f"║ Business Value: {result.get('business_value', 'N/A')}/10"
+        business_value = f"║ Business Value: {bv_score}/10"
         business_value = f"{business_value}{' ' * (79 - len(business_value))}║"
         
-        technical_complexity = f"║ Technical Complexity: {result.get('technical_complexity', 'N/A')}/10"
+        technical_complexity = f"║ Technical Complexity: {tc_score}/10"
         technical_complexity = f"{technical_complexity}{' ' * (79 - len(technical_complexity))}║"
         
-        code_quality = f"║ Code Quality: {result.get('code_quality', 'N/A')}x"
+        code_quality = f"║ Code Quality Points: {cq_score}/5"
         code_quality = f"{code_quality}{' ' * (79 - len(code_quality))}║"
         
-        risk_factor = f"║ Risk Factor: {result.get('risk_factor', 'N/A')}x"
-        risk_factor = f"{risk_factor}{' ' * (79 - len(risk_factor))}║"
+        risk_penalty = f"║ Risk Penalty: -{risk_score}"
+        risk_penalty = f"{risk_penalty}{' ' * (79 - len(risk_penalty))}║"
         
-        # Calculate impact score for display
-        impact_score = result.get('impact_score', 0)
-        impact_calc = f"({result.get('business_value', 0)} × {result.get('technical_complexity', 0)} × {result.get('code_quality', 1.0)}) ÷ {result.get('risk_factor', 1.0)}"
-        impact_line = f"║ Impact Score: {impact_score} points {impact_calc}"
+        # Calculate impact score display with new formula
+        impact_calc = f"({bv_score}×2) + ({tc_score}×1.5) + {cq_score} - {risk_score}"
+        impact_line = f"║ Impact Score: {impact_score} points = {impact_calc}"
         impact_line = f"{impact_line}{' ' * (79 - len(impact_line))}║"
         
-        # Format dominant category
-        category = result.get('dominant_category', 'N/A')
+        # Format category
         category_line = f"║ Commit Type: {category}"
         category_line = f"{category_line}{' ' * (79 - len(category_line))}║"
         
@@ -181,7 +190,8 @@ class CommitAnalyzer:
         bv_reasoning_header = "║ Business Value Reasoning:"
         bv_reasoning_header = f"{bv_reasoning_header}{' ' * (79 - len(bv_reasoning_header))}║"
         bv_reasoning_lines = []
-        bv_text = result.get('business_value_reasoning', '')
+        bv_data = result.get('business_value', {})
+        bv_text = bv_data.get('evidence', '')
         if bv_text:
             wrapped_lines = textwrap.wrap(bv_text, width=72)
             for line in wrapped_lines:
@@ -193,7 +203,8 @@ class CommitAnalyzer:
         tc_reasoning_header = "║ Technical Complexity Reasoning:"
         tc_reasoning_header = f"{tc_reasoning_header}{' ' * (79 - len(tc_reasoning_header))}║"
         tc_reasoning_lines = []
-        tc_text = result.get('technical_complexity_reasoning', '')
+        tc_data = result.get('technical_complexity', {})
+        tc_text = tc_data.get('evidence', '')
         if tc_text:
             wrapped_lines = textwrap.wrap(tc_text, width=72)
             for line in wrapped_lines:
@@ -201,23 +212,32 @@ class CommitAnalyzer:
                 line_fmt = f"{line_fmt}{' ' * (79 - len(line_fmt))}║"
                 tc_reasoning_lines.append(line_fmt)
         
-        # Code Quality Reasoning
-        cq_reasoning_header = "║ Code Quality Reasoning:"
+        # Code Quality Checklist
+        cq_reasoning_header = "║ Code Quality Checklist:"
         cq_reasoning_header = f"{cq_reasoning_header}{' ' * (79 - len(cq_reasoning_header))}║"
         cq_reasoning_lines = []
-        cq_text = result.get('code_quality_reasoning', '')
-        if cq_text:
-            wrapped_lines = textwrap.wrap(cq_text, width=72)
-            for line in wrapped_lines:
-                line_fmt = f"║   {line}"
-                line_fmt = f"{line_fmt}{' ' * (79 - len(line_fmt))}║"
-                cq_reasoning_lines.append(line_fmt)
+        cq_data = result.get('code_quality_points', {})
+        checklist = cq_data.get('checklist', {})
+        if checklist:
+            checklist_items = [
+                ("Tests included", checklist.get('tests_included', False)),
+                ("High coverage", checklist.get('high_coverage', False)),
+                ("Documentation updated", checklist.get('documentation_updated', False)),
+                ("Follows patterns", checklist.get('follows_patterns', False)),
+                ("Handles errors", checklist.get('handles_errors', False))
+            ]
+            for item_name, item_value in checklist_items:
+                check_mark = "✓" if item_value else "✗"
+                item_line = f"║   {check_mark} {item_name}"
+                item_line = f"{item_line}{' ' * (79 - len(item_line))}║"
+                cq_reasoning_lines.append(item_line)
         
-        # Risk Factor Reasoning
-        rf_reasoning_header = "║ Risk Factor Reasoning:"
+        # Risk Reasoning
+        rf_reasoning_header = "║ Risk Assessment:"
         rf_reasoning_header = f"{rf_reasoning_header}{' ' * (79 - len(rf_reasoning_header))}║"
         rf_reasoning_lines = []
-        rf_text = result.get('risk_factor_reasoning', '')
+        rf_data = result.get('risk_penalty', {})
+        rf_text = rf_data.get('reasoning', '')
         if rf_text:
             wrapped_lines = textwrap.wrap(rf_text, width=72)
             for line in wrapped_lines:
@@ -234,7 +254,7 @@ class CommitAnalyzer:
             business_value,
             technical_complexity,
             code_quality,
-            risk_factor,
+            risk_penalty,
             divider,
             impact_line,
             category_line,
@@ -311,108 +331,144 @@ Estimate engineering effort considering:
 - Code review and refinement cycles
 - Mental effort and architecture decisions
 
-#### Base Hours Calibration by Code Volume:
-• 1-20 lines changed: 0.25-1 hours
-• 21-100 lines: 1-2 hours  
-• 101-300 lines: 2-4 hours
-• 301-800 lines: 4-8 hours
-• 800+ lines: 8-20 hours
+#### Reference Anchors - STRUCTURED SELECTION
 
-#### Work Type Modifiers:
-• Bug fixes: +25% for investigation time
-• New features: +20% for design decisions
-• Test additions: +20% for test design
-• Infrastructure/CI: +30% for testing and validation
-• Database changes: +40% for migration planning
-• Security fixes: +50% for careful implementation
-• Documentation only: -30%
-• Mechanical refactoring: -30%
-• Code formatting: -50%
+**STEP 1: Initial Classification**
+Based on total lines (additions + deletions):
+- Under 50 lines → Start with Anchor A
+- 50-199 lines → Start with Anchor B  
+- 200-499 lines → Start with Anchor C
+- 500-1499 lines → Start with Anchor D
+- 1500+ lines → Consider Anchor D or E (see Step 2)
 
-#### File Type Importance:
-• Payment/financial code: 1.5x multiplier
-• Security/auth code: 1.4x multiplier
-• Core business logic: 1.3x multiplier
-• API contracts/schemas: 1.2x multiplier
-• Comprehensive tests: 1.2x multiplier
-• Regular features: 1.0x multiplier
-• Config/documentation: 0.8x multiplier
-• Generated/formatted code: 0.5x multiplier
+**STEP 2: Refinement Checks**
+Apply these checks IN ORDER:
+
+1. **Major Change Detection** (can upgrade D→E):
+   □ Commit message says "new system", "new service", "new framework", or "breaking change"?
+   □ Creates 5+ new files in a new top-level directory?
+   □ Changes 20+ files across 3+ different top-level directories?
+   □ Adds new technology/dependency to the project (new language, database, framework)?
+   If 2+ checked → Upgrade to Anchor E
+
+2. **File Count Override** (supersedes Step 1):
+   □ Changes 25+ files regardless of content?
+   If checked → Set to Anchor E
+
+3. **Simplicity Reduction** (can downgrade by one level):
+   □ >70% of changes are tests, docs, or comments?
+   □ Commit message contains "refactor", "rename", "move", "cleanup"?
+   □ Only changes configs, constants, or data files?
+   If any checked → Downgrade one anchor level (but never below A)
+
+**ANCHOR VALUES:**
+- A: Minimal (0.5h) - Typos, configs, small fixes
+- B: Simple (2.5h) - Single-purpose changes, basic features
+- C: Standard (6.0h) - Multi-file features, moderate complexity
+- D: Complex (12.0h) - Cross-component changes, significant logic
+- E: Major (20.0h) - Architectural changes, new subsystems
+
+#### Universal Multipliers:
+• Involves concurrent/parallel code: +40%
+• Modifies critical path (commit message indicates): +30%
+• Includes comprehensive tests (>50% of changes): +20%
+• Performance-critical changes: +20%
+• Security-sensitive code: +30%
+• Documentation only: -50%
+• Formatting/refactoring only: -30%
+
+#### Final Calculation:
+1. Select anchor from table (no averaging needed)
+2. Multiply by applicable multipliers
+3. Round to nearest 0.5 hour
+
+Example: 1200 lines in 8 files with parallel code
+- Anchor D: 12.0 hours (from table)
+- Multiplier: ×1.4 (parallel code)
+- Final: 16.8 → 17.0 hours
 
 ### 2. COMPLEXITY SCORING (1-10)
 
-Rate based on:
-• 1-2: Trivial (formatting, typos, simple config)
-• 3-4: Simple (basic CRUD, straightforward logic)
-• 5-6: Moderate (multiple components, some design decisions)
-• 7-8: Complex (architectural changes, complex algorithms)
-• 9-10: Very complex (distributed systems, critical infrastructure)
+Count these objective factors:
+□ Changes core functionality (+3)
+□ Modifies multiple components (+2)
+□ Adds new abstractions/patterns (+2)
+□ Requires algorithmic thinking (+2)
+□ Handles error cases (+1)
+Total: Min 1, Max 10
 
 ### 3. SENIORITY SCORING (1-10)
 
-Evaluate implementation quality against ideal senior-level work:
+Score implementation quality:
+□ Comprehensive error handling (+2)
+□ Well-structured tests (+2)
+□ Follows established patterns (+2)
+□ Good abstractions (+2)
+□ Forward-thinking design (+2)
+Total: Min 1, Max 10
 
-#### Positive Indicators (increase score):
-• Comprehensive error handling and edge cases
-• Well-structured tests with good coverage
-• Performance optimizations with benchmarks
-• Security best practices followed
-• Clean abstractions and API design
-• Follows and improves existing patterns
-• Considers future maintainability
-
-#### Negative Indicators (decrease score):
-• Missing error handling
-• No tests for complex logic
-• Hard-coded values
-• Security vulnerabilities
-• Performance anti-patterns
-• Breaks established patterns
-• Short-term thinking
-
-#### IMPORTANT - Trivial Change Detection:
-A commit is trivial ONLY when ALL conditions are met:
-- Total lines changed ≤ 20
-- Complexity score ≤ 2
-- No test files added or modified
-- No architectural files (migrations, schemas, configs)
-- Changes are purely cosmetic (formatting, typos, comments)
-
-For truly trivial commits only:
-- Set seniority_score = 10
-- Use rationale: "Trivial change – seniority not meaningfully assessable"
-
-For ALL other commits (including test additions):
-- Score seniority normally (1-10 range)
-- Test-only commits typically score 4-8 based on test quality
+For trivial changes (<20 lines AND complexity ≤ 2 AND no tests):
+Set seniority = 10 with rationale "Trivial change"
 
 ### 4. RISK LEVEL
 
 Assess deployment risk:
-• low: Unlikely to cause issues (tests, docs, isolated features)
+• low: Unlikely to cause issues (tests, docs, isolated changes)
 • medium: Some risk (core features, integrations)
-• high: Significant risk (payments, auth, data migrations)
+• high: Significant risk (critical path, data changes, security)
+
+## Scoring Process - COMPLETE ALL STEPS
+
+HOURS ESTIMATION:
+1. Total lines changed: ___ (additions + deletions from diff)
+2. Total files changed: ___ (count from files list)
+3. Initial anchor from Step 1: ___ (based on lines)
+4. Major change detection:
+   □ Message has "new system/service/framework/breaking"? ___
+   □ Creates 5+ files in new directory? ___
+   □ Changes 20+ files across 3+ directories? ___
+   □ Adds new technology/dependency? ___
+   COUNT: ___/4 (if 2+, upgrade D→E)
+5. File count override: 25+ files? ___ (if yes, force E)
+6. Simplicity checks:
+   □ >70% tests/docs/comments? ___
+   □ Message has "refactor/rename/move/cleanup"? ___
+   □ Only configs/constants/data? ___
+   ANY TRUE? ___ (if yes, downgrade one level)
+7. Final anchor: ___
+8. Base hours: ___
+9. Multipliers: ___ Final hours: ___
+
+VALUE & COMPLEXITY:
+10. Primary beneficiary: END USERS or DEVELOPERS? ___
+11. Value score (with cap if applicable): ___
+12. Check for complexity caps:
+    - Message contains tool/script/benchmark keywords? ___
+    - >50% files in tool/script folders? ___
+    - Apply cap? ___ Final complexity: ___
 
 ## Output Format
 
 Provide a JSON response with this exact structure:
 {{
+  "total_lines": <int>,
+  "total_files": <int>,
+  "initial_anchor": "<A/B/C/D/E>",
+  "major_change_checks": ["<specific checks that were true>"],
+  "major_change_count": <int>,
+  "file_count_override": <boolean>,
+  "simplicity_reduction_checks": ["<specific checks that were true>"],
+  "final_anchor": "<A/B/C/D/E>",
+  "base_hours": <float>,
+  "multipliers_applied": ["<multiplier1>", "<multiplier2>"],
   "complexity_score": <int 1-10>,
+  "complexity_cap_applied": "<none|tooling|test|doc>",
   "estimated_hours": <float>,
   "risk_level": "<low|medium|high>",
   "seniority_score": <int 1-10>,
   "seniority_rationale": "<explanation>",
   "key_changes": ["<change1>", "<change2>", ...]
 }}
-
-## Consistency Checks
-
-Before finalizing scores, verify:
-1. Hours align with complexity (high complexity = more hours)
-2. Test commits don't have inflated technical complexity
-3. Seniority score reflects actual code quality indicators
-4. Business value matches actual user/business impact
-5. No commit >20 lines is marked as trivial
 
 ## Commit to Analyze
 
@@ -449,7 +505,38 @@ Diff:
                 hours_response, impact_result = await asyncio.gather(hours_task, impact_task)
                 
                 # Parse the hours response from responses API
-                hours_result = json.loads(hours_response.output_text)
+                try:
+                    # Extract the text content
+                    text_content = None
+                    if hasattr(hours_response, 'output_text') and hours_response.output_text:
+                        text_content = hours_response.output_text
+                    elif hasattr(hours_response, 'output') and hasattr(hours_response.output, 'text'):
+                        text_content = hours_response.output.text
+                    elif hasattr(hours_response, 'choices') and hours_response.choices:
+                        # Sometimes responses API returns choices format
+                        text_content = hours_response.choices[0].message.content
+                    else:
+                        # Log the response structure for debugging
+                        print(f"Unexpected hours response structure: {hours_response}")
+                        print(f"Response type: {type(hours_response)}")
+                        print(f"Response attributes: {dir(hours_response)}")
+                        raise ValueError("Unable to extract text from responses API response")
+                    
+                    # Clean up markdown code blocks if present
+                    if text_content.strip().startswith('```json'):
+                        text_content = text_content.strip()[7:]  # Remove ```json
+                        if text_content.endswith('```'):
+                            text_content = text_content[:-3]  # Remove closing ```
+                    elif text_content.strip().startswith('```'):
+                        text_content = text_content.strip()[3:]  # Remove ```
+                        if text_content.endswith('```'):
+                            text_content = text_content[:-3]  # Remove closing ```
+                    
+                    hours_result = json.loads(text_content.strip())
+                except (json.JSONDecodeError, AttributeError) as e:
+                    print(f"Error parsing hours response: {e}")
+                    print(f"Response content: {getattr(hours_response, 'output_text', 'No output_text attribute')}")
+                    raise
             else:
                 # Use chat completions API for non-reasoning models
                 api_params = {
@@ -473,7 +560,16 @@ Diff:
             
             # Combine both results
             combined_result = {
-                # Traditional hours-based analysis
+                # Traditional hours-based analysis with structured anchors
+                "total_lines": hours_result.get("total_lines"),
+                "total_files": hours_result.get("total_files"),
+                "initial_anchor": hours_result.get("initial_anchor"),
+                "major_change_checks": hours_result.get("major_change_checks", []),
+                "complexity_boost_checks": hours_result.get("complexity_boost_checks", []),
+                "simplicity_reduction_checks": hours_result.get("simplicity_reduction_checks", []),
+                "final_anchor": hours_result.get("final_anchor"),
+                "base_hours": hours_result.get("base_hours"),
+                "multipliers_applied": hours_result.get("multipliers_applied"),
                 "complexity_score": hours_result.get("complexity_score"),
                 "estimated_hours": hours_result.get("estimated_hours"),
                 "risk_level": hours_result.get("risk_level"),
@@ -481,18 +577,19 @@ Diff:
                 "seniority_rationale": hours_result.get("seniority_rationale"),
                 "key_changes": hours_result.get("key_changes"),
                 
-                # Impact scoring analysis (prefixed with impact_)
-                "impact_business_value": impact_result.get("business_value"),
-                "impact_business_value_reasoning": impact_result.get("business_value_reasoning"),
-                "impact_technical_complexity": impact_result.get("technical_complexity"),
-                "impact_technical_complexity_reasoning": impact_result.get("technical_complexity_reasoning"),
-                "impact_code_quality": impact_result.get("code_quality"),
-                "impact_code_quality_reasoning": impact_result.get("code_quality_reasoning"),
-                "impact_risk_factor": impact_result.get("risk_factor"),
-                "impact_risk_factor_reasoning": impact_result.get("risk_factor_reasoning"),
+                # Impact scoring analysis (v2.0 with nested structure)
+                "impact_business_value": impact_result.get("business_value", {}).get("score"),
+                "impact_business_value_reasoning": impact_result.get("business_value", {}).get("evidence"),
+                "impact_business_value_decision_path": impact_result.get("business_value", {}).get("decision_path"),
+                "impact_technical_complexity": impact_result.get("technical_complexity", {}).get("score"),
+                "impact_technical_complexity_reasoning": impact_result.get("technical_complexity", {}).get("evidence"),
+                "impact_code_quality_points": impact_result.get("code_quality_points", {}).get("score"),
+                "impact_code_quality_checklist": impact_result.get("code_quality_points", {}).get("checklist"),
+                "impact_risk_penalty": impact_result.get("risk_penalty", {}).get("score"),
+                "impact_risk_reasoning": impact_result.get("risk_penalty", {}).get("reasoning"),
                 "impact_score": impact_result.get("impact_score"),
                 "impact_classification": impact_result.get("classification", {}),
-                "impact_validation_notes": impact_result.get("validation_notes"),
+                "impact_calculation_breakdown": impact_result.get("calculation_breakdown"),
                 
                 # Metadata
                 "analyzed_at": datetime.now().isoformat(),
@@ -540,199 +637,112 @@ Diff:
             technical_complexity_examples = "\n".join([f"Score {k}: {v}" for k, v in self.CALIBRATION_EXAMPLES["technical_complexity"].items()])
             code_quality_examples = "\n".join([f"Multiplier {k}: {v}" for k, v in self.CALIBRATION_EXAMPLES["code_quality"].items()])
             
-            prompt = f"""You are a senior engineering manager with deep experience in evaluating developer contributions. Analyze this commit using the Impact Points System with extreme consistency.
+            prompt = f"""You are a senior engineering manager evaluating developer contributions using the NEW Impact Points System (v2.0) with ADDITIVE scoring for better consistency.
 
-## CRITICAL INSTRUCTIONS
-1. You MUST compare every score to the provided examples
-2. You MUST provide specific evidence from the diff for each score
-3. You MUST follow the scoring rules exactly - no exceptions
-4. For ambiguous cases, always score conservatively (lower)
+## CRITICAL CHANGES IN V2.0
+1. Impact Score is now ADDITIVE, not multiplicative
+2. Code Quality is now a points checklist (0-5), not a multiplier
+3. Use decision trees for scoring - no guessing
+4. Two-pass scoring with self-justification required
 
-## STEP 1: Initial Classification
+## PASS 1: Initial Analysis
 
-First, classify this commit into ONE primary category:
-- feature: New functionality added
-- bugfix: Fixing broken functionality  
-- refactor: Code improvement without behavior change
-- test: Test additions or improvements
-- infrastructure: Build, CI/CD, deployment changes
-- documentation: Docs, comments, README updates
-- security: Security fixes or improvements
-- performance: Performance optimizations
+### STEP 1: Commit Classification
 
-Then identify ANY of these special flags:
-□ Affects payment/financial systems
-□ Modifies authentication/authorization
-□ Changes data models/migrations
-□ Updates external APIs/contracts
-□ Adds/modifies significant tests (>50 lines)
-□ Emergency/hotfix deployment
+Primary type:
+- capability: New functionality
+- fix: Repairing broken functionality
+- improvement: Enhancing existing functionality
+- foundation: Tests, refactoring, infrastructure
+- maintenance: Docs, configs, cleanup
 
-## STEP 2: Business Value Score (1-10)
+Check ALL that apply:
+□ Test code >80% of changes
+□ Modifies critical path (per commit message)
+□ Changes security-related code
+□ Alters data structures/storage
+□ Updates interfaces/contracts
+□ Emergency/hotfix
 
-### Canonical Examples by Category:
+### STEP 2: Value Assessment (1-10)
 
-**Features:**
-10: Payment processing, core revenue features
-9: Major user-facing features, key differentiators
-8: Important features used by many users
-7: Moderate features improving user experience
-6: Internal tools significantly boosting team productivity
-5: Minor features with limited user impact
-4: Small convenience features
-3: Internal improvements with indirect benefits
-2: Cosmetic improvements
-1: Negligible impact
+Universal Decision Tree:
+```
+START: Who benefits from this change?
+├─ END USERS (those who use the software's primary purpose)
+│   ├─ Critical to core functionality?
+│   │   ├─ YES → Score 8-10
+│   │   └─ NO → Score 5-7
+│   └─ Nice to have?
+│       └─ Score 3-4
+└─ DEVELOPERS/MAINTAINERS ONLY
+    ├─ Significantly improves development?
+    │   ├─ YES → Score 5 (HARD CAP)
+    │   └─ NO → Score 2-3
+    └─ Minimal impact → Score 1-2
+```
 
-**Bugfixes:**
-10: Critical data loss/security bugs
-9: Major functionality broken for many users
-8: Important features broken
-7: Moderate bugs affecting user experience
-6: Minor bugs with workarounds available
-5: Edge case bugs
-4: Internal tool bugs
-3: Cosmetic bugs
-2: Typos in non-user-facing text
-1: Code comment typos
+HARD CAPS:
+- Developer-only tools (build, test, benchmark, CI/CD): MAX 5
+- Test-only commits (>80% test code): MAX 5
+- Documentation-only commits: MAX 4
+- Refactoring with no new functionality: MAX 4
 
-**Tests (special scoring):**
-- Tests for payment/financial code: 5-6
-- Tests for core business logic: 4-5
-- Tests for standard features: 3-4
-- Tests for internal tools: 2-3
-- Test refactoring: 2
+### STEP 3: Technical Complexity (1-10)
 
-**Infrastructure:**
-8-10: Critical deployment/security infrastructure
-6-7: CI/CD improvements saving significant time
-4-5: Build optimizations
-2-3: Minor configuration updates
+Base Complexity Scale:
+1: Trivial (configs, constants, single-line changes)
+2: Simple (basic logic, single function/method)
+3: Standard (common patterns, single module)
+4: Moderate (multiple modules, standard integration)
+5: Substantial (complex logic, multiple integrations)
+6: Challenging (concurrent/async, performance-critical)
+7: Complex (distributed systems, complex algorithms)
+8: Very Complex (novel approaches, system architecture)
+9: Extremely Complex (breakthrough algorithms)
+10: Exceptional (paradigm-shifting implementation)
 
-### Scoring Rules:
-- If commit spans multiple categories, use the highest applicable score
-- Test commits are capped at 6 unless fixing critical test gaps
-- Documentation is capped at 4 unless fixing dangerous misinformation
-- Consider cumulative impact over time, not just immediate effect
+AUTOMATIC CAPS (check in order):
+1. If commit message contains "test", "benchmark", "script", "tool", "CI", "CD": CAP AT 5
+2. If >50% of changed files are in folders named "test", "tests", "scripts", "tools", "benchmarks", "ci", ".github": CAP AT 5
+3. If primarily test code (>70% of changes): CAP AT 3
+4. If only documentation changes: CAP AT 2
+5. Apply the LOWER of: base score OR cap
 
-Your Business Value Score: ___
+### STEP 4: Quality Indicators (0-5 points)
 
-## STEP 3: Technical Complexity Score (1-10)
+Universal Quality Checklist:
+□ Includes tests (+1)
+□ Handles edge cases (+1)
+□ Well-documented (+1)
+□ Follows patterns (+1)
+□ Future-proof design (+1)
 
-### Canonical Examples:
+### STEP 5: Risk Assessment (0-3 points)
 
-10: Distributed consensus, complex ML algorithms, compiler design
-9: Multi-service orchestration, complex state machines
-8: Database query optimization, caching strategies
-7: API design with versioning, complex business rules
-6: Integration with external services, moderate algorithms
-5: Standard CRUD with validation logic
-4: Simple feature implementation
-3: Basic logic changes, simple utilities
-2: Configuration updates, simple scripts
-1: Text changes, formatting
+Universal Risk Factors:
+- 0: Standard, well-tested
+- 1: Some untested paths
+- 2: Limited testing, rushed
+- 3: Emergency fix, high blast radius
 
-### Special Modifiers:
-+2 points if involves: concurrent programming, distributed systems
-+1 point if involves: performance optimization, security implementation
-+1 point if requires deep domain knowledge
+## PASS 2: Scoring Verification
 
-### Test Complexity Rules:
-- Test code is typically capped at 3
-- Exception: Complex test infrastructure/frameworks can score up to 5
-- Mocking distributed systems or complex state: 3
-- Standard unit tests: 2
-- Simple assertions: 1
+MANDATORY CHECKS:
+1. If primary beneficiary = DEVELOPERS ONLY → Business Value CANNOT exceed 5
+2. If commit message/files indicate tooling → Technical Complexity CANNOT exceed 5
+3. If >80% test code → Both Value and Complexity capped appropriately
+4. Verify all caps were applied correctly
 
-Your Technical Complexity Score: ___
+For EACH score, confirm:
+- Does it respect all applicable caps?
+- Is there specific evidence from the diff?
 
-## STEP 4: Code Quality Multiplier (0.5-1.5)
+## Final Formula
 
-Evaluate based on concrete evidence in the diff:
+Impact = (Value × 2) + (Complexity × 1.5) + Quality - Risk
 
-### 1.5 - Exceptional Quality
-ALL of the following must be true:
-- Comprehensive tests with >90% coverage of new code
-- Extensive documentation/comments explaining why, not what
-- Follows or establishes design patterns improving codebase
-- Handles all edge cases and errors gracefully
-- Performance considerations documented
-
-### 1.3 - High Quality  
-At least 3 of the following:
-- Good test coverage (70-90%) with edge cases
-- Clear documentation/comments
-- Follows established patterns consistently
-- Proper error handling
-- Clean, readable code structure
-
-### 1.0 - Standard Quality (default)
-- Basic tests for happy path
-- Minimal necessary documentation
-- No obvious anti-patterns
-- Standard error handling
-
-### 0.8 - Below Standard
-Any of these issues:
-- Missing tests for complex logic
-- Poor naming or structure
-- Violates established patterns
-- Minimal error handling
-
-### 0.5 - Poor Quality
-Multiple issues:
-- No tests for critical logic
-- Unclear/misleading code
-- Introduces technical debt
-- No error handling
-
-Your Code Quality Multiplier: ___
-
-## STEP 5: Risk Factor (0.8-2.0)
-
-### Risk Assessment:
-
-**0.8 - Over-engineered**
-- Solution is unnecessarily complex
-- Adds abstraction without clear benefit
-- Could be solved more simply
-
-**1.0 - Appropriate (default)**
-- Solution matches problem complexity
-- Standard approach for the situation
-- Well-planned implementation
-
-**1.2 - Elevated Risk**
-- Touches payment/financial systems
-- Modifies authentication/security
-- Changes critical data models
-- But: well-tested and reviewed
-
-**1.5 - High Risk**
-- Emergency fix under pressure
-- Limited testing due to urgency
-- Modifies critical systems without full review
-- Temporary solution needed
-
-**2.0 - Critical Risk**
-- Production hotfix for data loss/security
-- Deployed with minimal testing
-- Business-critical emergency
-
-Your Risk Factor: ___
-
-## STEP 6: Final Calculation
-
-Impact Score = (Business Value × Technical Complexity × Code Quality) / Risk Factor
-
-## VALIDATION CHECKLIST
-
-Before submitting, verify:
-□ Test commits don't have technical complexity >3 (unless test infrastructure)
-□ Business value aligns with actual user/business impact
-□ Code quality has specific evidence from the diff
-□ Risk factor reflects deployment urgency/safety
-□ All scores compared against canonical examples
+Range: 0.5 to 40 points
 
 ## Commit Details
 
@@ -746,24 +756,44 @@ Deletions: {commit_data.get('deletions', 0)} lines
 Diff:
 {commit_data.get('diff', '')}
 
-## Required Output Format
+## Required JSON Output
 
-You MUST output valid JSON only:
 {{
   "classification": {{
     "primary_category": "<category>",
+    "is_test_heavy": <boolean>,
     "special_flags": ["<flag1>", "<flag2>"]
   }},
-  "business_value": <int 1-10>,
-  "business_value_reasoning": "<specific comparison to examples>",
-  "technical_complexity": <int 1-10>,
-  "technical_complexity_reasoning": "<specific comparison to examples>",
-  "code_quality": <float 0.5|0.8|1.0|1.3|1.5>,
-  "code_quality_reasoning": "<specific evidence from diff>",
-  "risk_factor": <float 0.8|1.0|1.2|1.5|2.0>,
-  "risk_factor_reasoning": "<specific assessment>",
+  "business_value": {{
+    "score": <int 1-10>,
+    "decision_path": "<path taken in decision tree>",
+    "why_not_lower": "<specific reason>",
+    "why_not_higher": "<specific reason>",
+    "evidence": "<specific evidence from diff>"
+  }},
+  "technical_complexity": {{
+    "score": <int 1-10>,
+    "why_not_lower": "<specific reason>",
+    "why_not_higher": "<specific reason>",
+    "evidence": "<specific evidence from diff>"
+  }},
+  "code_quality_points": {{
+    "score": <int 0-5>,
+    "checklist": {{
+      "tests_included": <boolean>,
+      "high_coverage": <boolean>,
+      "documentation_updated": <boolean>,
+      "follows_patterns": <boolean>,
+      "handles_errors": <boolean>
+    }},
+    "evidence": "<specific evidence for each true item>"
+  }},
+  "risk_penalty": {{
+    "score": <int 0-3>,
+    "reasoning": "<specific risks identified>"
+  }},
   "impact_score": <calculated float>,
-  "validation_notes": "<any edge cases or special considerations>"
+  "calculation_breakdown": "<show the calculation>"
 }}"""
 
             # Set up parameters for the API call
@@ -785,7 +815,38 @@ You MUST output valid JSON only:
                 response = await self.client.responses.create(**api_params)
                 
                 # Parse the response from responses API
-                result = json.loads(response.output_text)
+                try:
+                    # Extract the text content
+                    text_content = None
+                    if hasattr(response, 'output_text') and response.output_text:
+                        text_content = response.output_text
+                    elif hasattr(response, 'output') and hasattr(response.output, 'text'):
+                        text_content = response.output.text
+                    elif hasattr(response, 'choices') and response.choices:
+                        # Sometimes responses API returns choices format
+                        text_content = response.choices[0].message.content
+                    else:
+                        # Log the response structure for debugging
+                        print(f"Unexpected response structure: {response}")
+                        print(f"Response type: {type(response)}")
+                        print(f"Response attributes: {dir(response)}")
+                        raise ValueError("Unable to extract text from responses API response")
+                    
+                    # Clean up markdown code blocks if present
+                    if text_content.strip().startswith('```json'):
+                        text_content = text_content.strip()[7:]  # Remove ```json
+                        if text_content.endswith('```'):
+                            text_content = text_content[:-3]  # Remove closing ```
+                    elif text_content.strip().startswith('```'):
+                        text_content = text_content.strip()[3:]  # Remove ```
+                        if text_content.endswith('```'):
+                            text_content = text_content[:-3]  # Remove closing ```
+                    
+                    result = json.loads(text_content.strip())
+                except (json.JSONDecodeError, AttributeError) as e:
+                    print(f"Error parsing impact response: {e}")
+                    print(f"Response content: {getattr(response, 'output_text', 'No output_text attribute')}")
+                    raise
             else:
                 # Use chat completions API for non-reasoning models
                 api_params = {
@@ -806,13 +867,20 @@ You MUST output valid JSON only:
                 # Parse the response from chat completions API
                 result = json.loads(response.choices[0].message.content)
             
-            # Calculate impact score if not provided
+            # Extract scores from nested structure
+            business_value = result.get("business_value", {}).get("score", 5)
+            technical_complexity = result.get("technical_complexity", {}).get("score", 5)
+            code_quality_points = result.get("code_quality_points", {}).get("score", 2)
+            risk_penalty = result.get("risk_penalty", {}).get("score", 0)
+            
+            # Calculate impact score using new additive formula
             if "impact_score" not in result or result["impact_score"] is None:
                 result["impact_score"] = (
-                    result["business_value"] * 
-                    result["technical_complexity"] * 
-                    result["code_quality"]
-                ) / result["risk_factor"]
+                    (business_value * 2) + 
+                    (technical_complexity * 1.5) + 
+                    code_quality_points - 
+                    risk_penalty
+                )
             
             # Round impact score to 1 decimal place
             result["impact_score"] = round(result["impact_score"], 1)
@@ -828,6 +896,13 @@ You MUST output valid JSON only:
             
             return result
             
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error in analyze_commit_impact: {e}")
+            return {
+                "error": True,
+                "message": f"Failed to parse API response: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }
         except Exception as e:
             return self.error_handling(e)
     
