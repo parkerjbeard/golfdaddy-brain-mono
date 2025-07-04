@@ -342,7 +342,15 @@ class CommitAnalysisService:
                 except ValueError:
                     logger.warning(f"Could not parse analyzed_at timestamp: {analyzed_at_str}")
             
+            # Extract impact scoring fields
+            impact_score = analysis_result.get("impact_score", 0)
+            impact_business_value = analysis_result.get("impact_business_value", 0)
+            impact_technical_complexity = analysis_result.get("impact_technical_complexity", 0)
+            impact_code_quality = analysis_result.get("impact_code_quality", 1.0)
+            impact_risk_factor = analysis_result.get("impact_risk_factor", 1.0)
+            
             logger.info(f"✓ Analysis complete: Points={ai_points}, Hours={ai_hours}, Seniority={seniority_score}")
+            logger.info(f"✓ Impact Score: {impact_score} (BV:{impact_business_value} × TC:{impact_technical_complexity} × CQ:{impact_code_quality} / RF:{impact_risk_factor})")
 
             # 3. Map commit author to internal user ID
             # Prioritize author_id if already provided in commit_data (e.g., by process_commit)
@@ -356,10 +364,23 @@ class CommitAnalysisService:
                 # Continue without author mapping if it fails
 
             # 4. Prepare commit data for saving
+            # Store impact scoring data in ai_analysis_notes as JSON for now
+            impact_data = {
+                "impact_score": impact_score,
+                "impact_business_value": impact_business_value,
+                "impact_technical_complexity": impact_technical_complexity,
+                "impact_code_quality": impact_code_quality,
+                "impact_risk_factor": impact_risk_factor,
+                "impact_business_value_reasoning": analysis_result.get("impact_business_value_reasoning"),
+                "impact_technical_complexity_reasoning": analysis_result.get("impact_technical_complexity_reasoning"),
+                "impact_code_quality_reasoning": analysis_result.get("impact_code_quality_reasoning"),
+                "impact_risk_factor_reasoning": analysis_result.get("impact_risk_factor_reasoning"),
+                "impact_dominant_category": analysis_result.get("impact_dominant_category")
+            }
+            
             commit_to_save = Commit(
                 commit_hash=commit_hash,
                 author_id=author_id, # May be None if mapping failed
-                ai_points=ai_points,
                 ai_estimated_hours=ai_hours,
                 seniority_score=seniority_score,
                 commit_timestamp=commit_data.get("timestamp") or commit_data.get("commit_timestamp") or 
@@ -371,6 +392,8 @@ class CommitAnalysisService:
                 seniority_rationale=seniority_rationale,
                 model_used=model_used,
                 analyzed_at=analyzed_at,
+                # Store impact scoring data in ai_analysis_notes as JSON
+                ai_analysis_notes=json.dumps(impact_data),
                 # Populate fields from EOD/Code Quality integration
                 eod_report_id=eod_report.id if eod_report else None,
                 eod_report_summary=eod_report.summary if eod_report and hasattr(eod_report, 'summary') else (eod_report.raw_text_input[:250] + "..." if eod_report and eod_report.raw_text_input else None),
