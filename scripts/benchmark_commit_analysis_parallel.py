@@ -137,25 +137,57 @@ class ParallelCommitAnalysisBenchmark:
                     }
                 }
                 
-                # Parse impact scoring
+                # Parse comprehensive analysis data from ai_analysis_notes
                 if analyzed_commit.ai_analysis_notes:
                     try:
-                        impact_data = json.loads(analyzed_commit.ai_analysis_notes)
+                        analysis_data = json.loads(analyzed_commit.ai_analysis_notes)
+                        
+                        # Update traditional hours with new anchor fields if available
+                        if analysis_data.get('total_lines') is not None:
+                            run_result["traditional_hours"].update({
+                                "total_lines": analysis_data.get('total_lines'),
+                                "total_files": analysis_data.get('total_files'),
+                                "initial_anchor": analysis_data.get('initial_anchor'),
+                                "final_anchor": analysis_data.get('final_anchor'),
+                                "base_hours": analysis_data.get('base_hours'),
+                                "major_change_checks": analysis_data.get('major_change_checks', []),
+                                "major_change_count": analysis_data.get('major_change_count', 0),
+                                "file_count_override": analysis_data.get('file_count_override', False),
+                                "simplicity_reduction_checks": analysis_data.get('simplicity_reduction_checks', []),
+                                "complexity_cap_applied": analysis_data.get('complexity_cap_applied', 'none'),
+                                "multipliers_applied": analysis_data.get('multipliers_applied', [])
+                            })
+                        
+                        # Extract impact scoring
                         run_result["impact_points"] = {
-                            "business_value": impact_data.get('impact_business_value', 0),
-                            "technical_complexity": impact_data.get('impact_technical_complexity', 0),
-                            "code_quality": impact_data.get('impact_code_quality', 1.0),
-                            "risk_factor": impact_data.get('impact_risk_factor', 1.0),
-                            "total_score": impact_data.get('impact_score', 0),
+                            "business_value": analysis_data.get('impact_business_value', 0),
+                            "technical_complexity": analysis_data.get('impact_technical_complexity', 0),
+                            "code_quality": analysis_data.get('impact_code_quality', 1.0),
+                            "risk_factor": analysis_data.get('impact_risk_factor', 1.0),
+                            "total_score": analysis_data.get('impact_score', 0),
                             "reasoning": {
-                                "business_value": impact_data.get('impact_business_value_reasoning', ''),
-                                "technical_complexity": impact_data.get('impact_technical_complexity_reasoning', ''),
-                                "code_quality": impact_data.get('impact_code_quality_reasoning', ''),
-                                "risk_factor": impact_data.get('impact_risk_factor_reasoning', ''),
+                                "business_value": analysis_data.get('impact_business_value_reasoning', ''),
+                                "technical_complexity": analysis_data.get('impact_technical_complexity_reasoning', ''),
+                                "code_quality": analysis_data.get('impact_code_quality_reasoning', ''),
+                                "risk_factor": analysis_data.get('impact_risk_factor_reasoning', ''),
                             }
                         }
-                    except:
-                        pass
+                    except Exception as e:
+                        console.print(f"[yellow]Warning: Could not parse analysis data: {e}[/yellow]")
+                        # Fallback to basic impact data if available
+                        run_result["impact_points"] = {
+                            "business_value": None,
+                            "technical_complexity": None,
+                            "code_quality": 1.0,
+                            "risk_factor": 1.0,
+                            "total_score": None,
+                            "reasoning": {
+                                "business_value": None,
+                                "technical_complexity": None,
+                                "code_quality": None,
+                                "risk_factor": None,
+                            }
+                        }
                 
                 return run_result
             else:

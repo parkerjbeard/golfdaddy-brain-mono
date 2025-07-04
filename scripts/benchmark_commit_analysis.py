@@ -129,13 +129,16 @@ through the model multiple times.
 **Configuration:**
 - Runs per commit: {self.config['runs_per_commit']}
 - Output directory: benchmark_results/
-- Scoring methods: Traditional Hours + Impact Points
+- Scoring methods: Traditional Hours + Impact Points v2.0
 
 **What we'll measure:**
 - Score consistency across runs
 - Statistical variance and standard deviation
 - Min/max ranges for each metric
 - Reasoning consistency
+
+**Impact Points v2.0 Formula:**
+Impact = (Business Value × 2) + (Technical Complexity × 1.5) + Quality Points - Risk Penalty
 
 Results will be saved to: `benchmark_results/benchmark_{self.current_benchmark_id}.json`
         """
@@ -332,25 +335,76 @@ Results will be saved to: `benchmark_results/benchmark_{self.current_benchmark_i
                             }
                         }
                         
-                        # Parse impact scoring from ai_analysis_notes
+                        # Parse comprehensive analysis data from ai_analysis_notes
                         if analyzed_commit.ai_analysis_notes:
                             try:
-                                impact_data = json.loads(analyzed_commit.ai_analysis_notes)
+                                analysis_data = json.loads(analyzed_commit.ai_analysis_notes)
+                                
+                                # Update traditional hours with new anchor fields if available
+                                if analysis_data.get('total_lines') is not None:
+                                    run_result["traditional_hours"].update({
+                                        "total_lines": analysis_data.get('total_lines'),
+                                        "total_files": analysis_data.get('total_files'),
+                                        "initial_anchor": analysis_data.get('initial_anchor'),
+                                        "final_anchor": analysis_data.get('final_anchor'),
+                                        "base_hours": analysis_data.get('base_hours'),
+                                        "major_change_checks": analysis_data.get('major_change_checks', []),
+                                        "major_change_count": analysis_data.get('major_change_count', 0),
+                                        "file_count_override": analysis_data.get('file_count_override', False),
+                                        "simplicity_reduction_checks": analysis_data.get('simplicity_reduction_checks', []),
+                                        "complexity_cap_applied": analysis_data.get('complexity_cap_applied', 'none'),
+                                        "multipliers_applied": analysis_data.get('multipliers_applied', [])
+                                    })
+                                
+                                # Extract impact scoring - check for v2.0 structure
+                                if 'impact_classification' in analysis_data:
+                                    # New v2.0 structure
+                                    run_result["impact_points"] = {
+                                        "business_value": analysis_data.get('impact_business_value', 0),
+                                        "technical_complexity": analysis_data.get('impact_technical_complexity', 0),
+                                        "code_quality_points": analysis_data.get('impact_code_quality_points', 0),
+                                        "risk_penalty": analysis_data.get('impact_risk_penalty', 0),
+                                        "total_score": analysis_data.get('impact_score', 0),
+                                        "classification": analysis_data.get('impact_classification', {}),
+                                        "calculation_breakdown": analysis_data.get('impact_calculation_breakdown', ''),
+                                        "reasoning": {
+                                            "business_value": analysis_data.get('impact_business_value_reasoning', ''),
+                                            "technical_complexity": analysis_data.get('impact_technical_complexity_reasoning', ''),
+                                            "code_quality": analysis_data.get('impact_code_quality_checklist', {}),
+                                            "risk": analysis_data.get('impact_risk_reasoning', ''),
+                                        }
+                                    }
+                                else:
+                                    # Old structure (backward compatibility)
+                                    run_result["impact_points"] = {
+                                        "business_value": analysis_data.get('impact_business_value', 0),
+                                        "technical_complexity": analysis_data.get('impact_technical_complexity', 0),
+                                        "code_quality": analysis_data.get('impact_code_quality', 1.0),
+                                        "risk_factor": analysis_data.get('impact_risk_factor', 1.0),
+                                        "total_score": analysis_data.get('impact_score', 0),
+                                        "reasoning": {
+                                            "business_value": analysis_data.get('impact_business_value_reasoning', ''),
+                                            "technical_complexity": analysis_data.get('impact_technical_complexity_reasoning', ''),
+                                            "code_quality": analysis_data.get('impact_code_quality_reasoning', ''),
+                                            "risk_factor": analysis_data.get('impact_risk_factor_reasoning', ''),
+                                        }
+                                    }
+                            except Exception as e:
+                                self.console.print(f"[yellow]Warning: Could not parse analysis data: {e}[/yellow]")
+                                # Fallback to basic impact data if available
                                 run_result["impact_points"] = {
-                                    "business_value": impact_data.get('impact_business_value', 0),
-                                    "technical_complexity": impact_data.get('impact_technical_complexity', 0),
-                                    "code_quality": impact_data.get('impact_code_quality', 1.0),
-                                    "risk_factor": impact_data.get('impact_risk_factor', 1.0),
-                                    "total_score": impact_data.get('impact_score', 0),
+                                    "business_value": None,
+                                    "technical_complexity": None,
+                                    "code_quality": 1.0,
+                                    "risk_factor": 1.0,
+                                    "total_score": None,
                                     "reasoning": {
-                                        "business_value": impact_data.get('impact_business_value_reasoning', ''),
-                                        "technical_complexity": impact_data.get('impact_technical_complexity_reasoning', ''),
-                                        "code_quality": impact_data.get('impact_code_quality_reasoning', ''),
-                                        "risk_factor": impact_data.get('impact_risk_factor_reasoning', ''),
+                                        "business_value": None,
+                                        "technical_complexity": None,
+                                        "code_quality": None,
+                                        "risk_factor": None,
                                     }
                                 }
-                            except:
-                                pass
                         
                         results["runs"].append(run_result)
                     else:
@@ -392,8 +446,24 @@ Results will be saved to: `benchmark_results/benchmark_{self.current_benchmark_i
         # Calculate statistics for Impact Points method
         business_values = [r["impact_points"]["business_value"] for r in successful_runs if r.get("impact_points", {}).get("business_value")]
         technical_values = [r["impact_points"]["technical_complexity"] for r in successful_runs if r.get("impact_points", {}).get("technical_complexity")]
-        quality_values = [r["impact_points"]["code_quality"] for r in successful_runs if r.get("impact_points", {}).get("code_quality")]
-        risk_values = [r["impact_points"]["risk_factor"] for r in successful_runs if r.get("impact_points", {}).get("risk_factor")]
+        
+        # Handle both old (code_quality) and new (code_quality_points) field names
+        quality_values = []
+        risk_values = []
+        for r in successful_runs:
+            impact = r.get("impact_points", {})
+            # Code quality - check both field names
+            if "code_quality_points" in impact:
+                quality_values.append(impact["code_quality_points"])
+            elif "code_quality" in impact:
+                quality_values.append(impact["code_quality"])
+            
+            # Risk - check both field names (risk_penalty vs risk_factor)
+            if "risk_penalty" in impact:
+                risk_values.append(impact["risk_penalty"])
+            elif "risk_factor" in impact:
+                risk_values.append(impact["risk_factor"])
+        
         impact_scores = [r["impact_points"]["total_score"] for r in successful_runs if r.get("impact_points", {}).get("total_score")]
         
         # Traditional Hours Statistics Table
@@ -489,6 +559,34 @@ Results will be saved to: `benchmark_results/benchmark_{self.current_benchmark_i
                 f"{max(technical_values):.2f}",
                 f"{max(technical_values) - min(technical_values):.2f}",
                 f"{cv_tech:.1f}%"
+            )
+        
+        if quality_values:
+            mean_quality = statistics.mean(quality_values)
+            std_quality = statistics.stdev(quality_values) if len(quality_values) > 1 else 0
+            cv_quality = (std_quality / mean_quality * 100) if mean_quality > 0 else 0
+            impact_table.add_row(
+                "Code Quality Points",
+                f"{mean_quality:.2f}",
+                f"{std_quality:.2f}",
+                f"{min(quality_values):.2f}",
+                f"{max(quality_values):.2f}",
+                f"{max(quality_values) - min(quality_values):.2f}",
+                f"{cv_quality:.1f}%"
+            )
+        
+        if risk_values:
+            mean_risk = statistics.mean(risk_values)
+            std_risk = statistics.stdev(risk_values) if len(risk_values) > 1 else 0
+            cv_risk = (std_risk / mean_risk * 100) if mean_risk > 0 else 0
+            impact_table.add_row(
+                "Risk Penalty",
+                f"{mean_risk:.2f}",
+                f"{std_risk:.2f}",
+                f"{min(risk_values):.2f}",
+                f"{max(risk_values):.2f}",
+                f"{max(risk_values) - min(risk_values):.2f}",
+                f"{cv_risk:.1f}%"
             )
         
         if impact_scores:
@@ -606,17 +704,47 @@ Results will be saved to: `benchmark_results/benchmark_{self.current_benchmark_i
                 f"{impact.get('total_score', 0):.1f} points"
             )
             
+            # Add business value row
+            run_table.add_row(
+                "Business Value",
+                "-",
+                f"{impact.get('business_value', 0)}/10"
+            )
+            
             run_table.add_row(
                 "Complexity",
                 f"{trad['complexity_score']}/10",
                 f"{impact.get('technical_complexity', 0)}/10"
             )
             
-            if trad.get('risk_level'):
+            # Handle both old and new field names for quality and risk
+            quality_val = impact.get('code_quality_points', impact.get('code_quality', 0))
+            risk_val = impact.get('risk_penalty', impact.get('risk_factor', 0))
+            
+            run_table.add_row(
+                "Quality Assessment",
+                f"Seniority: {trad.get('seniority_score', 0)}/10",
+                f"Quality Points: {quality_val}" + (" pts" if "code_quality_points" in impact else "x")
+            )
+            
+            if trad.get('risk_level') or risk_val:
                 run_table.add_row(
                     "Risk Assessment",
-                    trad['risk_level'].upper(),
-                    f"{impact.get('risk_factor', 1.0):.2f}x"
+                    trad.get('risk_level', 'N/A').upper(),
+                    f"Penalty: -{risk_val}" if "risk_penalty" in impact else f"{risk_val:.2f}x"
+                )
+            
+            # Add calculation breakdown for impact points if available
+            if impact.get('total_score') and "code_quality_points" in impact:
+                bv = impact.get('business_value', 0)
+                tc = impact.get('technical_complexity', 0)
+                cq = impact.get('code_quality_points', 0)
+                rp = impact.get('risk_penalty', 0)
+                calc = f"({bv}×2) + ({tc}×1.5) + {cq} - {rp} = {impact['total_score']:.1f}"
+                run_table.add_row(
+                    "Impact Calculation",
+                    "-",
+                    calc
                 )
             
             self.console.print(run_table)
