@@ -300,94 +300,176 @@ class CommitAnalyzer:
         """
         try:
             # Prepare a detailed prompt for the analysis
-            prompt = f"""You are analyzing a single Git commit with the primary objective of
-            estimating the real engineering effort (in hours) required to author
-            the change.  After estimating the effort you will also rate the
-            complexity and risk, and identify key changes. If the diff reveals
-            significant technical debt concerns, reflect that in a lower
-            seniority score and mention it in the rationale.  Respond **only**
-            with a single
-            valid JSON object using the exact keys listed below – no markdown or
-            extra commentary.
+            prompt = f"""You are a senior software engineer with expertise in code analysis. Analyze the following commit and provide both hours-based estimation and impact points scoring.
 
-            Required JSON schema:
-                {{
-                    "complexity_score": <integer 1-10>,
-                    "estimated_hours": <float>,
-                    "risk_level": <"low"|"medium"|"high">,
-                    "seniority_score": <integer 1-10>,
-                    "seniority_rationale": <string>,
-                    "key_changes": [<string>]
-                }}
+## Scoring Guidelines
 
-            Hours-estimation calibration table (baseline per commit – include
-            time for tests, docs and validation):
-                • Very simple (≤20 changed lines, trivial fix)……………… 0.25-1 h
-                • Simple       (21-100 lines or isolated feature)……… 1-2 h
-                • Moderate     (101-300 lines or multi-file feature)… 2-4 h
-                • Complex      (301-800 lines or architectural change) 4-8 h
-                • Extensive    (>800 lines or large scale refactor)…  8-20 h
+### 1. HOURS-BASED TRADITIONAL SCORING
 
-            Adjustment modifiers (apply cumulatively then round to 1 decimal):
-                +20 %  – non-trivial unit tests or documentation added/updated
-                +25 %  – new external integration or infrastructure work
-                −30 %  – mostly mechanical or generated changes
-                +15 %  – security-critical or high-risk code paths
+Estimate engineering effort considering:
+- Actual development time (not AI-assisted time)
+- Code review and refinement cycles
+- Mental effort and architecture decisions
 
-            Complexity, seniority and risk should be evaluated using standard
-            industry heuristics (see OWASP, clean-code, SOLID, etc.).  Make sure
-            the final **estimated_hours** is a single floating-point number with
-            one decimal place and never zero.
+#### Base Hours Calibration by Code Volume:
+• 1-20 lines changed: 0.25-1 hours
+• 21-100 lines: 1-2 hours  
+• 101-300 lines: 2-4 hours
+• 301-800 lines: 4-8 hours
+• 800+ lines: 8-20 hours
 
-            Seniority-scoring procedure (use every time):
-                1. Identify the intended function/purpose of the change.
-                2. Envision what an ideal senior-level implementation would look like (architecture, testing, error-handling, perf, security).
-                3. Compare the actual diff against this ideal.
-                4. Map the result to the 1-10 scale:
-                   • 1-3  – Junior-level, basic or naive implementation
-                   • 4-6  – Mid-level, competent but with notable gaps
-                   • 7-10 – Senior-level craftsmanship and forethought
+#### Work Type Modifiers:
+• Bug fixes: +25% for investigation time
+• New features: +20% for design decisions
+• Test additions: +20% for test design
+• Infrastructure/CI: +30% for testing and validation
+• Database changes: +40% for migration planning
+• Security fixes: +50% for careful implementation
+• Documentation only: -30%
+• Mechanical refactoring: -30%
+• Code formatting: -50%
 
-            Special case – trivial commits:
-                If the change is extremely small or mechanical (complexity_score ≤ 3 or ≤ 20 changed lines)
-                the seniority dimension is largely irrelevant.  In such cases:
-                    • Set seniority_score equal to 10.
-                    • Provide a brief seniority_rationale such as "Trivial change – seniority not meaningfully assessable."
+#### File Type Importance:
+• Payment/financial code: 1.5x multiplier
+• Security/auth code: 1.4x multiplier
+• Core business logic: 1.3x multiplier
+• API contracts/schemas: 1.2x multiplier
+• Comprehensive tests: 1.2x multiplier
+• Regular features: 1.0x multiplier
+• Config/documentation: 0.8x multiplier
+• Generated/formatted code: 0.5x multiplier
 
-            Commit metadata for context – use it but do **not** echo it back:
-            Repository: {commit_data.get('repository', '')}
-            Author: {commit_data.get('author_name', '')} <{commit_data.get('author_email', '')}>
-            Message: {commit_data.get('message', '')}
-            Files Changed: {', '.join(commit_data.get('files_changed', []))}
-            Lines Added: {commit_data.get('additions', 0)}
-            Lines Deleted: {commit_data.get('deletions', 0)}
+### 2. COMPLEXITY SCORING (1-10)
 
-            Diff:
-            {commit_data.get('diff', '')}"""
+Rate based on:
+• 1-2: Trivial (formatting, typos, simple config)
+• 3-4: Simple (basic CRUD, straightforward logic)
+• 5-6: Moderate (multiple components, some design decisions)
+• 7-8: Complex (architectural changes, complex algorithms)
+• 9-10: Very complex (distributed systems, critical infrastructure)
+
+### 3. SENIORITY SCORING (1-10)
+
+Evaluate implementation quality against ideal senior-level work:
+
+#### Positive Indicators (increase score):
+• Comprehensive error handling and edge cases
+• Well-structured tests with good coverage
+• Performance optimizations with benchmarks
+• Security best practices followed
+• Clean abstractions and API design
+• Follows and improves existing patterns
+• Considers future maintainability
+
+#### Negative Indicators (decrease score):
+• Missing error handling
+• No tests for complex logic
+• Hard-coded values
+• Security vulnerabilities
+• Performance anti-patterns
+• Breaks established patterns
+• Short-term thinking
+
+#### IMPORTANT - Trivial Change Detection:
+A commit is trivial ONLY when ALL conditions are met:
+- Total lines changed ≤ 20
+- Complexity score ≤ 2
+- No test files added or modified
+- No architectural files (migrations, schemas, configs)
+- Changes are purely cosmetic (formatting, typos, comments)
+
+For truly trivial commits only:
+- Set seniority_score = 10
+- Use rationale: "Trivial change – seniority not meaningfully assessable"
+
+For ALL other commits (including test additions):
+- Score seniority normally (1-10 range)
+- Test-only commits typically score 4-8 based on test quality
+
+### 4. RISK LEVEL
+
+Assess deployment risk:
+• low: Unlikely to cause issues (tests, docs, isolated features)
+• medium: Some risk (core features, integrations)
+• high: Significant risk (payments, auth, data migrations)
+
+## Output Format
+
+Provide a JSON response with this exact structure:
+{{
+  "complexity_score": <int 1-10>,
+  "estimated_hours": <float>,
+  "risk_level": "<low|medium|high>",
+  "seniority_score": <int 1-10>,
+  "seniority_rationale": "<explanation>",
+  "key_changes": ["<change1>", "<change2>", ...]
+}}
+
+## Consistency Checks
+
+Before finalizing scores, verify:
+1. Hours align with complexity (high complexity = more hours)
+2. Test commits don't have inflated technical complexity
+3. Seniority score reflects actual code quality indicators
+4. Business value matches actual user/business impact
+5. No commit >20 lines is marked as trivial
+
+## Commit to Analyze
+
+Repository: {commit_data.get('repository', '')}
+Author: {commit_data.get('author_name', '')} <{commit_data.get('author_email', '')}>
+Message: {commit_data.get('message', '')}
+Files Changed: {', '.join(commit_data.get('files_changed', []))}
+Additions: {commit_data.get('additions', 0)}
+Deletions: {commit_data.get('deletions', 0)}
+
+Diff:
+{commit_data.get('diff', '')}"""
 
             # Set up parameters for the API call
-            api_params = {
-                "model": self.commit_analysis_model,
-                "messages": [
-                    {"role": "system", "content": """You are a senior software engineer specialising in effort estimation and code review. Your foremost task is to determine how many engineering hours were required to implement the provided Git commit. Follow the calibration table and modifiers supplied by the user prompt, be deterministic, and output only the JSON described. In addition, evaluate complexity, risk, seniority and improvement suggestions with professional rigour."""},
-                    {"role": "user", "content": prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-            
-            # Only add temperature for models that support it
-            if not self._is_reasoning_model(self.commit_analysis_model):
-                api_params["temperature"] = 0.15  # Lower temperature for higher determinism in hour estimation
+            if self._is_reasoning_model(self.commit_analysis_model):
+                # Use responses API for reasoning models with high effort
+                api_params = {
+                    "model": self.commit_analysis_model,
+                    "reasoning": {"effort": "high"},
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": f"""You are a senior software engineer with deep expertise in effort estimation and code quality assessment. Your task is to analyze commits with extreme consistency by following the provided guidelines exactly. Always compare scores against the examples provided. Be conservative in scoring - when in doubt, score lower. Output only valid JSON with no additional commentary.
 
-            # Run both analyses in parallel for efficiency
-            hours_task = self.client.chat.completions.create(**api_params)
-            impact_task = self.analyze_commit_impact(commit_data)
-            
-            # Wait for both to complete
-            hours_response, impact_result = await asyncio.gather(hours_task, impact_task)
-            
-            # Parse the hours response
-            hours_result = json.loads(hours_response.choices[0].message.content)
+{prompt}"""
+                        }
+                    ]
+                }
+                # Run both analyses in parallel for efficiency
+                hours_task = self.client.responses.create(**api_params)
+                impact_task = self.analyze_commit_impact(commit_data)
+                
+                # Wait for both to complete
+                hours_response, impact_result = await asyncio.gather(hours_task, impact_task)
+                
+                # Parse the hours response from responses API
+                hours_result = json.loads(hours_response.output_text)
+            else:
+                # Use chat completions API for non-reasoning models
+                api_params = {
+                    "model": self.commit_analysis_model,
+                    "messages": [
+                        {"role": "system", "content": """You are a senior software engineer with deep expertise in effort estimation and code quality assessment. Your task is to analyze commits with extreme consistency by following the provided guidelines exactly. Always compare scores against the examples provided. Be conservative in scoring - when in doubt, score lower. Output only valid JSON with no additional commentary."""},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.15  # Lower temperature for higher determinism
+                }
+                # Run both analyses in parallel for efficiency
+                hours_task = self.client.chat.completions.create(**api_params)
+                impact_task = self.analyze_commit_impact(commit_data)
+                
+                # Wait for both to complete
+                hours_response, impact_result = await asyncio.gather(hours_task, impact_task)
+                
+                # Parse the hours response from chat completions API
+                hours_result = json.loads(hours_response.choices[0].message.content)
             
             # Combine both results
             combined_result = {
@@ -409,7 +491,8 @@ class CommitAnalyzer:
                 "impact_risk_factor": impact_result.get("risk_factor"),
                 "impact_risk_factor_reasoning": impact_result.get("risk_factor_reasoning"),
                 "impact_score": impact_result.get("impact_score"),
-                "impact_dominant_category": impact_result.get("dominant_category"),
+                "impact_classification": impact_result.get("classification", {}),
+                "impact_validation_notes": impact_result.get("validation_notes"),
                 
                 # Metadata
                 "analyzed_at": datetime.now().isoformat(),
@@ -457,107 +540,271 @@ class CommitAnalyzer:
             technical_complexity_examples = "\n".join([f"Score {k}: {v}" for k, v in self.CALIBRATION_EXAMPLES["technical_complexity"].items()])
             code_quality_examples = "\n".join([f"Multiplier {k}: {v}" for k, v in self.CALIBRATION_EXAMPLES["code_quality"].items()])
             
-            prompt = f"""Analyze this commit using the Impact Points System. You must score exactly according to these definitions.
+            prompt = f"""You are a senior engineering manager with deep experience in evaluating developer contributions. Analyze this commit using the Impact Points System with extreme consistency.
 
-STEP 1: Classify the commit type
-- What type of change is this? (feature/bugfix/refactor/infrastructure/etc)
-- What is the primary purpose?
+## CRITICAL INSTRUCTIONS
+1. You MUST compare every score to the provided examples
+2. You MUST provide specific evidence from the diff for each score
+3. You MUST follow the scoring rules exactly - no exceptions
+4. For ambiguous cases, always score conservatively (lower)
 
-STEP 2: Business Value Score (1-10)
-Compare this commit to these canonical examples:
-{business_value_examples}
+## STEP 1: Initial Classification
 
-Questions to consider:
-- Does this directly impact users or revenue?
-- How critical is this to core business operations?
-- What happens if this feature/fix doesn't exist?
+First, classify this commit into ONE primary category:
+- feature: New functionality added
+- bugfix: Fixing broken functionality  
+- refactor: Code improvement without behavior change
+- test: Test additions or improvements
+- infrastructure: Build, CI/CD, deployment changes
+- documentation: Docs, comments, README updates
+- security: Security fixes or improvements
+- performance: Performance optimizations
 
-Your score: ___ (you MUST pick a whole number 1-10)
+Then identify ANY of these special flags:
+□ Affects payment/financial systems
+□ Modifies authentication/authorization
+□ Changes data models/migrations
+□ Updates external APIs/contracts
+□ Adds/modifies significant tests (>50 lines)
+□ Emergency/hotfix deployment
 
-STEP 3: Technical Complexity Score (1-10)
-Compare this commit to these canonical examples:
-{technical_complexity_examples}
+## STEP 2: Business Value Score (1-10)
 
-Questions to consider:
-- How many systems/services are involved?
-- What's the algorithmic complexity?
-- How much domain knowledge is required?
-- For game dev: involves physics/rendering/AI? (+2-3 points)
+### Canonical Examples by Category:
 
-Your score: ___ (you MUST pick a whole number 1-10)
+**Features:**
+10: Payment processing, core revenue features
+9: Major user-facing features, key differentiators
+8: Important features used by many users
+7: Moderate features improving user experience
+6: Internal tools significantly boosting team productivity
+5: Minor features with limited user impact
+4: Small convenience features
+3: Internal improvements with indirect benefits
+2: Cosmetic improvements
+1: Negligible impact
 
-STEP 4: Code Quality Multiplier (0.5-1.5)
-{code_quality_examples}
+**Bugfixes:**
+10: Critical data loss/security bugs
+9: Major functionality broken for many users
+8: Important features broken
+7: Moderate bugs affecting user experience
+6: Minor bugs with workarounds available
+5: Edge case bugs
+4: Internal tool bugs
+3: Cosmetic bugs
+2: Typos in non-user-facing text
+1: Code comment typos
 
-Evaluate:
-- Test coverage added/modified
-- Documentation completeness
-- Code maintainability
-- Design patterns used
+**Tests (special scoring):**
+- Tests for payment/financial code: 5-6
+- Tests for core business logic: 4-5
+- Tests for standard features: 3-4
+- Tests for internal tools: 2-3
+- Test refactoring: 2
 
-Your multiplier: ___ (pick from: 0.5, 0.8, 1.0, 1.2, 1.5)
+**Infrastructure:**
+8-10: Critical deployment/security infrastructure
+6-7: CI/CD improvements saving significant time
+4-5: Build optimizations
+2-3: Minor configuration updates
 
-STEP 5: Risk Factor (0.8-2.0)
-- 0.8 = Over-engineered for the problem
-- 1.0 = Appropriate solution (default)
-- 1.2 = Touching critical systems
-- 1.5 = High security/financial risk
-- 2.0 = Emergency production fix
+### Scoring Rules:
+- If commit spans multiple categories, use the highest applicable score
+- Test commits are capped at 6 unless fixing critical test gaps
+- Documentation is capped at 4 unless fixing dangerous misinformation
+- Consider cumulative impact over time, not just immediate effect
 
-Your factor: ___
+Your Business Value Score: ___
 
-FINAL CALCULATION:
+## STEP 3: Technical Complexity Score (1-10)
+
+### Canonical Examples:
+
+10: Distributed consensus, complex ML algorithms, compiler design
+9: Multi-service orchestration, complex state machines
+8: Database query optimization, caching strategies
+7: API design with versioning, complex business rules
+6: Integration with external services, moderate algorithms
+5: Standard CRUD with validation logic
+4: Simple feature implementation
+3: Basic logic changes, simple utilities
+2: Configuration updates, simple scripts
+1: Text changes, formatting
+
+### Special Modifiers:
++2 points if involves: concurrent programming, distributed systems
++1 point if involves: performance optimization, security implementation
++1 point if requires deep domain knowledge
+
+### Test Complexity Rules:
+- Test code is typically capped at 3
+- Exception: Complex test infrastructure/frameworks can score up to 5
+- Mocking distributed systems or complex state: 3
+- Standard unit tests: 2
+- Simple assertions: 1
+
+Your Technical Complexity Score: ___
+
+## STEP 4: Code Quality Multiplier (0.5-1.5)
+
+Evaluate based on concrete evidence in the diff:
+
+### 1.5 - Exceptional Quality
+ALL of the following must be true:
+- Comprehensive tests with >90% coverage of new code
+- Extensive documentation/comments explaining why, not what
+- Follows or establishes design patterns improving codebase
+- Handles all edge cases and errors gracefully
+- Performance considerations documented
+
+### 1.3 - High Quality  
+At least 3 of the following:
+- Good test coverage (70-90%) with edge cases
+- Clear documentation/comments
+- Follows established patterns consistently
+- Proper error handling
+- Clean, readable code structure
+
+### 1.0 - Standard Quality (default)
+- Basic tests for happy path
+- Minimal necessary documentation
+- No obvious anti-patterns
+- Standard error handling
+
+### 0.8 - Below Standard
+Any of these issues:
+- Missing tests for complex logic
+- Poor naming or structure
+- Violates established patterns
+- Minimal error handling
+
+### 0.5 - Poor Quality
+Multiple issues:
+- No tests for critical logic
+- Unclear/misleading code
+- Introduces technical debt
+- No error handling
+
+Your Code Quality Multiplier: ___
+
+## STEP 5: Risk Factor (0.8-2.0)
+
+### Risk Assessment:
+
+**0.8 - Over-engineered**
+- Solution is unnecessarily complex
+- Adds abstraction without clear benefit
+- Could be solved more simply
+
+**1.0 - Appropriate (default)**
+- Solution matches problem complexity
+- Standard approach for the situation
+- Well-planned implementation
+
+**1.2 - Elevated Risk**
+- Touches payment/financial systems
+- Modifies authentication/security
+- Changes critical data models
+- But: well-tested and reviewed
+
+**1.5 - High Risk**
+- Emergency fix under pressure
+- Limited testing due to urgency
+- Modifies critical systems without full review
+- Temporary solution needed
+
+**2.0 - Critical Risk**
+- Production hotfix for data loss/security
+- Deployed with minimal testing
+- Business-critical emergency
+
+Your Risk Factor: ___
+
+## STEP 6: Final Calculation
+
 Impact Score = (Business Value × Technical Complexity × Code Quality) / Risk Factor
 
-Commit metadata for context:
+## VALIDATION CHECKLIST
+
+Before submitting, verify:
+□ Test commits don't have technical complexity >3 (unless test infrastructure)
+□ Business value aligns with actual user/business impact
+□ Code quality has specific evidence from the diff
+□ Risk factor reflects deployment urgency/safety
+□ All scores compared against canonical examples
+
+## Commit Details
+
 Repository: {commit_data.get('repository', '')}
 Author: {commit_data.get('author_name', '')} <{commit_data.get('author_email', '')}>
 Message: {commit_data.get('message', '')}
 Files Changed: {', '.join(commit_data.get('files_changed', []))}
-Lines Added: {commit_data.get('additions', 0)}
-Lines Deleted: {commit_data.get('deletions', 0)}
+Additions: {commit_data.get('additions', 0)} lines
+Deletions: {commit_data.get('deletions', 0)} lines
 
 Diff:
 {commit_data.get('diff', '')}
 
-Output JSON only:
+## Required Output Format
+
+You MUST output valid JSON only:
 {{
-    "business_value": <int>,
-    "business_value_reasoning": "<compare to examples>",
-    "technical_complexity": <int>,
-    "technical_complexity_reasoning": "<compare to examples>",
-    "code_quality": <float>,
-    "code_quality_reasoning": "<specific evidence>",
-    "risk_factor": <float>,
-    "risk_factor_reasoning": "<specific evidence>",
-    "impact_score": <calculated float>,
-    "dominant_category": "<feature|bugfix|refactor|etc>"
+  "classification": {{
+    "primary_category": "<category>",
+    "special_flags": ["<flag1>", "<flag2>"]
+  }},
+  "business_value": <int 1-10>,
+  "business_value_reasoning": "<specific comparison to examples>",
+  "technical_complexity": <int 1-10>,
+  "technical_complexity_reasoning": "<specific comparison to examples>",
+  "code_quality": <float 0.5|0.8|1.0|1.3|1.5>,
+  "code_quality_reasoning": "<specific evidence from diff>",
+  "risk_factor": <float 0.8|1.0|1.2|1.5|2.0>,
+  "risk_factor_reasoning": "<specific assessment>",
+  "impact_score": <calculated float>,
+  "validation_notes": "<any edge cases or special considerations>"
 }}"""
 
             # Set up parameters for the API call
-            api_params = {
-                "model": self.commit_analysis_model,
-                "messages": [
-                    {
-                        "role": "system", 
-                        "content": """You are a senior engineering manager analyzing developer productivity using the Impact Points System. 
-                        Focus on business value delivered and technical achievement rather than time spent. 
-                        Be consistent in scoring by always comparing to the provided examples."""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-            
-            # Only add temperature for models that support it
-            if not self._is_reasoning_model(self.commit_analysis_model):
-                api_params["temperature"] = 0.15  # Low temperature for consistency
+            if self._is_reasoning_model(self.commit_analysis_model):
+                # Use responses API for reasoning models with high effort
+                api_params = {
+                    "model": self.commit_analysis_model,
+                    "reasoning": {"effort": "high"},
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": f"""You are a senior engineering manager with extensive experience evaluating developer contributions. Your task is to apply the Impact Points System with extreme consistency. Always compare scores to canonical examples. Be conservative - when uncertain, score lower. Focus on concrete evidence from the diff. Output only valid JSON with no additional commentary.
 
-            # Make API call
-            response = await self.client.chat.completions.create(**api_params)
-            
-            # Parse the response
-            result = json.loads(response.choices[0].message.content)
+{prompt}"""
+                        }
+                    ]
+                }
+                # Make API call
+                response = await self.client.responses.create(**api_params)
+                
+                # Parse the response from responses API
+                result = json.loads(response.output_text)
+            else:
+                # Use chat completions API for non-reasoning models
+                api_params = {
+                    "model": self.commit_analysis_model,
+                    "messages": [
+                        {
+                            "role": "system", 
+                            "content": """You are a senior engineering manager with extensive experience evaluating developer contributions. Your task is to apply the Impact Points System with extreme consistency. Always compare scores to canonical examples. Be conservative - when uncertain, score lower. Focus on concrete evidence from the diff. Output only valid JSON with no additional commentary."""
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.15  # Low temperature for consistency
+                }
+                # Make API call
+                response = await self.client.chat.completions.create(**api_params)
+                
+                # Parse the response from chat completions API
+                result = json.loads(response.choices[0].message.content)
             
             # Calculate impact score if not provided
             if "impact_score" not in result or result["impact_score"] is None:
