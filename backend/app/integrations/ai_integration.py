@@ -165,7 +165,7 @@ class AIIntegration:
         if not self.commit_analyzer:
              logger.error("CommitAnalyzer not initialized.")
              return {"error": "CommitAnalyzer not available"}
-        return await self.commit_analyzer.analyze_commit_diff(commit_data, ai_client=self.client, model_name=self.model) # Pass client if needed
+        return await self.commit_analyzer.analyze_commit_diff(commit_data)
     
     async def generate_doc(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -12,6 +12,19 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
+
+def convert_datetimes_to_iso(obj: Any) -> Any:
+    """Recursively convert all datetime objects in a dictionary/list to ISO format strings."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: convert_datetimes_to_iso(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetimes_to_iso(item) for item in obj]
+    else:
+        return obj
+
+
 class CommitRepository:
     def __init__(self, client: Client = None):
         self._client = client if client is not None else get_supabase_client_safe()
@@ -28,7 +41,7 @@ class CommitRepository:
         status = "✓" if success else "❌"
         return f"{status} {operation}: {commit_hash}"
 
-    def save_commit(self, commit_data: Commit) -> Optional[Commit]:
+    async def save_commit(self, commit_data: Commit) -> Optional[Commit]:
         """Saves a new commit record or updates it if commit_hash already exists (upsert)."""
         try:
             commit_hash = commit_data.commit_hash
@@ -48,9 +61,8 @@ class CommitRepository:
             if 'ai_estimated_hours' in commit_dict and commit_dict['ai_estimated_hours'] is not None:
                  commit_dict['ai_estimated_hours'] = str(commit_dict['ai_estimated_hours'])
                  
-            # Ensure commit_timestamp is timezone-aware or in ISO format string
-            if 'commit_timestamp' in commit_dict and isinstance(commit_dict['commit_timestamp'], datetime):
-                 commit_dict['commit_timestamp'] = commit_dict['commit_timestamp'].isoformat()
+            # Convert all datetime objects to ISO format strings (handles nested objects too)
+            commit_dict = convert_datetimes_to_iso(commit_dict)
                  
             # Log critical fields for debugging schema issues
             logger.info(f"Commit fields being saved: seniority_score={commit_dict.get('seniority_score')}, " 
@@ -59,7 +71,9 @@ class CommitRepository:
                         f"author_id={commit_dict.get('author_id')}, "
                         f"eod_report_id={commit_dict.get('eod_report_id')}")
 
-            response: PostgrestAPIResponse = self._client.table(self._table).upsert(commit_dict, on_conflict='commit_hash').execute()
+            response: PostgrestAPIResponse = await asyncio.to_thread(
+                self._client.table(self._table).upsert(commit_dict, on_conflict='commit_hash').execute
+            )
             
             self._handle_supabase_error(response, f"Failed to save commit {commit_hash}")
             if response.data:
