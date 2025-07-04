@@ -327,11 +327,17 @@ This section demonstrates automatic commit analysis and developer productivity t
 
 We'll:
 1. Fetch the latest commit from your repository
-2. Analyze it using AI (via GitHub Personal Access Token)
-3. View the AI-generated insights
-4. Check the productivity dashboard
+2. Analyze it using AI with TWO scoring methods:
+   - Traditional Hours Estimation (time-based)
+   - Impact Points System (value-based)
+3. Compare both methods side-by-side
+4. View the AI-generated insights
+5. Check the productivity dashboard
 
 Note: This uses your GitHub PAT to fetch commit data directly - no webhooks needed!
+
+The Impact Points System is designed to be fair in the age of LLM-assisted programming,
+focusing on business value delivered rather than time spent coding.
         """
         self.console.print(Panel(Markdown(demo_text), border_style="blue"))
         
@@ -375,33 +381,55 @@ Note: This uses your GitHub PAT to fetch commit data directly - no webhooks need
             self.console.print(f"[red]✗ Error fetching repository: {e}[/red]")
             return
         
-        # Get last commit from the repository
-        self.console.print("\n[bold]Step 3: Fetching last commit...[/bold]")
+        # Get commits from the repository
+        self.console.print("\n[bold]Step 3: Fetching commits from repository...[/bold]")
         try:
             headers = {"Authorization": f"token {self.config['github_token']}"}
             repo_name = f"{self.config['github_username']}/{self.config['demo_repo_name']}"
             
-            # Get commits
+            # Get multiple commits for analysis
             response = requests.get(
                 f"https://api.github.com/repos/{repo_name}/commits",
                 headers=headers,
-                params={"per_page": 1}
+                params={"per_page": 20}  # Get more commits for multiple analyses
             )
             
             if response.status_code == 200:
-                commits = response.json()
-                if commits:
-                    last_commit = commits[0]
-                    commit_sha = last_commit['sha']
-                    commit_message = last_commit['commit']['message']
-                    author = last_commit['commit']['author']['name']
-                    date = last_commit['commit']['author']['date']
+                all_commits = response.json()
+                if all_commits:
+                    self.console.print(f"[green]✓ Found {len(all_commits)} commits in repository[/green]")
                     
-                    self.console.print(f"[green]✓ Found last commit:[/green]")
-                    self.console.print(f"  SHA: {commit_sha[:7]}")
-                    self.console.print(f"  Message: {commit_message.split('\\n')[0][:60]}...")
-                    self.console.print(f"  Author: {author}")
-                    self.console.print(f"  Date: {date}")
+                    # Analyze commits one by one
+                    commit_index = 0
+                    while commit_index < len(all_commits):
+                        commit = all_commits[commit_index]
+                        commit_sha = commit['sha']
+                        commit_message = commit['commit']['message']
+                        author = commit['commit']['author']['name']
+                        date = commit['commit']['author']['date']
+                        
+                        self.console.print(f"\n[bold]Analyzing commit {commit_index + 1} of {len(all_commits)}:[/bold]")
+                        self.console.print(f"  SHA: {commit_sha[:7]}")
+                        self.console.print(f"  Message: {commit_message.split('\\n')[0][:60]}...")
+                        self.console.print(f"  Author: {author}")
+                        self.console.print(f"  Date: {date}")
+                        
+                        # Analyze this commit
+                        if not self._analyze_single_commit(commit_sha, commit_message, author, date):
+                            return  # Exit if analysis fails
+                        
+                        # Ask if user wants to analyze another commit
+                        commit_index += 1
+                        if commit_index < len(all_commits):
+                            self.console.print("\n" + "="*80 + "\n")
+                            if Confirm.ask(f"[bold yellow]Would you like to analyze another commit? ({len(all_commits) - commit_index} more available)[/bold yellow]", default=True):
+                                continue
+                            else:
+                                break
+                        else:
+                            self.console.print("\n[yellow]No more commits available to analyze.[/yellow]")
+                            break
+                    
                 else:
                     self.console.print("[red]✗ No commits found in repository[/red]")
                     return
@@ -412,7 +440,21 @@ Note: This uses your GitHub PAT to fetch commit data directly - no webhooks need
             self.console.print(f"[red]✗ Error fetching commits: {e}[/red]")
             return
         
-        # Step 4: Send commit for AI analysis using PAT (not webhook)
+        # Step 5: Show productivity dashboard
+        self.console.print("\n[bold]Step 5: Viewing productivity dashboard...[/bold]")
+        dashboard_url = f"{self.config['frontend_url']}/manager"
+        self.console.print(f"\n[cyan]Open your browser to view the manager dashboard:[/cyan]")
+        self.console.print(f"[bold]{dashboard_url}[/bold]")
+        
+        if Confirm.ask("Open dashboard in browser?", default=True):
+            webbrowser.open(dashboard_url)
+            self.console.print("[green]✓ Dashboard opened in browser[/green]")
+            time.sleep(3)
+        
+        self.console.print("\n[green]✅ GitHub analysis demo complete![/green]")
+    
+    def _analyze_single_commit(self, commit_sha: str, commit_message: str, author: str, date: str) -> bool:
+        """Analyze a single commit and display results. Returns True if successful."""
         self.console.print("\n[bold]Step 4: Analyzing commit with AI...[/bold]")
         
         # Check if backend imports are available
@@ -420,10 +462,9 @@ Note: This uses your GitHub PAT to fetch commit data directly - no webhooks need
             self.console.print("[red]✗ Backend modules not available[/red]")
             self.console.print("[yellow]Please ensure you're running from the backend virtual environment[/yellow]")
             self.console.print("[dim]  cd backend && source venv/bin/activate[/dim]")
-            return
+            return False
         
         try:
-            
             # Initialize services
             db = get_supabase_client()
             commit_service = CommitAnalysisService(db)
@@ -458,15 +499,15 @@ Note: This uses your GitHub PAT to fetch commit data directly - no webhooks need
                 # Show the analysis results
                 self.console.print("\n[bold]AI Analysis Results:[/bold]")
                 
-                # Display analysis in a nice table
-                table = Table(title="Commit Analysis", box=box.ROUNDED)
+                # Display analysis in a nice table with BOTH scoring methods
+                table = Table(title="Commit Analysis - Traditional Hours Method", box=box.ROUNDED)
                 table.add_column("Metric", style="cyan")
                 table.add_column("Value", style="green")
                 
                 table.add_row("Commit SHA", commit_sha[:8])
-                table.add_row("Complexity Score", f"{analyzed_commit.complexity_score}/10")
-                table.add_row("AI Estimated Hours", f"{analyzed_commit.ai_estimated_hours:.1f} hours")
-                table.add_row("Points Earned", str(analyzed_commit.points_earned))
+                table.add_row("Complexity Score", f"{analyzed_commit.complexity_score}/10" if analyzed_commit.complexity_score else "N/A")
+                table.add_row("AI Estimated Hours", f"{analyzed_commit.ai_estimated_hours:.1f} hours" if analyzed_commit.ai_estimated_hours else "N/A")
+                table.add_row("Seniority Score", f"{analyzed_commit.seniority_score}/10" if analyzed_commit.seniority_score else "N/A")
                 
                 if analyzed_commit.risk_level:
                     risk_color = {"low": "green", "medium": "yellow", "high": "red"}.get(
@@ -474,28 +515,95 @@ Note: This uses your GitHub PAT to fetch commit data directly - no webhooks need
                     )
                     table.add_row("Risk Level", f"[{risk_color}]{analyzed_commit.risk_level.upper()}[/{risk_color}]")
                 
-                if analyzed_commit.files_changed:
-                    table.add_row("Files Changed", str(analyzed_commit.files_changed))
+                if analyzed_commit.changed_files:
+                    table.add_row("Files Changed", str(len(analyzed_commit.changed_files)))
                 
-                additions = analyzed_commit.additions or 0
-                deletions = analyzed_commit.deletions or 0
+                additions = analyzed_commit.lines_added or 0
+                deletions = analyzed_commit.lines_deleted or 0
                 table.add_row("Lines Changed", f"[green]+{additions}[/green] [red]-{deletions}[/red]")
                 
                 self.console.print(table)
                 
-                # Show commit summary
-                if analyzed_commit.commit_summary:
-                    self.console.print("\n[bold]Summary:[/bold]")
+                # Parse and display impact scoring from ai_analysis_notes
+                if analyzed_commit.ai_analysis_notes:
+                    try:
+                        import json
+                        impact_data = json.loads(analyzed_commit.ai_analysis_notes)
+                        
+                        # Display impact scoring table
+                        impact_table = Table(title="Commit Analysis - Impact Points Method", box=box.ROUNDED)
+                        impact_table.add_column("Metric", style="cyan")
+                        impact_table.add_column("Value", style="green")
+                        impact_table.add_column("Reasoning", style="dim")
+                        
+                        impact_table.add_row(
+                            "Business Value", 
+                            f"{impact_data.get('impact_business_value', 0)}/10",
+                            impact_data.get('impact_business_value_reasoning', '')[:50] + "..."
+                        )
+                        impact_table.add_row(
+                            "Technical Complexity", 
+                            f"{impact_data.get('impact_technical_complexity', 0)}/10",
+                            impact_data.get('impact_technical_complexity_reasoning', '')[:50] + "..."
+                        )
+                        impact_table.add_row(
+                            "Code Quality", 
+                            f"{impact_data.get('impact_code_quality', 1.0)}x",
+                            impact_data.get('impact_code_quality_reasoning', '')[:50] + "..."
+                        )
+                        impact_table.add_row(
+                            "Risk Factor", 
+                            f"{impact_data.get('impact_risk_factor', 1.0)}x",
+                            impact_data.get('impact_risk_factor_reasoning', '')[:50] + "..."
+                        )
+                        
+                        # Calculate and show impact score
+                        impact_score = impact_data.get('impact_score', 0)
+                        impact_table.add_row(
+                            "[bold]Impact Score[/bold]", 
+                            f"[bold]{impact_score} points[/bold]",
+                            f"({impact_data.get('impact_business_value', 0)} × {impact_data.get('impact_technical_complexity', 0)} × {impact_data.get('impact_code_quality', 1.0)}) ÷ {impact_data.get('impact_risk_factor', 1.0)}"
+                        )
+                        
+                        self.console.print("\n")
+                        self.console.print(impact_table)
+                        
+                        # Show comparison
+                        self.console.print("\n[bold]Scoring Method Comparison:[/bold]")
+                        comparison_table = Table(box=box.SIMPLE)
+                        comparison_table.add_column("Method", style="cyan")
+                        comparison_table.add_column("Result", style="green")
+                        comparison_table.add_column("Focus", style="dim")
+                        
+                        comparison_table.add_row(
+                            "Traditional Hours",
+                            f"{analyzed_commit.ai_estimated_hours:.1f} hours",
+                            "Time to implement"
+                        )
+                        comparison_table.add_row(
+                            "Impact Points",
+                            f"{impact_score} points",
+                            "Business value delivered"
+                        )
+                        
+                        self.console.print(comparison_table)
+                        
+                    except Exception as e:
+                        self.console.print(f"[yellow]Could not parse impact scoring data: {e}[/yellow]")
+                
+                # Show commit message
+                if analyzed_commit.commit_message:
+                    self.console.print("\n[bold]Commit Message:[/bold]")
                     self.console.print(Panel(
-                        analyzed_commit.commit_summary,
+                        analyzed_commit.commit_message,
                         border_style="blue"
                     ))
                 
-                # Show the AI insights
-                if analyzed_commit.ai_analysis:
+                # Show seniority rationale as AI insights
+                if analyzed_commit.seniority_rationale:
                     self.console.print("\n[bold]AI Insights:[/bold]")
                     self.console.print(Panel(
-                        analyzed_commit.ai_analysis,
+                        analyzed_commit.seniority_rationale,
                         border_style="green"
                     ))
                 
@@ -504,31 +612,34 @@ Note: This uses your GitHub PAT to fetch commit data directly - no webhooks need
                     self.console.print("\n[bold]Key Changes Identified:[/bold]")
                     for change in analyzed_commit.key_changes:
                         self.console.print(f"  [dim]•[/dim] {change}")
+                
+                # Add explanation of the two scoring methods
+                self.console.print("\n[bold yellow]📊 Analysis Explanation:[/bold yellow]")
+                self.console.print("[dim]The Traditional Hours method estimates time spent coding, which can be[/dim]")
+                self.console.print("[dim]unfairly low for LLM-assisted development or unfairly high for manual work.[/dim]")
+                self.console.print("")
+                self.console.print("[dim]The Impact Points method focuses on business value delivered, considering:[/dim]")
+                self.console.print("[dim]  • Business Value: How critical is this to users/revenue?[/dim]")
+                self.console.print("[dim]  • Technical Complexity: How difficult was the problem?[/dim]")
+                self.console.print("[dim]  • Code Quality: Are there tests and documentation?[/dim]")
+                self.console.print("[dim]  • Risk Factor: Is this touching critical systems?[/dim]")
+                self.console.print("")
+                self.console.print("[dim]This makes it fair for both LLM-assisted and manual development![/dim]")
+                
+                return True  # Success
                         
             else:
                 self.console.print("[red]✗ Failed to analyze commit[/red]")
                 self.console.print("[yellow]Check that your GITHUB_TOKEN has repo access[/yellow]")
+                return False
                 
         except ImportError as e:
             self.console.print(f"[red]✗ Error importing analysis modules: {e}[/red]")
             self.console.print("[yellow]Make sure you're running from the backend virtual environment[/yellow]")
-            return
+            return False
         except Exception as e:
             self.console.print(f"[red]✗ Error analyzing commit: {e}[/red]")
-            return
-        
-        # Step 5: Show productivity dashboard
-        self.console.print("\n[bold]Step 5: Viewing productivity dashboard...[/bold]")
-        dashboard_url = f"{self.config['frontend_url']}/daily-reports"
-        self.console.print(f"\n[cyan]Open your browser to view the dashboard:[/cyan]")
-        self.console.print(f"[bold]{dashboard_url}[/bold]")
-        
-        if Confirm.ask("Open dashboard in browser?", default=True):
-            webbrowser.open(dashboard_url)
-            self.console.print("[green]✓ Dashboard opened in browser[/green]")
-            time.sleep(3)
-        
-        self.console.print("\n[green]✅ GitHub analysis demo complete![/green]")
+            return False
     
     def show_commit_analysis(self, commit_sha: str):
         """Display commit analysis results"""
@@ -780,7 +891,7 @@ Features:
         
         # Open analytics dashboard
         if Confirm.ask("Open full analytics dashboard?", default=True):
-            webbrowser.open(f"{self.config['frontend_url']}/analytics")
+            webbrowser.open(f"{self.config['frontend_url']}/dashboard")
         
         self.pause_for_explanation(
             "The analytics dashboard provides comprehensive insights into team productivity, "
