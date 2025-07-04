@@ -30,12 +30,13 @@ class EODReminderService:
         self.default_reminder_time = time(17, 0)  # 5:00 PM
         self.default_timezone = ZoneInfo(settings.EOD_REMINDER_TIMEZONE or "America/Los_Angeles")
     
-    async def send_eod_reminders(self, dry_run: bool = False) -> Dict[str, Any]:
+    async def send_eod_reminders(self, dry_run: bool = False, check_time_window: bool = True) -> Dict[str, Any]:
         """
         Send EOD reminders to all active users.
         
         Args:
             dry_run: If True, don't actually send messages, just return what would be sent
+            check_time_window: If True, only send reminders to users whose configured time is within the current 30-minute window
             
         Returns:
             Dictionary with results of the reminder sending process
@@ -55,6 +56,29 @@ class EODReminderService:
             
             for user in active_users:
                 try:
+                    # Check user preferences for EOD reminders
+                    notification_prefs = user.preferences.get('notification', {}) if user.preferences else {}
+                    eod_enabled = notification_prefs.get('eod_reminder_enabled', True)
+                    
+                    if not eod_enabled:
+                        results["skipped"].append({
+                            "user_id": str(user.id),
+                            "reason": "reminders_disabled"
+                        })
+                        continue
+                    
+                    # Check if it's the right time for this user's reminder
+                    if check_time_window:
+                        user_reminder_time = notification_prefs.get('eod_reminder_time', '16:30')
+                        user_timezone = notification_prefs.get('timezone', settings.EOD_REMINDER_TIMEZONE)
+                        
+                        if not self._is_within_reminder_window(user_reminder_time, user_timezone):
+                            results["skipped"].append({
+                                "user_id": str(user.id),
+                                "reason": "outside_time_window"
+                            })
+                            continue
+                    
                     # Check if user has already submitted today's report
                     from app.repositories.daily_report_repository import DailyReportRepository
                     report_repo = DailyReportRepository()
@@ -249,6 +273,41 @@ class EODReminderService:
             "timezone": "America/Los_Angeles",
             "include_commit_summary": True
         })
+    
+    def _is_within_reminder_window(self, reminder_time_str: str, timezone_str: str, window_minutes: int = 30) -> bool:
+        """
+        Check if the current time is within the reminder window for a given time and timezone.
+        
+        Args:
+            reminder_time_str: Time string in HH:MM format
+            timezone_str: Timezone string
+            window_minutes: Window size in minutes (default: 30)
+            
+        Returns:
+            True if current time is within the window, False otherwise
+        """
+        try:
+            # Parse reminder time
+            hour, minute = map(int, reminder_time_str.split(':'))
+            reminder_time = time(hour, minute)
+            
+            # Get current time in user's timezone
+            tz = ZoneInfo(timezone_str)
+            now = datetime.now(tz)
+            current_time = now.time()
+            
+            # Calculate window
+            reminder_datetime = now.replace(hour=reminder_time.hour, minute=reminder_time.minute, second=0, microsecond=0)
+            window_start = reminder_datetime
+            window_end = reminder_datetime + timedelta(minutes=window_minutes)
+            
+            # Check if current time is within window
+            return window_start <= now <= window_end
+            
+        except Exception as e:
+            logger.error(f"Error checking reminder window: {e}")
+            # Default to True to avoid missing reminders due to errors
+            return True
 
 
 # Scheduled task function to be called by the scheduler

@@ -96,17 +96,31 @@ async def handle_slash_command(
         channel_id = body.get("channel_id", "")
         trigger_id = body.get("trigger_id", "")
         
-        if command != "/eod":
+        # Handle different slash commands
+        if command == "/eod":
+            # Delegate to conversation handler
+            result = await conversation_handler.handle_eod_command(
+                slack_user_id=slack_user_id,
+                channel_id=channel_id,
+                trigger_id=trigger_id
+            )
+            return result
+            
+        elif command == "/preferences":
+            # Handle preferences command
+            result = await conversation_handler.handle_preferences_command(
+                slack_user_id=slack_user_id,
+                trigger_id=trigger_id
+            )
+            return result
+            
+        elif command == "/help":
+            # Return help message
+            help_text = conversation_handler.get_help_message()
+            return {"text": help_text}
+            
+        else:
             return {"text": "Unknown command"}
-        
-        # Delegate to conversation handler
-        result = await conversation_handler.handle_eod_command(
-            slack_user_id=slack_user_id,
-            channel_id=channel_id,
-            trigger_id=trigger_id
-        )
-        
-        return result
             
     except Exception as e:
         logger.exception(f"Error handling slash command: {e}")
@@ -136,6 +150,12 @@ async def handle_interactive_message(
             callback_id = payload.get("view", {}).get("callback_id", "")
             if callback_id in ["eod_report_submission", "eod_report_update"]:
                 result = await conversation_handler.handle_modal_submission(
+                    slack_user_id=slack_user_id,
+                    view_data=payload.get("view", {})
+                )
+                return result
+            elif callback_id == "preferences_update":
+                result = await conversation_handler.handle_preferences_submission(
                     slack_user_id=slack_user_id,
                     view_data=payload.get("view", {})
                 )

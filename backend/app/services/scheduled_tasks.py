@@ -91,47 +91,40 @@ class ScheduledTaskService:
                 await asyncio.sleep(3600)  # 1 hour
     
     async def _run_eod_reminders(self):
-        """Run EOD reminders at configured time every day"""
+        """Run EOD reminders every 30 minutes to support per-user reminder times"""
         while True:
             try:
-                # Parse reminder time from settings (default 4:30 PM)
-                reminder_time_str = getattr(settings, 'EOD_REMINDER_TIME', '16:30')
-                try:
-                    reminder_hour, reminder_minute = map(int, reminder_time_str.split(':'))
-                except ValueError:
-                    logger.warning(f"Invalid EOD_REMINDER_TIME format: {reminder_time_str}. Using default 4:30 PM")
-                    reminder_hour, reminder_minute = 16, 30
-                
-                # Calculate time until next reminder
-                now = datetime.now()
-                today_reminder = now.replace(hour=reminder_hour, minute=reminder_minute, second=0, microsecond=0)
-                
-                if now >= today_reminder:
-                    # Already past today's reminder time, schedule for tomorrow
-                    tomorrow = now + timedelta(days=1)
-                    next_reminder = tomorrow.replace(hour=reminder_hour, minute=reminder_minute, second=0, microsecond=0)
-                else:
-                    next_reminder = today_reminder
-                
-                seconds_until_reminder = (next_reminder - now).total_seconds()
-                
-                logger.info(f"Next EOD reminder scheduled in {seconds_until_reminder/3600:.1f} hours")
-                
-                # Wait until reminder time
-                await asyncio.sleep(seconds_until_reminder)
+                # Run every 30 minutes
+                interval_minutes = 30
                 
                 # Skip weekends if configured
-                if getattr(settings, 'SKIP_WEEKEND_REMINDERS', True) and next_reminder.weekday() >= 5:
-                    logger.info("Skipping EOD reminder for weekend")
+                now = datetime.now()
+                if getattr(settings, 'SKIP_WEEKEND_REMINDERS', True) and now.weekday() >= 5:
+                    logger.info("Skipping EOD reminder check for weekend")
+                    # Sleep until Monday
+                    days_until_monday = (7 - now.weekday()) % 7
+                    if days_until_monday == 0:
+                        days_until_monday = 1
+                    next_monday = now + timedelta(days=days_until_monday)
+                    next_monday = next_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+                    sleep_seconds = (next_monday - now).total_seconds()
+                    logger.info(f"Weekend detected, sleeping until Monday ({sleep_seconds/3600:.1f} hours)")
+                    await asyncio.sleep(sleep_seconds)
                     continue
                 
-                # Send reminders
-                logger.info("Starting EOD reminder process...")
+                # Send reminders for users whose reminder time is within the current window
+                logger.info("Checking for EOD reminders to send...")
                 try:
-                    results = await self.eod_reminder_service.send_eod_reminders()
-                    logger.info(f"EOD reminders sent: {results}")
+                    results = await self.eod_reminder_service.send_eod_reminders(check_time_window=True)
+                    if results["reminders_sent"] > 0:
+                        logger.info(f"EOD reminders sent: {results}")
+                    else:
+                        logger.debug(f"No reminders to send in this window")
                 except Exception as e:
                     logger.error(f"Error sending EOD reminders: {e}", exc_info=True)
+                
+                # Wait for next interval
+                await asyncio.sleep(interval_minutes * 60)
                 
             except asyncio.CancelledError:
                 logger.info("EOD reminder task cancelled")

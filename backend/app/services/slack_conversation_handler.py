@@ -829,6 +829,246 @@ class SlackConversationHandler:
     
     def _get_user_timezone(self, user: User) -> str:
         """Get user's timezone from preferences or use default."""
-        if user.preferences and 'timezone' in user.preferences:
-            return user.preferences['timezone']
+        if user.preferences:
+            notification_prefs = user.preferences.get('notification', {})
+            if 'timezone' in notification_prefs:
+                return notification_prefs['timezone']
         return settings.EOD_REMINDER_TIMEZONE
+    
+    async def handle_preferences_command(
+        self,
+        slack_user_id: str,
+        trigger_id: str
+    ) -> Dict[str, Any]:
+        """Handle the /preferences slash command."""
+        try:
+            # Get user from Slack ID
+            user = await self.user_service.get_user_by_slack_id(slack_user_id)
+            if not user:
+                return {"text": "❌ User not found. Please ensure your account is properly set up."}
+            
+            # Get current preferences
+            preferences = user.preferences or {}
+            notification_prefs = preferences.get('notification', {})
+            
+            # Build preferences modal
+            modal = self._build_preferences_modal(user, notification_prefs)
+            
+            # Open the modal
+            await self.slack_service.open_modal(trigger_id, modal)
+            
+            return {"response_type": "ephemeral"}
+            
+        except Exception as e:
+            logger.exception(f"Error handling preferences command: {e}")
+            return {"text": "❌ An error occurred. Please try again later."}
+    
+    def _build_preferences_modal(self, user: User, notification_prefs: Dict[str, Any]) -> Dict[str, Any]:
+        """Build the preferences configuration modal."""
+        # Get current values or defaults
+        eod_enabled = notification_prefs.get('eod_reminder_enabled', True)
+        eod_time = notification_prefs.get('eod_reminder_time', '16:30')
+        timezone = notification_prefs.get('timezone', 'America/Los_Angeles')
+        
+        return {
+            "type": "modal",
+            "callback_id": "preferences_update",
+            "title": {
+                "type": "plain_text",
+                "text": "Notification Preferences"
+            },
+            "submit": {
+                "type": "plain_text",
+                "text": "Save Preferences"
+            },
+            "close": {
+                "type": "plain_text",
+                "text": "Cancel"
+            },
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Configure your notification preferences for GolfDaddy Brain."
+                    }
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "input",
+                    "block_id": "eod_enabled",
+                    "element": {
+                        "type": "checkboxes",
+                        "action_id": "eod_enabled_checkbox",
+                        "options": [
+                            {
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Enable EOD reminders"
+                                },
+                                "value": "enabled"
+                            }
+                        ],
+                        "initial_options": [
+                            {
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Enable EOD reminders"
+                                },
+                                "value": "enabled"
+                            }
+                        ] if eod_enabled else []
+                    },
+                    "label": {
+                        "type": "plain_text",
+                        "text": "EOD Reminders"
+                    }
+                },
+                {
+                    "type": "input",
+                    "block_id": "eod_time",
+                    "element": {
+                        "type": "timepicker",
+                        "action_id": "eod_time_picker",
+                        "initial_time": eod_time,
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "Select time"
+                        }
+                    },
+                    "label": {
+                        "type": "plain_text",
+                        "text": "EOD Reminder Time"
+                    }
+                },
+                {
+                    "type": "input",
+                    "block_id": "timezone",
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "timezone_select",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "Select timezone"
+                        },
+                        "initial_option": {
+                            "text": {
+                                "type": "plain_text",
+                                "text": timezone
+                            },
+                            "value": timezone
+                        },
+                        "options": self._get_common_timezone_options()
+                    },
+                    "label": {
+                        "type": "plain_text",
+                        "text": "Timezone"
+                    }
+                }
+            ]
+        }
+    
+    def _get_common_timezone_options(self) -> List[Dict[str, Any]]:
+        """Get common timezone options for the dropdown."""
+        common_timezones = [
+            "America/New_York",
+            "America/Chicago", 
+            "America/Denver",
+            "America/Los_Angeles",
+            "America/Phoenix",
+            "America/Anchorage",
+            "Pacific/Honolulu",
+            "Europe/London",
+            "Europe/Paris",
+            "Europe/Berlin",
+            "Asia/Tokyo",
+            "Asia/Shanghai",
+            "Asia/Kolkata",
+            "Australia/Sydney"
+        ]
+        
+        return [
+            {
+                "text": {
+                    "type": "plain_text",
+                    "text": tz
+                },
+                "value": tz
+            }
+            for tz in common_timezones
+        ]
+    
+    def get_help_message(self) -> str:
+        """Get the help message for available slash commands."""
+        return """*Available Commands:*
+
+• `/eod` - Submit or update your daily end-of-day report
+• `/preferences` - Configure your notification preferences (reminder time, timezone)
+• `/help` - Show this help message
+
+*Tips:*
+• You can update your EOD report multiple times before midnight
+• EOD reminders are sent at your configured time (default: 4:30 PM)
+• Reports include both your commit activity and manually reported work
+• Use the preferences command to customize your reminder time and timezone"""
+    
+    async def handle_preferences_submission(
+        self,
+        slack_user_id: str,
+        view_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Handle preferences modal submission."""
+        try:
+            # Get user
+            user = await self.user_service.get_user_by_slack_id(slack_user_id)
+            if not user:
+                return {
+                    "response_action": "errors",
+                    "errors": {"general": "User not found"}
+                }
+            
+            # Extract form values
+            values = view_data.get("state", {}).get("values", {})
+            
+            # Get EOD enabled checkbox
+            eod_enabled_values = values.get("eod_enabled", {}).get("eod_enabled_checkbox", {}).get("selected_options", [])
+            eod_enabled = len(eod_enabled_values) > 0
+            
+            # Get EOD time
+            eod_time = values.get("eod_time", {}).get("eod_time_picker", {}).get("selected_time", "16:30")
+            
+            # Get timezone
+            timezone = values.get("timezone", {}).get("timezone_select", {}).get("selected_option", {}).get("value", "America/Los_Angeles")
+            
+            # Update user preferences
+            preferences = user.preferences or {}
+            preferences['notification'] = {
+                'eod_reminder_enabled': eod_enabled,
+                'eod_reminder_time': eod_time,
+                'timezone': timezone
+            }
+            
+            # Save preferences
+            from app.repositories.user_repository import UserRepository
+            user_repo = UserRepository()
+            await user_repo.update_user(user.id, {'preferences': preferences})
+            
+            # Send confirmation message
+            await self.slack_service.send_direct_message(
+                user_id=slack_user_id,
+                text=f"✅ Your preferences have been updated!\n\n" +
+                     f"*EOD Reminders:* {'Enabled' if eod_enabled else 'Disabled'}\n" +
+                     f"*Reminder Time:* {eod_time}\n" +
+                     f"*Timezone:* {timezone}"
+            )
+            
+            return {"response_action": "clear"}
+            
+        except Exception as e:
+            logger.exception(f"Error handling preferences submission: {e}")
+            return {
+                "response_action": "errors",
+                "errors": {"general": "Failed to update preferences. Please try again."}
+            }
