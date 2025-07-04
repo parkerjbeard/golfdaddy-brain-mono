@@ -94,7 +94,6 @@ class GolfDaddyDemo:
             
             # Main demo sections
             self.demo_github_analysis()
-            self.demo_auto_documentation()
             self.demo_semantic_search()
             self.demo_analytics_dashboard()
             
@@ -116,10 +115,9 @@ class GolfDaddyDemo:
 Welcome to the comprehensive demonstration of GolfDaddy Brain!
 
 This demo will showcase:
-1. **GitHub Analysis** - Automatic commit tracking and effort estimation
-2. **Auto Documentation** - AI-powered documentation generation
-3. **Semantic Search** - Find and analyze documentation
-4. **Analytics Dashboard** - Team productivity insights
+1. **GitHub Analysis** - Automatic commit tracking with dual scoring methods
+2. **Semantic Search** - Find and analyze documentation
+3. **Analytics Dashboard** - Team productivity insights
 
 The demo will create temporary repositories and data for demonstration purposes.
         """
@@ -297,26 +295,6 @@ The demo will create temporary repositories and data for demonstration purposes.
             )
             self.demo_repos["main"] = response.json()
         
-        # Create docs repo
-        repo_data["name"] = self.config["demo_docs_repo_name"]
-        repo_data["description"] = "Demo documentation repository"
-        
-        response = requests.post(
-            "https://api.github.com/user/repos",
-            headers=headers,
-            json=repo_data
-        )
-        
-        if response.status_code == 201:
-            self.demo_repos["docs"] = response.json()
-            self.created_resources.append(("github_repo", self.config["demo_docs_repo_name"]))
-        elif response.status_code == 422:
-            # Repo already exists
-            response = requests.get(
-                f"https://api.github.com/repos/{self.config['github_username']}/{self.config['demo_docs_repo_name']}",
-                headers=headers
-            )
-            self.demo_repos["docs"] = response.json()
     
     def demo_github_analysis(self):
         """Demonstrate GitHub commit analysis features"""
@@ -714,78 +692,8 @@ focusing on business value delivered rather than time spent coding.
             except Exception as e:
                 self.console.print(f"[red]✗ Error fetching analysis: {e}[/red]")
     
-    def demo_auto_documentation(self):
-        """Demonstrate auto documentation features"""
-        self.console.print("\n[bold blue]=== Auto Documentation Demo ===[/bold blue]\n")
-        
-        demo_text = """
-This section demonstrates AI-powered documentation generation.
-
-We'll:
-1. Push code that needs documentation
-2. View AI-generated documentation suggestions
-3. Review and approve the changes
-4. See the pull request created
-        """
-        self.console.print(Panel(Markdown(demo_text), border_style="blue"))
-        
-        if not Confirm.ask("Continue with auto documentation demo?", default=True):
-            return
-        
-        # Configure docs repository in settings
-        self.console.print("Configuring documentation repository...")
-        response = self.session.post(
-            f"{self.config['api_base_url']}/api/v1/settings/docs-repository",
-            json={"repository": f"{self.config['github_username']}/{self.config['demo_docs_repo_name']}"}
-        )
-        
-        # Trigger documentation generation
-        self.console.print("Triggering documentation analysis...")
-        response = self.session.post(
-            f"{self.config['api_base_url']}/api/v1/documentation/analyze",
-            json={
-                "repository": f"{self.config['github_username']}/{self.config['demo_repo_name']}",
-                "branch": "main"
-            }
-        )
-        
-        if response.status_code == 200:
-            doc_request_id = response.json().get("request_id")
-            self.console.print(f"[green]✓ Documentation analysis started: {doc_request_id}[/green]")
-            
-            # Wait for processing
-            time.sleep(5)
-            
-            # Show pending approvals
-            self.show_documentation_approvals()
-            
-            # Open documentation page
-            if Confirm.ask("Open documentation management page?", default=True):
-                webbrowser.open(f"{self.config['frontend_url']}/documentation")
-        
-        self.pause_for_explanation(
-            "The auto documentation system has analyzed the code changes and generated "
-            "contextual documentation updates. The approval queue allows human review "
-            "before changes are committed to your documentation repository."
-        )
+    # Removed auto documentation demo - not showing actual functionality
     
-    def show_documentation_approvals(self):
-        """Display pending documentation approvals"""
-        response = self.session.get(
-            f"{self.config['api_base_url']}/api/v1/documentation/approvals/pending"
-        )
-        
-        if response.status_code == 200 and response.json():
-            approvals = response.json()
-            
-            self.console.print("\n[bold]Pending Documentation Updates:[/bold]")
-            for approval in approvals[:3]:  # Show first 3
-                self.console.print(f"\nFile: {approval.get('file_path', 'N/A')}")
-                self.console.print(f"Type: {approval.get('change_type', 'N/A')}")
-                if approval.get('suggested_content'):
-                    self.console.print("Suggested content preview:")
-                    preview = approval['suggested_content'][:200] + "..."
-                    self.console.print(Panel(preview, border_style="dim"))
     
     def demo_semantic_search(self):
         """Demonstrate semantic search capabilities"""
@@ -955,10 +863,9 @@ Features:
 
 You've seen how GolfDaddy Brain can:
 
-1. **Automatically track engineering work** - Every commit is analyzed for effort and complexity
-2. **Generate contextual documentation** - AI understands your code and suggests updates
-3. **Enable semantic search** - Find information by meaning, not just keywords
-4. **Provide actionable insights** - Dashboard shows productivity trends and metrics
+1. **Automatically track engineering work** - Every commit is analyzed with both traditional hours and impact scoring
+2. **Enable semantic search** - Find information by meaning, not just keywords
+3. **Provide actionable insights** - Dashboard shows productivity trends and metrics
 
 ## Next Steps
 
