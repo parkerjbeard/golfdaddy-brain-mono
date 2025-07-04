@@ -59,12 +59,6 @@
 
 ## 🟢 Backend Services
 
-### Notification Service
-- [ ] Add user notification preferences (EOD reminder time, timezone)
-- [ ] Create /preferences slash command for configuration
-- [ ] Create /help slash command to show all available commands
-- [ ] Update Slack setup guide with slash command documentation
-
 ### KPI Service
 - [ ] Add cycle time metrics calculation
 - [ ] Implement code churn analysis
@@ -88,15 +82,6 @@
 - [ ] Implement stale task reminders
 
 ## 🟢 Integrations
-
-### GitHub Integration
-- [ ] Implement code quality AI analysis
-- [ ] Create commit pattern analysis
-- [ ] Set up production webhook URL
-- [ ] Configure webhook secret in environment
-- [ ] Add webhook health monitoring
-- [ ] Implement webhook retry logic
-- [ ] Create webhook event logging
 
 ### Documentation Agent
 - [ ] Replace placeholder propose_via_slack with functional Slack integration
@@ -170,7 +155,6 @@
 
 ### API Endpoint Tasks
 - [ ] Modify PUT /tasks/{task_id} to use RaciService.update_raci_assignments
-- [ ] Add notifications for RACI role changes
 - [ ] Create GET /tasks/{task_id}/raci-validation endpoint
 - [ ] Add comprehensive API documentation with OpenAPI/Swagger
 
@@ -182,7 +166,6 @@
 - [ ] Slack command reference guide
 - [ ] AWS deployment guide with step-by-step instructions
 - [ ] Environment variables documentation
-- [x] Role-based authentication guide (see claude_docs/simplified-auth-setup-guide.md)
 
 ### Developer Documentation
 - [ ] Backend architecture overview
