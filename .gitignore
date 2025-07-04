@@ -167,3 +167,8 @@ auth.json
 *.backup
 *.old
 *_backup
+
+# Benchmark results and data
+benchmark_results/
+*benchmark*.json
+*benchmark*.csv
