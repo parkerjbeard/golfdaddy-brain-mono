@@ -27,10 +27,10 @@ import {
   Bookmark,
   MessageSquare
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import remarkGfm from 'remark-gfm';
+// import ReactMarkdown from 'react-markdown'; // Temporarily disabled for production build
+// import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+// import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+// import remarkGfm from 'remark-gfm';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -486,55 +486,9 @@ For API support, please contact:
               </TabsList>
 
               <TabsContent value="content" className="prose prose-neutral dark:prose-invert max-w-none">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    h1: ({ children, ...props }) => (
-                      <h1 id={String(children).toLowerCase().replace(/[^\w]+/g, '-')} {...props}>
-                        {children}
-                      </h1>
-                    ),
-                    h2: ({ children, ...props }) => (
-                      <h2 id={String(children).toLowerCase().replace(/[^\w]+/g, '-')} {...props}>
-                        {children}
-                      </h2>
-                    ),
-                    h3: ({ children, ...props }) => (
-                      <h3 id={String(children).toLowerCase().replace(/[^\w]+/g, '-')} {...props}>
-                        {children}
-                      </h3>
-                    ),
-                    code({ node, inline, className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      return !inline && match ? (
-                        <div className="relative">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="absolute right-2 top-2"
-                            onClick={() => copyToClipboard(String(children).replace(/\n$/, ''))}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <SyntaxHighlighter
-                            style={oneDark}
-                            language={match[1]}
-                            PreTag="div"
-                            {...props}
-                          >
-                            {String(children).replace(/\n$/, '')}
-                          </SyntaxHighlighter>
-                        </div>
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      );
-                    },
-                  }}
-                >
+                <div className="whitespace-pre-wrap">
                   {document.content}
-                </ReactMarkdown>
+                </div>
               </TabsContent>
 
               <TabsContent value="source">

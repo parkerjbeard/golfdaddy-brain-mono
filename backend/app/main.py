@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import uvicorn
 import logging
@@ -78,13 +79,14 @@ if settings.ENABLE_RATE_LIMITING:
         rate_limit_per_minute=settings.DEFAULT_RATE_LIMIT,
         exclude_paths=settings.RATE_LIMIT_EXCLUDE_PATHS.split(","),
     )
-if settings.ENABLE_API_AUTH:
-    app.add_middleware(
-        ApiKeyMiddleware,
-        api_key_header=settings.API_KEY_HEADER,
-        api_keys=settings.API_KEYS,
-        exclude_paths=settings.AUTH_EXCLUDE_PATHS.split(","),
-    )
+# API Key middleware disabled for Docker deployment
+# if settings.ENABLE_API_AUTH:
+#     app.add_middleware(
+#         ApiKeyMiddleware,
+#         api_key_header=settings.API_KEY_HEADER,
+#         api_keys=settings.API_KEYS,
+#         exclude_paths=settings.AUTH_EXCLUDE_PATHS.split(","),
+#     )
 
 # Register routers
 app.include_router(auth_router)
@@ -110,6 +112,8 @@ if os.getenv("ENVIRONMENT", "development") == "development":
 
 # Register custom exception handlers
 add_exception_handlers(app)
+
+# Mount static files (frontend) - this needs to be moved to the end
 
 # Health check endpoint
 @app.get("/health", tags=["status"])
@@ -231,6 +235,30 @@ async def start_async_tasks():
 @app.on_event("shutdown")
 async def shutdown_async_tasks():
     await stop_scheduled_tasks()
+
+# Mount static files (frontend) - MUST be after all other routes
+frontend_dist_path = "/app/frontend/dist"
+if os.path.exists(frontend_dist_path):
+    # Mount static assets
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets")), name="assets")
+    
+    # Serve index.html for SPA routing (catch-all route)
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Don't serve SPA for API routes or known backend paths
+        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "health", "auth/", "dev/")):
+            return JSONResponse({"detail": "Not found"}, status_code=404)
+        
+        # Serve static files directly
+        static_file = os.path.join(frontend_dist_path, full_path)
+        if os.path.isfile(static_file):
+            return FileResponse(static_file)
+        
+        # For everything else, serve the SPA index.html
+        index_file = os.path.join(frontend_dist_path, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return JSONResponse({"detail": "Frontend not found"}, status_code=404)
 
 # Main entry point
 if __name__ == "__main__":

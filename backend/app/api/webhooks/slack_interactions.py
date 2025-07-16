@@ -18,8 +18,8 @@ from app.config.settings import settings
 from app.models.doc_approval import DocApproval
 from app.services.slack_service import SlackService
 from app.services.slack_message_templates import SlackMessageTemplates
-# Import doc_agent when needed
-from doc_agent.client import AutoDocClient
+# TODO: Re-enable when doc_agent is available
+# from doc_agent.client import AutoDocClient
 
 logger = logging.getLogger(__name__)
 

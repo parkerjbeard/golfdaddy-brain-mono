@@ -82,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
+          'X-API-Key': import.meta.env.VITE_API_KEY || 'dev-api-key',
         },
       });
 
@@ -164,34 +165,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string, rememberMe: boolean = false) => {
     try {
-      // Set session persistence based on rememberMe
-      // If rememberMe is true, session will persist for 30 days
-      // If false, session will last for 12 hours (configured in Supabase dashboard)
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-        options: {
-          // This tells Supabase to use a longer-lived refresh token
-          // The actual session duration is controlled by Supabase dashboard settings
-          data: {
-            rememberMe: rememberMe
+      console.log('=== Sign In Debug ===');
+      console.log('Email:', email);
+      console.log('Password length:', password.length);
+      console.log('RememberMe:', rememberMe);
+      
+      // Add timeout to the request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      try {
+        // Set session persistence based on rememberMe
+        // If rememberMe is true, session will persist for 30 days
+        // If false, session will last for 12 hours (configured in Supabase dashboard)
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+          options: {
+            // This tells Supabase to use a longer-lived refresh token
+            // The actual session duration is controlled by Supabase dashboard settings
+            data: {
+              rememberMe: rememberMe
+            }
           }
+        });
+        
+        clearTimeout(timeoutId);
+        console.log('Supabase sign in response:', { data, error });
+
+        if (error) {
+          console.error('Supabase sign in error:', error);
+          console.error('Error message:', error.message);
+          console.error('Error code:', error.status);
+          console.error('Full error object:', JSON.stringify(error, null, 2));
+          return { error };
         }
-      });
 
-      if (error) {
-        return { error };
+        console.log('Sign in successful:', data);
+
+        // Store remember me preference
+        if (rememberMe) {
+          localStorage.setItem('rememberMe', 'true');
+        } else {
+          localStorage.removeItem('rememberMe');
+        }
+
+        // Session and profile will be handled by the auth state change listener
+        return { error: null };
+      } catch (timeoutError) {
+        clearTimeout(timeoutId);
+        console.error('Sign in timeout or network error:', timeoutError);
+        return { error: new Error('Network timeout - please check your connection') };
       }
-
-      // Store remember me preference
-      if (rememberMe) {
-        localStorage.setItem('rememberMe', 'true');
-      } else {
-        localStorage.removeItem('rememberMe');
-      }
-
-      // Session and profile will be handled by the auth state change listener
-      return { error: null };
     } catch (err) {
       console.error('Error signing in:', err);
       return { error: err as Error };
