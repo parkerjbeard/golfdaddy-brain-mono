@@ -2,7 +2,7 @@ from typing import List, Dict, Optional, Union, Any
 from uuid import UUID
 from datetime import datetime, timezone
 from supabase import Client, PostgrestAPIResponse
-from app.config.supabase_client import get_supabase_client_safe
+from app.config.supabase_client import get_supabase_client_safe, retry_on_connection_error
 from app.models.daily_report import DailyReport, DailyReportCreate, DailyReportUpdate, AiAnalysis, ClarificationRequest
 import logging
 import json
@@ -297,6 +297,7 @@ class DailyReportRepository:
             logger.error(f"Unexpected error deleting daily report {report_id}: {e}", exc_info=True)
             raise DatabaseError(f"Unexpected error deleting daily report {report_id}: {str(e)}")
 
+    @retry_on_connection_error(max_retries=3, backoff_factor=1.5)
     async def get_all_daily_reports(self, limit: int = 100, offset: int = 0) -> List[DailyReport]:
         """Retrieves all daily reports with pagination (for admin/debugging)."""
         try:

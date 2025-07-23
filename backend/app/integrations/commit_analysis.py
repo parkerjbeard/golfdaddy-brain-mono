@@ -676,17 +676,20 @@ START: Who benefits from this change?
 │   └─ Nice to have?
 │       └─ Score 3-4
 └─ DEVELOPERS/MAINTAINERS ONLY
-    ├─ Significantly improves development?
-    │   ├─ YES → Score 5 (HARD CAP)
+    ├─ Significantly improves development velocity, quality, or operational efficiency?
+    │   ├─ YES → Score 4-5 (internal tooling still provides business value)
     │   └─ NO → Score 2-3
-    └─ Minimal impact → Score 1-2
+    └─ Minimal development impact → Score 1-2
 ```
 
 HARD CAPS:
-- Developer-only tools (build, test, benchmark, CI/CD): MAX 5
-- Test-only commits (>80% test code): MAX 5
-- Documentation-only commits: MAX 4
+- Test-only commits (>80% test code): MAX 4
+- Documentation-only commits: MAX 3
 - Refactoring with no new functionality: MAX 4
+
+NOTE: Developer productivity tools, CI/CD improvements, monitoring, and infrastructure 
+changes provide measurable business value through reduced costs, faster delivery, 
+and improved system reliability. Do not penalize changes for being "internal-only."
 
 ### STEP 3: Technical Complexity (1-10)
 
