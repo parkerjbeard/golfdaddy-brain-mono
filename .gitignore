@@ -172,3 +172,18 @@ auth.json
 benchmark_results/
 *benchmark*.json
 *benchmark*.csv
+
+# Temporary development test files
+debug_test.py
+simple_test.py
+run_real_test.py
+run_test_manual.py
+test_enhanced_seeding_direct.py
+test_import.py
+test_minimal.py
+backend/test_commit_storage.py
+backend/scripts/example_enhanced_usage.py
+backend/scripts/run_enhanced_test.py
+backend/scripts/test_enhanced_seeding.py
+backend/scripts/test_syntax_check.py
+backend/scripts/validate_enhanced_seeding.py
