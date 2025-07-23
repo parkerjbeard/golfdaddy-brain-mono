@@ -49,7 +49,7 @@ const getCachedProfile = (): UserProfile | null => {
       return data;
     }
   } catch (e) {
-    console.error('Error parsing cached profile:', e);
+    // Cache parsing failed, return null
   }
   
   return null;
@@ -97,7 +97,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       return profile;
     } catch (err) {
-      console.error('Error fetching user profile:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch user profile');
       
       // Fallback to creating a basic profile from Supabase data
@@ -165,10 +164,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string, rememberMe: boolean = false) => {
     try {
-      console.log('=== Sign In Debug ===');
-      console.log('Email:', email);
-      console.log('Password length:', password.length);
-      console.log('RememberMe:', rememberMe);
       
       // Add timeout to the request
       const controller = new AbortController();
@@ -191,17 +186,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         
         clearTimeout(timeoutId);
-        console.log('Supabase sign in response:', { data, error });
 
         if (error) {
-          console.error('Supabase sign in error:', error);
-          console.error('Error message:', error.message);
-          console.error('Error code:', error.status);
-          console.error('Full error object:', JSON.stringify(error, null, 2));
           return { error };
         }
-
-        console.log('Sign in successful:', data);
 
         // Store remember me preference
         if (rememberMe) {
@@ -214,11 +202,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: null };
       } catch (timeoutError) {
         clearTimeout(timeoutId);
-        console.error('Sign in timeout or network error:', timeoutError);
         return { error: new Error('Network timeout - please check your connection') };
       }
     } catch (err) {
-      console.error('Error signing in:', err);
       return { error: err as Error };
     }
   };
@@ -230,7 +216,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('userProfile');
       localStorage.removeItem('rememberMe');
     } catch (err) {
-      console.error('Error signing out:', err);
       setError(err instanceof Error ? err.message : 'Failed to sign out');
     }
   };
