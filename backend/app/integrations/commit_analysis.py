@@ -909,6 +909,247 @@ Diff:
         except Exception as e:
             return self.error_handling(e)
     
+    async def analyze_commit_traditional_only(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze a commit using ONLY the traditional hours-based method.
+        This is for benchmarking to isolate scoring methods.
+        """
+        try:
+            # Prepare the traditional hours prompt
+            prompt = f"""You are a senior software engineer with expertise in code analysis. Analyze the following commit and provide ONLY hours-based estimation.
+
+## Scoring Guidelines
+
+### 1. HOURS-BASED TRADITIONAL SCORING
+
+Estimate engineering effort considering:
+- Actual development time (not AI-assisted time)
+- Code review and refinement cycles
+- Mental effort and architecture decisions
+
+#### Reference Anchors - STRUCTURED SELECTION
+
+**STEP 1: Initial Classification**
+Based on total lines (additions + deletions):
+- Under 50 lines → Start with Anchor A
+- 50-199 lines → Start with Anchor B  
+- 200-499 lines → Start with Anchor C
+- 500-1499 lines → Start with Anchor D
+- 1500+ lines → Consider Anchor D or E (see Step 2)
+
+**STEP 2: Refinement Checks**
+Apply these checks IN ORDER:
+
+1. **Major Change Detection** (can upgrade D→E):
+   □ Commit message says "new system", "new service", "new framework", or "breaking change"?
+   □ Creates 5+ new files in a new top-level directory?
+   □ Changes 20+ files across 3+ different top-level directories?
+   □ Adds new technology/dependency to the project (new language, database, framework)?
+   If 2+ checked → Upgrade to Anchor E
+
+2. **File Count Override** (supersedes Step 1):
+   □ Changes 25+ files regardless of content?
+   If checked → Set to Anchor E
+
+3. **Simplicity Reduction** (can downgrade by one level):
+   □ >70% of changes are tests, docs, or comments?
+   □ Commit message contains "refactor", "rename", "move", "cleanup"?
+   □ Only changes configs, constants, or data files?
+   If any checked → Downgrade one anchor level (but never below A)
+
+**ANCHOR VALUES:**
+- A: Minimal (0.5h) - Typos, configs, small fixes
+- B: Simple (2.5h) - Single-purpose changes, basic features
+- C: Standard (6.0h) - Multi-file features, moderate complexity
+- D: Complex (12.0h) - Cross-component changes, significant logic
+- E: Major (20.0h) - Architectural changes, new subsystems
+
+#### Universal Multipliers:
+• Involves concurrent/parallel code: +40%
+• Modifies critical path (commit message indicates): +30%
+• Includes comprehensive tests (>50% of changes): +20%
+• Performance-critical changes: +20%
+• Security-sensitive code: +30%
+• Documentation only: -50%
+• Formatting/refactoring only: -30%
+
+#### Final Calculation:
+1. Select anchor from table (no averaging needed)
+2. Multiply by applicable multipliers
+3. Round to nearest 0.5 hour
+
+Example: 1200 lines in 8 files with parallel code
+- Anchor D: 12.0 hours (from table)
+- Multiplier: ×1.4 (parallel code)
+- Final: 16.8 → 17.0 hours
+
+### 2. COMPLEXITY SCORING (1-10)
+
+Count these objective factors:
+□ Changes core functionality (+3)
+□ Modifies multiple components (+2)
+□ Adds new abstractions/patterns (+2)
+□ Requires algorithmic thinking (+2)
+□ Handles error cases (+1)
+Total: Min 1, Max 10
+
+### 3. SENIORITY SCORING (1-10)
+
+Score implementation quality:
+□ Comprehensive error handling (+2)
+□ Well-structured tests (+2)
+□ Follows established patterns (+2)
+□ Good abstractions (+2)
+□ Forward-thinking design (+2)
+Total: Min 1, Max 10
+
+For trivial changes (<20 lines AND complexity ≤ 2 AND no tests):
+Set seniority = 10 with rationale "Trivial change"
+
+### 4. RISK LEVEL
+
+Assess deployment risk:
+• low: Unlikely to cause issues (tests, docs, isolated changes)
+• medium: Some risk (core features, integrations)
+• high: Significant risk (critical path, data changes, security)
+
+## Output Format
+
+Provide a JSON response with this exact structure:
+{{
+  "total_lines": <int>,
+  "total_files": <int>,
+  "initial_anchor": "<A/B/C/D/E>",
+  "major_change_checks": ["<specific checks that were true>"],
+  "major_change_count": <int>,
+  "file_count_override": <boolean>,
+  "simplicity_reduction_checks": ["<specific checks that were true>"],
+  "final_anchor": "<A/B/C/D/E>",
+  "base_hours": <float>,
+  "multipliers_applied": ["<multiplier1>", "<multiplier2>"],
+  "complexity_score": <int 1-10>,
+  "complexity_cap_applied": "<none|tooling|test|doc>",
+  "estimated_hours": <float>,
+  "risk_level": "<low|medium|high>",
+  "seniority_score": <int 1-10>,
+  "seniority_rationale": "<explanation>",
+  "key_changes": ["<change1>", "<change2>", ...]
+}}
+
+## Commit to Analyze
+
+Repository: {commit_data.get('repository', '')}
+Author: {commit_data.get('author_name', '')} <{commit_data.get('author_email', '')}>
+Message: {commit_data.get('message', '')}
+Files Changed: {', '.join(commit_data.get('files_changed', []))}
+Additions: {commit_data.get('additions', 0)}
+Deletions: {commit_data.get('deletions', 0)}
+
+Diff:
+{commit_data.get('diff', '')}"""
+
+            # Set up parameters for the API call
+            if self._is_reasoning_model(self.commit_analysis_model):
+                # Use responses API for reasoning models with high effort
+                api_params = {
+                    "model": self.commit_analysis_model,
+                    "reasoning": {"effort": "high"},
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": f"""You are a senior software engineer with deep expertise in effort estimation and code quality assessment. Your task is to analyze commits with extreme consistency by following the provided guidelines exactly. Always compare scores against the examples provided. Be conservative in scoring - when in doubt, score lower. Output only valid JSON with no additional commentary.
+
+{prompt}"""
+                        }
+                    ]
+                }
+                response = await self.client.responses.create(**api_params)
+                
+                # Parse the response from responses API
+                try:
+                    # Extract the text content
+                    text_content = None
+                    if hasattr(response, 'output_text') and response.output_text:
+                        text_content = response.output_text
+                    elif hasattr(response, 'output') and hasattr(response.output, 'text'):
+                        text_content = response.output.text
+                    elif hasattr(response, 'choices') and response.choices:
+                        text_content = response.choices[0].message.content
+                    else:
+                        raise ValueError("Unable to extract text from responses API response")
+                    
+                    # Clean up markdown code blocks if present
+                    if text_content.strip().startswith('```json'):
+                        text_content = text_content.strip()[7:]
+                        if text_content.endswith('```'):
+                            text_content = text_content[:-3]
+                    elif text_content.strip().startswith('```'):
+                        text_content = text_content.strip()[3:]
+                        if text_content.endswith('```'):
+                            text_content = text_content[:-3]
+                    
+                    result = json.loads(text_content.strip())
+                except (json.JSONDecodeError, AttributeError) as e:
+                    print(f"Error parsing traditional response: {e}")
+                    raise
+            else:
+                # Use chat completions API for non-reasoning models
+                api_params = {
+                    "model": self.commit_analysis_model,
+                    "messages": [
+                        {"role": "system", "content": """You are a senior software engineer with deep expertise in effort estimation and code quality assessment. Your task is to analyze commits with extreme consistency by following the provided guidelines exactly. Always compare scores against the examples provided. Be conservative in scoring - when in doubt, score lower. Output only valid JSON with no additional commentary."""},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.15
+                }
+                response = await self.client.chat.completions.create(**api_params)
+                result = json.loads(response.choices[0].message.content)
+            
+            # Add metadata
+            result.update({
+                "analyzed_at": datetime.now().isoformat(),
+                "commit_hash": commit_data.get("commit_hash"),
+                "repository": commit_data.get("repository"),
+                "model_used": self.commit_analysis_model,
+                "scoring_method": "traditional_hours_only"
+            })
+            
+            return result
+            
+        except Exception as e:
+            return self.error_handling(e)
+    
+    async def benchmark_separate_analyses(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Run traditional hours and impact scoring completely separately for benchmarking.
+        This ensures no cross-contamination between scoring methods.
+        """
+        try:
+            # Run both analyses completely independently
+            traditional_task = self.analyze_commit_traditional_only(commit_data)
+            impact_task = self.analyze_commit_impact(commit_data)
+            
+            # Wait for both to complete
+            traditional_result, impact_result = await asyncio.gather(traditional_task, impact_task)
+            
+            # Combine results
+            combined_result = {
+                "traditional_hours": traditional_result,
+                "impact_points": impact_result,
+                "analyzed_at": datetime.now().isoformat(),
+                "commit_hash": commit_data.get("commit_hash"),
+                "repository": commit_data.get("repository"),
+                "model_used": self.commit_analysis_model,
+                "scoring_methods": ["traditional_hours", "impact_points"],
+                "benchmark_mode": "separate_analyses"
+            }
+            
+            return combined_result
+            
+        except Exception as e:
+            return self.error_handling(e)
+    
     def error_handling(self, error: Exception) -> Dict[str, Any]:
         """
         Handle errors from OpenAI API.

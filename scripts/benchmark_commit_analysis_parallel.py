@@ -92,108 +92,81 @@ class ParallelCommitAnalysisBenchmark:
             self.commit_service = CommitAnalysisService(self.db)
         
     async def analyze_commit_async(self, commit_data: Dict[str, Any], run_index: int) -> Dict[str, Any]:
-        """Async wrapper for commit analysis"""
+        """Async wrapper for commit analysis using separate scoring methods"""
         try:
             start_time = time.time()
             
-            # Prepare analysis data
+            # Import commit analyzer directly for separate benchmarking
+            from backend.app.integrations.commit_analysis import CommitAnalyzer
+            commit_analyzer = CommitAnalyzer()
+            
+            # Prepare analysis data in the format expected by CommitAnalyzer
             analysis_data = {
                 "repository": commit_data["repository"],
                 "commit_hash": commit_data["sha"],
-                "author": {
-                    "name": commit_data["author"],
-                    "email": "benchmark@example.com",
-                    "login": self.config["github_username"]
-                },
+                "author_name": commit_data["author"],
+                "author_email": "benchmark@example.com",
                 "message": commit_data["message"],
-                "timestamp": commit_data["date"],
-                "url": commit_data["url"]
+                "files_changed": commit_data.get("files_changed", []),
+                "additions": commit_data.get("additions", 0),
+                "deletions": commit_data.get("deletions", 0),
+                "diff": commit_data.get("diff", "")
             }
             
-            # Run analysis
-            analyzed_commit = await self.commit_service.analyze_commit(
-                commit_hash=commit_data["sha"],
-                commit_data=analysis_data,
-                fetch_diff=True
-            )
+            # Run separate analyses directly for better isolation
+            analysis_result = await commit_analyzer.benchmark_separate_analyses(analysis_data)
             
             analysis_time = time.time() - start_time
             
-            if analyzed_commit:
-                # Extract scores
+            if analysis_result and not analysis_result.get("error"):
+                # Extract scores from separate analyses
+                traditional_data = analysis_result.get("traditional_hours", {})
+                impact_data = analysis_result.get("impact_points", {})
+                
                 run_result = {
                     "run_index": run_index + 1,
                     "analysis_time": analysis_time,
                     "traditional_hours": {
-                        "ai_estimated_hours": analyzed_commit.ai_estimated_hours,
-                        "complexity_score": analyzed_commit.complexity_score,
-                        "seniority_score": analyzed_commit.seniority_score,
-                        "risk_level": analyzed_commit.risk_level,
+                        "ai_estimated_hours": traditional_data.get("estimated_hours"),
+                        "complexity_score": traditional_data.get("complexity_score"),
+                        "seniority_score": traditional_data.get("seniority_score"),
+                        "risk_level": traditional_data.get("risk_level"),
+                        "total_lines": traditional_data.get("total_lines"),
+                        "total_files": traditional_data.get("total_files"),
+                        "initial_anchor": traditional_data.get("initial_anchor"),
+                        "final_anchor": traditional_data.get("final_anchor"),
+                        "base_hours": traditional_data.get("base_hours"),
+                        "major_change_checks": traditional_data.get("major_change_checks", []),
+                        "major_change_count": traditional_data.get("major_change_count"),
+                        "file_count_override": traditional_data.get("file_count_override"),
+                        "simplicity_reduction_checks": traditional_data.get("simplicity_reduction_checks", []),
+                        "complexity_cap_applied": traditional_data.get("complexity_cap_applied"),
+                        "multipliers_applied": traditional_data.get("multipliers_applied", [])
                     },
-                    "impact_points": {},
+                    "impact_points": {
+                        "business_value": impact_data.get("business_value", {}).get("score"),
+                        "technical_complexity": impact_data.get("technical_complexity", {}).get("score"),
+                        "code_quality": impact_data.get("code_quality_points", {}).get("score", 1.0),
+                        "risk_factor": impact_data.get("risk_penalty", {}).get("score", 1.0),
+                        "total_score": impact_data.get("impact_score"),
+                        "reasoning": {
+                            "business_value": impact_data.get("business_value", {}).get("evidence"),
+                            "technical_complexity": impact_data.get("technical_complexity", {}).get("evidence"),
+                            "code_quality": impact_data.get("code_quality_points", {}).get("evidence"),
+                            "risk_factor": impact_data.get("risk_penalty", {}).get("reasoning")
+                        }
+                    },
                     "reasoning": {
-                        "seniority_rationale": analyzed_commit.seniority_rationale,
-                        "key_changes": analyzed_commit.key_changes,
+                        "seniority_rationale": traditional_data.get("seniority_rationale"),
+                        "key_changes": traditional_data.get("key_changes", []),
                     }
                 }
-                
-                # Parse comprehensive analysis data from ai_analysis_notes
-                if analyzed_commit.ai_analysis_notes:
-                    try:
-                        analysis_data = json.loads(analyzed_commit.ai_analysis_notes)
-                        
-                        # Update traditional hours with new anchor fields if available
-                        if analysis_data.get('total_lines') is not None:
-                            run_result["traditional_hours"].update({
-                                "total_lines": analysis_data.get('total_lines'),
-                                "total_files": analysis_data.get('total_files'),
-                                "initial_anchor": analysis_data.get('initial_anchor'),
-                                "final_anchor": analysis_data.get('final_anchor'),
-                                "base_hours": analysis_data.get('base_hours'),
-                                "major_change_checks": analysis_data.get('major_change_checks', []),
-                                "major_change_count": analysis_data.get('major_change_count', 0),
-                                "file_count_override": analysis_data.get('file_count_override', False),
-                                "simplicity_reduction_checks": analysis_data.get('simplicity_reduction_checks', []),
-                                "complexity_cap_applied": analysis_data.get('complexity_cap_applied', 'none'),
-                                "multipliers_applied": analysis_data.get('multipliers_applied', [])
-                            })
-                        
-                        # Extract impact scoring
-                        run_result["impact_points"] = {
-                            "business_value": analysis_data.get('impact_business_value', 0),
-                            "technical_complexity": analysis_data.get('impact_technical_complexity', 0),
-                            "code_quality": analysis_data.get('impact_code_quality', 1.0),
-                            "risk_factor": analysis_data.get('impact_risk_factor', 1.0),
-                            "total_score": analysis_data.get('impact_score', 0),
-                            "reasoning": {
-                                "business_value": analysis_data.get('impact_business_value_reasoning', ''),
-                                "technical_complexity": analysis_data.get('impact_technical_complexity_reasoning', ''),
-                                "code_quality": analysis_data.get('impact_code_quality_reasoning', ''),
-                                "risk_factor": analysis_data.get('impact_risk_factor_reasoning', ''),
-                            }
-                        }
-                    except Exception as e:
-                        console.print(f"[yellow]Warning: Could not parse analysis data: {e}[/yellow]")
-                        # Fallback to basic impact data if available
-                        run_result["impact_points"] = {
-                            "business_value": None,
-                            "technical_complexity": None,
-                            "code_quality": 1.0,
-                            "risk_factor": 1.0,
-                            "total_score": None,
-                            "reasoning": {
-                                "business_value": None,
-                                "technical_complexity": None,
-                                "code_quality": None,
-                                "risk_factor": None,
-                            }
-                        }
                 
                 return run_result
             else:
                 return {
                     "run_index": run_index + 1,
-                    "error": "Analysis failed"
+                    "error": "Analysis failed or returned error"
                 }
                 
         except Exception as e:
