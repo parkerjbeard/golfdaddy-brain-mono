@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Security
 from fastapi.security import APIKeyHeader
 import logging
-import base64
 
 from app.config.database import get_db
 from app.config.settings import settings
@@ -19,23 +18,10 @@ api_key_header = APIKeyHeader(name=settings.api_key_header, auto_error=False)
 
 async def get_api_key(request: Request, api_key_header: str = Security(api_key_header)):
     """Dependency to validate the incoming API key from Make.com."""
-    # Log the received key header for debugging
+    # Log authentication attempt without exposing sensitive data
     actual_header_name = settings.api_key_header
     received_value = request.headers.get(actual_header_name)
-    logger.info(f"Attempting API key authentication. Header '{actual_header_name}': Received value '{received_value}' (Type: {type(received_value)})")
-    
-    # Enhanced debugging
-    # Log all request headers to see what's being sent
-    logger.info(f"All request headers: {dict(request.headers)}")
-    
-    # Check both uppercase and lowercase header names
-    for header_name in [actual_header_name, actual_header_name.upper(), actual_header_name.lower()]:
-        value = request.headers.get(header_name)
-        if value:
-            logger.info(f"Found header '{header_name}' with value '{value[:5]}...'")
-    
-    # Log the key comparison target
-    logger.info(f"Comparing against expected MAKE_INTEGRATION_API_KEY: '{settings.make_integration_api_key[:5]}...' (Length: {len(settings.make_integration_api_key) if settings.make_integration_api_key else 0})")
+    logger.info(f"Attempting API key authentication for header '{actual_header_name}'")
 
     # Check if API auth is enabled and a key was provided
     # Note: The `api_key_header` variable here is the *parsed* value by FastAPI/Security, 
@@ -49,20 +35,12 @@ async def get_api_key(request: Request, api_key_header: str = Security(api_key_h
               logger.error(f"API key header '{actual_header_name}' is missing")
               raise AuthenticationError(message=f"API key header '{actual_header_name}' is missing")
 
-    # Debug - encode both values for comparison
-    received_encoded = base64.b64encode(received_value.encode()).decode() if received_value else None
-    expected_encoded = base64.b64encode(settings.make_integration_api_key.encode()).decode() if settings.make_integration_api_key else None
-    logger.info(f"Received key (base64): {received_encoded}")
-    logger.info(f"Expected key (base64): {expected_encoded}")
-
-    # Now use the raw received_value for comparison
+    # Validate API key without logging sensitive data
     if received_value == settings.make_integration_api_key: 
-        logger.info(f"API Key validation successful for key starting with: {received_value[:5]}...")
+        logger.info("API Key validation successful")
         return received_value # Return the validated key
     else:
-        # Log safely - show only a few chars of the received incorrect key
-        safe_received = received_value[:5] + '...' if received_value else 'None'
-        logger.error(f"Invalid API key received. Value starting with: {safe_received}")
+        logger.error("Invalid API key received")
         raise AuthenticationError(message="Invalid API Key")
 
 @router.post("/commit", status_code=status.HTTP_202_ACCEPTED)

@@ -31,7 +31,7 @@ project/
 - **Documentation Generation**: Transform minimal input into robust documentation
 - **Slack Integration**: Notifications, task creation, and daily reminders
 - **Personal Mastery Tracking**: Manager-specific tasks with reminders
-- **API Gateway & Security**: API key authentication, rate limiting, and request metrics
+- **API Gateway & Security**: API key authentication, rate limiting, request metrics, and automatic log sanitization
 
 ## Getting Started
 
@@ -174,6 +174,28 @@ API usage metrics are available at the `/metrics` endpoint (admin access only):
 - Request counts by endpoint
 - Response status codes
 - Average response time
+
+### Security Features
+
+#### Automatic Log Sanitization
+
+The application automatically redacts sensitive information from all log messages to prevent credential exposure:
+
+- **What's Protected**: API keys, passwords, JWT tokens, email addresses, database URLs, credit cards, SSNs, and more
+- **How It Works**: A logging filter intercepts all log messages and applies pattern-based redaction
+- **Zero Code Changes**: Works transparently with existing logging code
+- **Performance**: Minimal impact (<1ms per log message)
+
+Example:
+```python
+# Your code logs normally:
+logger.info(f"API key: {api_key}")
+
+# Output is automatically sanitized:
+# INFO: API key=REDACTED
+```
+
+For detailed security logging guidelines, see `docs/LOGGING_SECURITY_GUIDELINES.md`.
 
 ## Configuration
 

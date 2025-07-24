@@ -40,6 +40,7 @@ from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_metrics import RequestMetricsMiddleware
 from app.core.error_handlers import add_exception_handlers
 from app.services.scheduled_tasks import start_scheduled_tasks, stop_scheduled_tasks
+from app.core.log_sanitizer import configure_secure_logging
 
 # Configure logging
 logging.basicConfig(
@@ -52,6 +53,9 @@ if not root_logger.handlers:
     for handler in logging.getLogger("uvicorn.error").handlers:
         root_logger.addHandler(handler)
     root_logger.setLevel(logging.getLogger("uvicorn.error").level)
+
+# Configure secure logging with sensitive data filtering
+configure_secure_logging()
 
 logger = logging.getLogger(__name__)
 
