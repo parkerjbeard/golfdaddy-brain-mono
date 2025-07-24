@@ -82,11 +82,7 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
                   asChild 
                   tooltip="Admin Dashboard"
                 >
-                  <Link to="/admin" onClick={(e) => {
-                    console.log('Admin link clicked!');
-                    console.log('Event:', e);
-                    console.log('Current location before:', location.pathname);
-                  }}>
+                  <Link to="/admin">
                     <BarChart className="h-5 w-5" />
                     <span>Admin Dashboard</span>
                   </Link>
@@ -99,11 +95,7 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
                   asChild 
                   tooltip="Manager Dashboard"
                 >
-                  <Link to="/manager" onClick={(e) => {
-                    console.log('Manager link clicked!');
-                    console.log('Event:', e);
-                    console.log('Current location before:', location.pathname);
-                  }}>
+                  <Link to="/manager">
                     <ClipboardList className="h-5 w-5" />
                     <span>Manager Dashboard</span>
                   </Link>

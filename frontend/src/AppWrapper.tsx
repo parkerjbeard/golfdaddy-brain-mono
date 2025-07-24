@@ -1,12 +1,8 @@
 import React from 'react'
 
 function AppWrapper() {
-  console.log('AppWrapper starting...');
-  
   try {
-    console.log('Attempting to import App...');
     const App = require('./App').default;
-    console.log('App imported successfully');
     return <App />;
   } catch (error) {
     console.error('Failed to load App:', error);

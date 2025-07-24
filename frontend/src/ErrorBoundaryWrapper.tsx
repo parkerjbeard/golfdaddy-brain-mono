@@ -34,8 +34,6 @@ class ErrorBoundary extends React.Component<
 }
 
 function ErrorBoundaryWrapper() {
-  console.log('ErrorBoundaryWrapper rendering...')
-  
   return (
     <ErrorBoundary>
       <App />

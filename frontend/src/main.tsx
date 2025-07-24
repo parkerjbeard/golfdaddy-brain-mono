@@ -5,7 +5,6 @@ import './index.css'
 
 // Global error handler
 window.addEventListener('error', (event) => {
-  console.error('Global error:', event.error);
   const errorDiv = document.getElementById('error-display');
   if (errorDiv) {
     // Clear any existing content safely
@@ -26,7 +25,7 @@ window.addEventListener('error', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason);
+  // Unhandled promise rejection
 });
 
 // Error Boundary
@@ -44,7 +43,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo);
+    // Error caught by boundary
   }
 
   render() {
@@ -74,11 +73,9 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-console.log('Starting React app...');
-
 const container = document.getElementById('root');
 if (!container) {
-  console.error('Root element not found!');
+  // Root element not found
 } else {
   // Add error display div
   const errorDiv = document.createElement('div');
@@ -87,10 +84,8 @@ if (!container) {
   document.body.insertBefore(errorDiv, document.body.firstChild);
   
   try {
-    console.log('Creating React root...');
     const root = createRoot(container);
     
-    console.log('Rendering app with ErrorBoundary...');
     root.render(
       <React.StrictMode>
         <ErrorBoundary>
@@ -98,10 +93,7 @@ if (!container) {
         </ErrorBoundary>
       </React.StrictMode>
     );
-    
-    console.log('React app mounted successfully');
   } catch (error) {
-    console.error('Error mounting React app:', error);
     // Safely display error without XSS vulnerability
     container.textContent = '';
     const heading = document.createElement('h1');
