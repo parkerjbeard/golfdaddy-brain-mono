@@ -37,6 +37,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Check role requirements
+
   if (userProfile && requiredRoles.includes(userProfile.role)) {
     return <>{children}</>;
   }

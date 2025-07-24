@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import { secureStorage } from '../services/secureStorage';
+import { TokenCleanupService } from '../services/tokenCleanupService';
 
 interface UserProfile {
   id: string;
@@ -38,29 +40,38 @@ export const useAuth = () => {
 };
 
 // Helper to get cached profile
-const getCachedProfile = (): UserProfile | null => {
-  const cached = localStorage.getItem('userProfile');
-  if (!cached) return null;
-  
+const getCachedProfile = async (): Promise<UserProfile | null> => {
   try {
-    const { data, timestamp } = JSON.parse(cached);
+    const cached = await secureStorage.getItem<{ data: UserProfile; timestamp: number }>('userProfile');
+    if (!cached) return null;
+    
     // Cache for 5 minutes
-    if (Date.now() - timestamp < 5 * 60 * 1000) {
-      return data;
+    if (Date.now() - cached.timestamp < 5 * 60 * 1000) {
+      return cached.data;
     }
+    
+    // Cache expired, remove it
+    await secureStorage.removeItem('userProfile');
   } catch (e) {
-    // Cache parsing failed, return null
+    console.error('Failed to get cached profile:', e);
   }
   
   return null;
 };
 
 // Helper to cache profile
-const cacheProfile = (profile: UserProfile) => {
-  localStorage.setItem('userProfile', JSON.stringify({
-    data: profile,
-    timestamp: Date.now()
-  }));
+const cacheProfile = async (profile: UserProfile): Promise<void> => {
+  try {
+    await secureStorage.setItem('userProfile', {
+      data: profile,
+      timestamp: Date.now()
+    }, {
+      expiresIn: 5 * 60 * 1000, // 5 minutes
+      tags: ['auth', 'profile']
+    });
+  } catch (error) {
+    console.error('Failed to cache profile:', error);
+  }
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -72,13 +83,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchUserProfile = async (accessToken: string): Promise<UserProfile | null> => {
     try {
       // Check cache first
-      const cached = getCachedProfile();
+      const cached = await getCachedProfile();
       if (cached) {
         return cached;
       }
 
-      // Fetch from API
-      const response = await fetch('/auth/me', {
+      // Fetch from API - note: auth endpoints are at /auth/* not /api/v1/auth/*
+      // When running in development with Vite proxy, use relative URLs
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const isViteProxy = window.location.port === '8080'; // Vite dev server port
+      const apiUrl = isViteProxy ? '/auth/me' : `${baseUrl}/auth/me`;
+      
+      
+      const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -93,7 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const profile = await response.json();
       
       // Cache the profile
-      cacheProfile(profile);
+      await cacheProfile(profile);
       
       return profile;
     } catch (err) {
@@ -119,7 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!session?.access_token) return;
     
     // Clear cache to force refresh
-    localStorage.removeItem('userProfile');
+    await secureStorage.removeItem('userProfile');
     
     const profile = await fetchUserProfile(session.access_token);
     if (profile) {
@@ -129,19 +146,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       
       if (session?.access_token) {
-        fetchUserProfile(session.access_token).then(profile => {
+        try {
+          const profile = await fetchUserProfile(session.access_token);
           if (profile) {
             setUserProfile(profile);
           }
-          setLoading(false);
-        });
+        } catch (error) {
+          // Error fetching user profile
+        }
+        setLoading(false);
       } else {
         setLoading(false);
       }
+    }).catch(error => {
+      // Error getting session
+      setLoading(false);
     });
 
     // Listen for auth changes
@@ -155,7 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         setUserProfile(null);
-        localStorage.removeItem('userProfile');
+        await secureStorage.removeItem('userProfile');
       }
     });
 
@@ -193,9 +216,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Store remember me preference
         if (rememberMe) {
-          localStorage.setItem('rememberMe', 'true');
+          await secureStorage.setItem('rememberMe', 'true', {
+            tags: ['auth', 'preferences']
+          });
         } else {
-          localStorage.removeItem('rememberMe');
+          await secureStorage.removeItem('rememberMe');
         }
 
         // Session and profile will be handled by the auth state change listener
@@ -213,8 +238,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await supabase.auth.signOut();
       setUserProfile(null);
-      localStorage.removeItem('userProfile');
-      localStorage.removeItem('rememberMe');
+      
+      // Trigger comprehensive cleanup
+      TokenCleanupService.triggerLogout();
+      
+      // Also remove specific items
+      await secureStorage.removeItem('userProfile');
+      await secureStorage.removeItem('rememberMe');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign out');
     }

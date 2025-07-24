@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react'
+import React, { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 // Removed StoreProvider import to prevent infinite auth loops
@@ -6,6 +6,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthenticatedLayout } from './components/layout/AuthenticatedLayout'
 import { LoginPage } from './pages/LoginPage'
 import { Toaster } from './components/ui/toaster'
+import { migrateStorageIfNeeded } from './services/storageMigration'
 
 // Lazy load pages that might have circular dependencies
 const CompanyDashboard = lazy(() => import('./pages/CompanyDashboard'))
@@ -29,11 +30,9 @@ const PageLoader = () => (
 )
 
 function App() {
-  console.log('App component rendering...');
-  
-  // Log route changes
-  React.useEffect(() => {
-    console.log('Current location:', window.location.pathname);
+  // Run storage migration on app start
+  useEffect(() => {
+    migrateStorageIfNeeded().catch(console.error);
   }, []);
   
   return (

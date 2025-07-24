@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
+import { tokenManager } from '@/services/api/tokenManager';
 import { 
   Search, 
   FileText, 
@@ -15,11 +16,8 @@ import {
   AlertCircle,
   Loader2,
   ChevronRight,
-  ExternalLink,
   GitBranch,
-  FolderOpen,
-  CheckCircle,
-  XCircle
+  FolderOpen
 } from 'lucide-react';
 import {
   Collapsible,
@@ -86,11 +84,16 @@ export function SemanticSearch() {
     
     setLoading(true);
     try {
+      const token = await tokenManager.getToken();
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+
       const response = await fetch('/api/v1/search/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           query: debouncedQuery,
@@ -118,9 +121,14 @@ export function SemanticSearch() {
   const analyzeGaps = async (repository: string) => {
     setLoading(true);
     try {
+      const token = await tokenManager.getToken();
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+
       const response = await fetch(`/api/v1/search/gaps/${repository}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -132,7 +140,7 @@ export function SemanticSearch() {
       // Also fetch coverage
       const coverageResponse = await fetch(`/api/v1/search/coverage/${repository}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
       

@@ -61,7 +61,7 @@ const ManagerDashboardPage: React.FC = () => {
         // Do not auto-select user, let manager choose
       } catch (err) {
         setErrorUsers(err instanceof Error ? err.message : 'Failed to fetch users.');
-        console.error('Error fetching users:', err);
+        // Error fetching users
       }
       setIsLoadingUsers(false);
     };
@@ -82,8 +82,8 @@ const ManagerDashboardPage: React.FC = () => {
         startDate: format(dateRangeToUse.from, 'yyyy-MM-dd'),
         endDate: dateRangeToUse.to ? format(dateRangeToUse.to, 'yyyy-MM-dd') : format(dateRangeToUse.from, 'yyyy-MM-dd'),
       };
-      const summaries = await getBulkWidgetSummaries(params);
-      setUserWidgetsData(summaries);
+      const response = await getBulkWidgetSummaries(params);
+      setUserWidgetsData(response.data || []);
     } catch (err) {
       setErrorWidgets(err instanceof Error ? err.message : 'Failed to fetch bulk widget summaries.');
       setUserWidgetsData([]);
@@ -122,7 +122,7 @@ const ManagerDashboardPage: React.FC = () => {
       setFocusedUserPerformanceData(summary);
     } catch (err) {
       setErrorFocusedSummary(err instanceof Error ? err.message : 'Failed to fetch detailed performance summary.');
-      console.error('Error fetching focused user data:', err);
+      // Error fetching focused user data
       setFocusedUserPerformanceData(null);
     }
     setIsLoadingFocusedSummary(false);
@@ -169,7 +169,7 @@ const ManagerDashboardPage: React.FC = () => {
 
   const selectedUserName = useMemo(() => users.find(u => u.id === selectedUserId)?.name || "Selected User", [users, selectedUserId]);
   const focusedUserName = useMemo(() => {
-    const widgetUser = userWidgetsData.find(w => w.user_id === showFocusedViewForUserId);
+    const widgetUser = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === showFocusedViewForUserId) : undefined;
     if (widgetUser?.name) return widgetUser.name;
     const generalUser = users.find(u => u.id === showFocusedViewForUserId);
     return generalUser?.name || "Focused User";
@@ -208,7 +208,7 @@ const ManagerDashboardPage: React.FC = () => {
       {!isLoadingWidgets && !errorWidgets && users.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {users.map((user) => {
-            const widgetData = userWidgetsData.find(w => w.user_id === user.id);
+            const widgetData = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === user.id) : undefined;
             const userName = widgetData?.name || user.name || 'Unknown User';
             const userAvatarUrl = widgetData?.avatar_url || undefined; // Corrected: User type does not have avatarUrl
 

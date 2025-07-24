@@ -4,6 +4,8 @@
 
 import { TokenManager } from './base';
 import { LoginResponse, RefreshTokenResponse } from '@/types/api';
+import { secureStorage } from '@/services/secureStorage';
+import { tokenCleanupService, TokenCleanupService } from '@/services/tokenCleanupService';
 
 export interface TokenData {
   accessToken: string;
@@ -11,6 +13,9 @@ export interface TokenData {
   tokenType: string;
   expiresIn: number;
   expiresAt: number;
+  version?: number; // Token version for rotation tracking
+  issuedAt?: number; // When the token was issued
+  rotationCount?: number; // Number of times this token has been rotated
 }
 
 export interface TokenManagerConfig {
@@ -36,10 +41,16 @@ export class GolfDaddyTokenManager implements TokenManager {
   private refreshCallbacks: Array<(token: string) => void> = [];
   private expiredCallbacks: Array<() => void> = [];
   private refreshTimer: NodeJS.Timeout | null = null;
+  private tokenVersion = 1; // Current token version
 
   constructor(config?: Partial<TokenManagerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.loadTokenFromStorage();
+    // Load token asynchronously on initialization
+    this.initialize();
+  }
+
+  private async initialize(): Promise<void> {
+    await this.loadTokenFromStorage();
     this.setupAutoRefresh();
   }
 
@@ -89,7 +100,7 @@ export class GolfDaddyTokenManager implements TokenManager {
 
   async clearToken(): Promise<void> {
     this.tokenData = null;
-    this.clearStorage();
+    await this.clearStorage();
     this.clearRefreshTimer();
     
     // Notify callbacks
@@ -97,15 +108,19 @@ export class GolfDaddyTokenManager implements TokenManager {
   }
 
   async setTokenData(loginResponse: LoginResponse): Promise<void> {
+    const now = Date.now();
     this.tokenData = {
       accessToken: loginResponse.access_token,
       refreshToken: loginResponse.refresh_token,
       tokenType: loginResponse.token_type,
       expiresIn: loginResponse.expires_in,
-      expiresAt: Date.now() + (loginResponse.expires_in * 1000),
+      expiresAt: now + (loginResponse.expires_in * 1000),
+      version: this.tokenVersion,
+      issuedAt: now,
+      rotationCount: 0,
     };
 
-    this.saveTokenToStorage();
+    await this.saveTokenToStorage();
     this.setupAutoRefresh();
     
     // Notify callbacks
@@ -113,15 +128,19 @@ export class GolfDaddyTokenManager implements TokenManager {
   }
 
   // Simple method for setting a token directly (useful for bypass mode)
-  setToken(token: string): void {
+  async setToken(token: string): Promise<void> {
+    const now = Date.now();
     this.tokenData = {
       accessToken: token,
       refreshToken: token,
       tokenType: 'Bearer',
       expiresIn: 86400, // 24 hours
-      expiresAt: Date.now() + (86400 * 1000),
+      expiresAt: now + (86400 * 1000),
+      version: this.tokenVersion,
+      issuedAt: now,
+      rotationCount: 0,
     };
-    this.saveTokenToStorage();
+    await this.saveTokenToStorage();
   }
 
   onTokenRefresh(callback: (token: string) => void): void {
@@ -170,16 +189,22 @@ export class GolfDaddyTokenManager implements TokenManager {
       try {
         const response = await this.callRefreshEndpoint(this.tokenData.refreshToken);
         
-        // Update token data
+        // Update token data with rotation tracking
+        const now = Date.now();
+        const previousRotationCount = this.tokenData.rotationCount || 0;
+        
         this.tokenData = {
           accessToken: response.access_token,
           refreshToken: response.refresh_token,
           tokenType: response.token_type,
           expiresIn: response.expires_in,
-          expiresAt: Date.now() + (response.expires_in * 1000),
+          expiresAt: now + (response.expires_in * 1000),
+          version: this.tokenVersion,
+          issuedAt: now,
+          rotationCount: previousRotationCount + 1,
         };
 
-        this.saveTokenToStorage();
+        await this.saveTokenToStorage();
         this.setupAutoRefresh();
         
         // Notify callbacks
@@ -254,31 +279,46 @@ export class GolfDaddyTokenManager implements TokenManager {
 
   // ========== STORAGE ==========
 
-  private saveTokenToStorage(): void {
+  private async saveTokenToStorage(): Promise<void> {
     if (!this.tokenData) return;
 
     try {
-      const data = JSON.stringify(this.tokenData);
-      
-      if (this.config.secureStorage && window.crypto && window.crypto.subtle) {
-        // TODO: Implement encryption for sensitive token data
-        // For now, use regular localStorage with a warning
-        console.warn('Secure storage not yet implemented, using localStorage');
-        localStorage.setItem(this.config.storageKey, data);
+      if (this.config.secureStorage) {
+        // Use secure storage with encryption
+        await secureStorage.setItem(this.config.storageKey, this.tokenData, {
+          expiresIn: this.tokenData.expiresIn * 1000, // Convert to milliseconds
+          tags: ['auth', 'token'],
+        });
       } else {
-        localStorage.setItem(this.config.storageKey, data);
+        // Fallback to regular localStorage (not recommended for production)
+        console.warn('Using unencrypted localStorage for tokens. Enable secureStorage for production.');
+        localStorage.setItem(this.config.storageKey, JSON.stringify(this.tokenData));
       }
     } catch (error) {
       console.error('Failed to save token to storage:', error);
+      // If secure storage fails, don't fall back to insecure storage
+      if (this.config.secureStorage) {
+        throw error;
+      }
     }
   }
 
-  private loadTokenFromStorage(): void {
+  private async loadTokenFromStorage(): Promise<void> {
     try {
-      const data = localStorage.getItem(this.config.storageKey);
-      if (!data) return;
+      let tokenData: TokenData | null = null;
 
-      const tokenData = JSON.parse(data) as TokenData;
+      if (this.config.secureStorage) {
+        // Try to load from secure storage
+        tokenData = await secureStorage.getItem<TokenData>(this.config.storageKey);
+      } else {
+        // Fallback to regular localStorage
+        const data = localStorage.getItem(this.config.storageKey);
+        if (data) {
+          tokenData = JSON.parse(data) as TokenData;
+        }
+      }
+
+      if (!tokenData) return;
       
       // Validate token structure
       if (this.isValidTokenData(tokenData)) {
@@ -287,21 +327,25 @@ export class GolfDaddyTokenManager implements TokenManager {
         // Check if token is already expired
         if (this.isTokenExpired()) {
           console.warn('Loaded token is expired, clearing storage');
-          this.clearToken();
+          await this.clearToken();
         }
       } else {
         console.warn('Invalid token data in storage, clearing');
-        this.clearStorage();
+        await this.clearStorage();
       }
     } catch (error) {
       console.error('Failed to load token from storage:', error);
-      this.clearStorage();
+      await this.clearStorage();
     }
   }
 
-  private clearStorage(): void {
+  private async clearStorage(): Promise<void> {
     try {
-      localStorage.removeItem(this.config.storageKey);
+      if (this.config.secureStorage) {
+        await secureStorage.removeItem(this.config.storageKey);
+      } else {
+        localStorage.removeItem(this.config.storageKey);
+      }
     } catch (error) {
       console.error('Failed to clear token storage:', error);
     }
@@ -320,12 +364,15 @@ export class GolfDaddyTokenManager implements TokenManager {
 
   // ========== EVENT HANDLING ==========
 
-  private handleTokenExpired(): void {
+  private async handleTokenExpired(): Promise<void> {
     console.warn('Token expired, clearing authentication state');
-    this.clearToken();
+    await this.clearToken();
     
     // Emit global event for other parts of the app
     window.dispatchEvent(new CustomEvent('auth-token-expired'));
+    
+    // Trigger token cleanup
+    TokenCleanupService.triggerLogout();
   }
 
   // ========== DEBUG METHODS ==========
