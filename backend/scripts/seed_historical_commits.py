@@ -17,6 +17,8 @@ from typing import Dict, List, Optional
 import json
 from dotenv import load_dotenv
 from decimal import Decimal
+import time
+from requests.exceptions import SSLError, ConnectionError, Timeout, RequestException
 
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
@@ -62,28 +64,45 @@ class HistoricalCommitSeeder:
         """Enable or disable daily analysis mode."""
         self.enable_daily_analysis = enabled
         
-    def _make_github_request(self, url: str, accept_header: str = "application/vnd.github.v3+json") -> requests.Response:
-        """Make a GitHub API request with proper headers and rate limit handling."""
+    def _make_github_request(self, url: str, accept_header: str = "application/vnd.github.v3+json", max_retries: int = 3) -> requests.Response:
+        """Make a GitHub API request with proper headers, rate limit handling, and retry logic."""
         headers = {"Accept": accept_header}
         if self.github_token:
             headers["Authorization"] = f"token {self.github_token}"
-            
-        response = requests.get(url, headers=headers)
         
-        # Update rate limit info
-        if 'X-RateLimit-Remaining' in response.headers:
-            self.rate_limit_remaining = int(response.headers['X-RateLimit-Remaining'])
-            self.rate_limit_reset = int(response.headers.get('X-RateLimit-Reset', 0))
-            
-        # Handle rate limiting
-        if response.status_code == 403 and self.rate_limit_remaining == 0:
-            reset_time = datetime.fromtimestamp(self.rate_limit_reset)
-            wait_time = (reset_time - datetime.now()).total_seconds() + 60
-            print(f"⏰ Rate limit exceeded. Waiting {wait_time:.0f} seconds until {reset_time}...")
-            import time
-            time.sleep(wait_time)
-            return self._make_github_request(url, accept_header)
-            
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.get(url, headers=headers, timeout=30)
+                
+                # Update rate limit info
+                if 'X-RateLimit-Remaining' in response.headers:
+                    self.rate_limit_remaining = int(response.headers['X-RateLimit-Remaining'])
+                    self.rate_limit_reset = int(response.headers.get('X-RateLimit-Reset', 0))
+                    
+                # Handle rate limiting
+                if response.status_code == 403 and self.rate_limit_remaining == 0:
+                    reset_time = datetime.fromtimestamp(self.rate_limit_reset)
+                    wait_time = (reset_time - datetime.now()).total_seconds() + 60
+                    print(f"⏰ Rate limit exceeded. Waiting {wait_time:.0f} seconds until {reset_time}...")
+                    time.sleep(wait_time)
+                    return self._make_github_request(url, accept_header, max_retries)
+                    
+                return response
+                
+            except (SSLError, ConnectionError, Timeout) as e:
+                if attempt < max_retries:
+                    wait_time = (2 ** attempt) + 1  # Exponential backoff: 2, 3, 5 seconds
+                    print(f"🔄 Network error (attempt {attempt + 1}/{max_retries + 1}): {type(e).__name__}")
+                    print(f"   Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print(f"❌ Network error after {max_retries + 1} attempts: {e}")
+                    raise
+            except RequestException as e:
+                print(f"❌ Request error: {e}")
+                raise
+                
         return response
     
     def get_branches(self, repository: str) -> List[str]:
@@ -272,7 +291,14 @@ class HistoricalCommitSeeder:
             try:
                 # Analyze the commit
                 print(f"  🔍 Analyzing commit {sha[:8]}: {commit['commit']['message'][:50]}...")
-                analysis = await self.commit_analyzer.analyze_commit_diff(commit_data)
+                
+                # Choose analysis method based on configuration
+                if self.analysis_method == "hours":
+                    analysis = await self.commit_analyzer.analyze_commit_hours_only(commit_data)
+                elif self.analysis_method == "impact":
+                    analysis = await self.commit_analyzer.analyze_commit_impact_only(commit_data)
+                else:  # both
+                    analysis = await self.commit_analyzer.analyze_commit_diff(commit_data)
                 
                 if analysis and not analysis.get('error'):
                     # Merge original commit data with analysis results
@@ -324,7 +350,20 @@ class HistoricalCommitSeeder:
             "average_complexity": round(avg_complexity, 1),
             "total_impact_score": round(total_impact_score, 1),  # NEW: Total impact
             "average_impact": round(avg_impact, 1),  # NEW: Average impact
-            "analyses": analyses
+            "analyses": analyses,
+            "commit_details": [
+                {
+                    "sha": commit['sha'],
+                    "short_sha": commit['sha'][:8],
+                    "message": commit['commit']['message'],
+                    "timestamp": commit['commit']['author']['date'],
+                    "url": f"https://github.com/{repository}/commit/{commit['sha']}",
+                    "author": {
+                        "name": commit['commit']['author']['name'],
+                        "email": commit['commit']['author']['email']
+                    }
+                } for commit in commits
+            ]
         }
     
     async def analyze_daily_batch(self, repository: str, author_email: str, date: datetime, commits: List[dict]) -> Dict:
@@ -419,7 +458,23 @@ class HistoricalCommitSeeder:
             "average_impact": 0,
             "analyses": [],  # No individual analyses in daily mode
             "daily_analysis": daily_result,
-            "commit_summaries": commit_summaries  # Include commit summaries for storage
+            "commit_summaries": commit_summaries,  # Include commit summaries for storage
+            "commit_details": [
+                {
+                    "sha": commit['sha'],
+                    "short_sha": commit['sha'][:8],
+                    "message": commit['commit']['message'],
+                    "timestamp": commit['commit']['author']['date'],
+                    "url": f"https://github.com/{repository}/commit/{commit['sha']}",
+                    "author": {
+                        "name": commit['commit']['author']['name'],
+                        "email": commit['commit']['author']['email']
+                    },
+                    "files_changed": commit_summaries[i].get("files_changed", []) if i < len(commit_summaries) else [],
+                    "additions": commit_summaries[i].get("additions", 0) if i < len(commit_summaries) else 0,
+                    "deletions": commit_summaries[i].get("deletions", 0) if i < len(commit_summaries) else 0
+                } for i, commit in enumerate(commits)
+            ]
         }
     
     async def seed_repository(self, repository: str, days: int = 30, branches: Optional[List[str]] = None, 
@@ -742,6 +797,20 @@ async def main():
         type=str,
         help="Output file for results (JSON format)"
     )
+    parser.add_argument(
+        "--analysis-mode",
+        type=str,
+        choices=["individual", "daily"],
+        default="individual",
+        help="Analysis granularity: individual (per commit) or daily (batch per day)"
+    )
+    parser.add_argument(
+        "--scoring-method",
+        type=str,
+        choices=["hours", "impact", "both"],
+        default="both",
+        help="Scoring method: hours (time estimation), impact (business value), or both"
+    )
     
     args = parser.parse_args()
     
@@ -758,10 +827,23 @@ async def main():
         sys.exit(1)
     
     # Create seeder instance
-    seeder = HistoricalCommitSeeder(github_token=github_token, model=args.model)
+    seeder = HistoricalCommitSeeder(github_token=github_token, model=args.model, analysis_method=args.scoring_method)
     
-    # Enable daily batch analysis (analyzing commits per day instead of individually)
-    seeder.set_daily_analysis_mode(True)
+    # Set analysis granularity and scoring method
+    if args.analysis_mode == "daily":
+        seeder.set_daily_analysis_mode(True)
+        print(f"🔬 Using daily batch analysis mode")
+    else:  # individual
+        seeder.set_daily_analysis_mode(False)
+        print(f"🔬 Using individual commit analysis mode")
+    
+    # Display scoring method
+    if args.scoring_method == "hours":
+        print(f"⏱️  Scoring: Hours estimation only")
+    elif args.scoring_method == "impact":
+        print(f"📊 Scoring: Impact points only")
+    else:  # both
+        print(f"🔄 Scoring: Both hours estimation and impact points")
     
     try:
         # Run the seeding process
@@ -801,9 +883,45 @@ async def main():
         
         # Save results to file if requested
         if args.output:
-            with open(args.output, 'w') as f:
-                json.dump(results, f, indent=2)
-            print(f"\n💾 Results saved to {args.output}")
+            # Generate dynamic filename if args.output is "auto"
+            if args.output == "auto":
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                repo_name = args.repo.replace("/", "_").replace("-", "_")
+                branch_suffix = ""
+                if args.branches:
+                    branch_name = args.branches[0].replace("/", "_").replace("-", "_")
+                    branch_suffix = f"_{branch_name}"
+                elif args.single_branch:
+                    branch_suffix = "_main"
+                else:
+                    branch_suffix = "_all_branches"
+                
+                filename = f"github_analysis_{repo_name}{branch_suffix}_{args.days}days_{timestamp}.json"
+            else:
+                filename = args.output
+            
+            # Add metadata for import
+            results['analysis_metadata'] = {
+                'generated_at': datetime.now(timezone.utc).isoformat(),
+                'model_used': args.model or 'gpt-4o-mini',
+                'analysis_version': '2.0',
+                'script_version': '1.0',
+                'github_seeding_tool': 'historical_commit_seeder',
+                'export_format_version': '1.0',
+                'dry_run': args.dry_run,
+                'filename': filename,
+                'command_args': {
+                    'repository': args.repo,
+                    'days': args.days,
+                    'branches': args.branches,
+                    'single_branch': args.single_branch
+                }
+            }
+            
+            with open(filename, 'w') as f:
+                json.dump(results, f, indent=2, default=str)
+            print(f"\n💾 Results saved to {filename}")
+            print(f"📊 Export contains {len(results['summary']['daily_summaries'])} daily summaries ready for import")
     
     except KeyboardInterrupt:
         print("\n⚠️  Seeding interrupted by user")
