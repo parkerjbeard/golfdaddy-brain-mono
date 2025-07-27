@@ -70,6 +70,11 @@ class UserRepository:
                 self._client.table(self._table).insert(user_dict).execute
             )
             
+            # Check if response is None (connection/client issue)
+            if response is None:
+                logger.error("Supabase client returned None response when creating user profile")
+                raise DatabaseError("Database connection issue when creating user profile")
+            
             self._handle_supabase_error(response, "Failed to create user profile")
             if response.data:
                 logger.info(f"Successfully created user profile for ID: {response.data[0]['id']}")
@@ -137,6 +142,12 @@ class UserRepository:
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.from_(self._table).select("*").eq("email", email).maybe_single().execute
             )
+            
+            # Check if response is None (connection/client issue)
+            if response is None:
+                logger.error(f"Supabase client returned None response for email {email}")
+                raise DatabaseError(f"Database connection issue when fetching user by email {email}")
+                
             if response.data:
                 return User(**response.data)
             elif response.status_code == 406 or (not response.data and not response.error):
@@ -157,6 +168,12 @@ class UserRepository:
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("github_username", github_username).maybe_single().execute
             )
+            
+            # Check if response is None (connection/client issue)
+            if response is None:
+                logger.error(f"Supabase client returned None response for GitHub username {github_username}")
+                raise DatabaseError(f"Database connection issue when fetching user by GitHub username {github_username}")
+                
             if response.data:
                 return User(**response.data)
             elif response.status_code == 406 or (not response.data and not response.error):

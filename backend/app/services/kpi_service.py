@@ -139,10 +139,10 @@ class KpiService:
         """
         # Fetch users (e.g., developers). Adjust role or fetching logic as needed.
         # Consider if this should fetch users managed by a specific manager if auth context is available.
-        # For simplicity, fetching all users with DEVELOPER role.
+        # For simplicity, fetching all users with EMPLOYEE role.
         try:
             # Assuming user_repo is UserRepository instance
-            relevant_users: List[User] = await self.user_repo.list_users_by_role(UserRole.DEVELOPER)
+            relevant_users: List[User] = await self.user_repo.list_users_by_role(UserRole.EMPLOYEE)
             if not relevant_users:
                 logger.info("No users found for bulk widget summaries.")
                 return []
