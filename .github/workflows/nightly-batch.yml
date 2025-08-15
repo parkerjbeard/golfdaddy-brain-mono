@@ -1,0 +1,14 @@
+name: Nightly AI Batch
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger nightly batch endpoint
+        run: |
+          curl -fsSL -H "X-API-Key: ${{ secrets.CRON_API_KEY }}" \
+            ${{ secrets.NIGHTLY_BATCH_URL }}
