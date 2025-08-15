@@ -195,7 +195,7 @@ Results will be saved to: `benchmark_results/benchmark_{self.current_benchmark_i
         # Ask for repository
         repo_name = Prompt.ask(
             "Enter repository name",
-            default=f"{self.config['github_username']}/{self.config['test_repo']}"
+            default="GolfDaddy-game/unity-game"
         )
         
         # Fetch commits

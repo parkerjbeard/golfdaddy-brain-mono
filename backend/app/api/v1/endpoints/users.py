@@ -1,20 +1,20 @@
-from fastapi import APIRouter, Depends, Query, status
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, EmailStr
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from app.models.user import User, UserRole  # Pydantic model for response
-from app.repositories.user_repository import UserRepository
-from app.services.user_service import UserService
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, EmailStr
 
 # Removing this non-existent import
 # from app.services.auth_service import get_current_active_user
-from app.auth.dependencies import get_current_user, get_admin_user
+from app.auth.dependencies import get_admin_user, get_current_user
 from app.core.exceptions import (
-    ResourceNotFoundError,
-    PermissionDeniedError,
     DatabaseError,
+    PermissionDeniedError,
+    ResourceNotFoundError,
 )
+from app.models.user import User, UserRole  # Pydantic model for response
+from app.repositories.user_repository import UserRepository
+from app.services.user_service import UserService
 
 router = APIRouter()
 
@@ -56,9 +56,7 @@ def get_user_service() -> UserService:
 
 @router.get("", response_model=List[User])
 async def list_users(
-    role: Optional[UserRole] = Query(
-        None, description="Filter users by role (e.g., DEVELOPER, MANAGER)"
-    ),
+    role: Optional[UserRole] = Query(None, description="Filter users by role (e.g., DEVELOPER, MANAGER)"),
     current_user: User = Depends(get_current_user),  # Require authentication
     user_repo: UserRepository = Depends(get_user_repository),
 ):
@@ -81,9 +79,7 @@ async def list_users(
         users = result[0]
 
     if not users:
-        return (
-            []
-        )  # Return empty list if no users found, rather than 404 for a list endpoint
+        return []  # Return empty list if no users found, rather than 404 for a list endpoint
     return users
 
 

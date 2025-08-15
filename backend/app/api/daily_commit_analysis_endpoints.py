@@ -20,24 +20,22 @@ async def get_user_analysis_history(
     start_date: date = Query(..., description="Start date for analysis history"),
     end_date: date = Query(..., description="End date for analysis history"),
     current_user: User = Depends(get_current_user),
-    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService)
+    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService),
 ):
     """Get daily commit analysis history for a user within a date range"""
-    
+
     # Users can only access their own data unless they're admin
     if current_user.id != user_id and current_user.role != "ADMIN":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: Can only view your own analysis history"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Can only view your own analysis history"
         )
-    
+
     try:
         analyses = await service.get_user_analysis_history(user_id, start_date, end_date)
         return analyses
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving analysis history: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving analysis history: {str(e)}"
         )
 
 
@@ -46,24 +44,22 @@ async def get_analysis_for_date(
     user_id: UUID,
     analysis_date: date,
     current_user: User = Depends(get_current_user),
-    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService)
+    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService),
 ):
     """Get daily commit analysis for a specific user and date"""
-    
+
     # Users can only access their own data unless they're admin
     if current_user.id != user_id and current_user.role != "ADMIN":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: Can only view your own analysis"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Can only view your own analysis"
         )
-    
+
     try:
         analysis = await service.repository.get_by_user_and_date(user_id, analysis_date)
         return analysis
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving analysis: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving analysis: {str(e)}"
         )
 
 
@@ -72,7 +68,7 @@ async def get_my_analysis_history(
     start_date: date = Query(..., description="Start date for analysis history"),
     end_date: date = Query(..., description="End date for analysis history"),
     current_user: User = Depends(get_current_user),
-    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService)
+    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService),
 ):
     """Get daily commit analysis history for the current user"""
     try:
@@ -80,15 +76,14 @@ async def get_my_analysis_history(
         return analyses
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving analysis history: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving analysis history: {str(e)}"
         )
 
 
 @router.get("/me/current-week", response_model=List[DailyCommitAnalysis])
 async def get_my_current_week_analysis(
     current_user: User = Depends(get_current_user),
-    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService)
+    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService),
 ):
     """Get daily commit analysis for the current user's current week"""
     try:
@@ -96,20 +91,19 @@ async def get_my_current_week_analysis(
         today = date.today()
         start_of_week = today - timedelta(days=today.weekday())  # Monday
         end_of_week = start_of_week + timedelta(days=6)  # Sunday
-        
+
         analyses = await service.get_user_analysis_history(current_user.id, start_of_week, end_of_week)
         return analyses
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving weekly analysis: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving weekly analysis: {str(e)}"
         )
 
 
 @router.get("/me/today", response_model=Optional[DailyCommitAnalysis])
 async def get_my_today_analysis(
     current_user: User = Depends(get_current_user),
-    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService)
+    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService),
 ):
     """Get daily commit analysis for the current user's today"""
     try:
@@ -118,8 +112,7 @@ async def get_my_today_analysis(
         return analysis
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving today's analysis: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving today's analysis: {str(e)}"
         )
 
 
@@ -128,61 +121,48 @@ async def trigger_manual_analysis(
     user_id: UUID,
     analysis_date: date = Query(..., description="Date to analyze"),
     current_user: User = Depends(get_current_user),
-    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService)
+    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService),
 ):
     """Manually trigger daily analysis for a specific user and date"""
-    
+
     # Only admins or the user themselves can trigger analysis
     if current_user.id != user_id and current_user.role != "ADMIN":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: Can only trigger analysis for yourself"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Can only trigger analysis for yourself"
         )
-    
+
     try:
         analysis = await service.analyze_for_date(user_id, analysis_date)
         if analysis:
             return {
                 "message": "Analysis completed successfully",
                 "analysis_id": analysis.id,
-                "total_hours": analysis.total_estimated_hours
+                "total_hours": analysis.total_estimated_hours,
             }
         else:
-            return {
-                "message": "No commits found for analysis on this date",
-                "analysis_id": None,
-                "total_hours": 0
-            }
+            return {"message": "No commits found for analysis on this date", "analysis_id": None, "total_hours": 0}
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error triggering analysis: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error triggering analysis: {str(e)}"
         )
 
 
 @router.post("/admin/batch-analysis")
 async def trigger_batch_analysis(
     analysis_date: date = Query(..., description="Date to analyze for all users"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Manually trigger batch analysis for all users on a specific date (admin only)"""
-    
+
     if current_user.role != "ADMIN":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: Admin privileges required"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Admin privileges required")
+
     try:
         results = await scheduled_tasks.run_analysis_for_date(datetime.combine(analysis_date, datetime.min.time()))
-        return {
-            "message": "Batch analysis completed",
-            "results": results
-        }
+        return {"message": "Batch analysis completed", "results": results}
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error running batch analysis: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error running batch analysis: {str(e)}"
         )
 
 
@@ -191,16 +171,13 @@ async def get_analysis_stats(
     start_date: date = Query(..., description="Start date for stats"),
     end_date: date = Query(..., description="End date for stats"),
     current_user: User = Depends(get_current_user),
-    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService)
+    service: DailyCommitAnalysisService = Depends(DailyCommitAnalysisService),
 ):
     """Get analysis statistics for admin dashboard"""
-    
+
     if current_user.role != "ADMIN":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: Admin privileges required"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Admin privileges required")
+
     try:
         # This would need to be implemented in the service
         # For now, return a placeholder
@@ -209,13 +186,9 @@ async def get_analysis_stats(
             "total_hours_estimated": 0,
             "average_hours_per_day": 0,
             "users_analyzed": 0,
-            "date_range": {
-                "start": start_date.isoformat(),
-                "end": end_date.isoformat()
-            }
+            "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
         }
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving stats: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving stats: {str(e)}"
         )

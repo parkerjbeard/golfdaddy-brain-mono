@@ -4,7 +4,7 @@ import os
 import subprocess
 import logging
 import asyncio
-from doc_agent.client import AutoDocClient
+from doc_agent.client_v2 import AutoDocClientV2
 
 logging.basicConfig(level=logging.INFO)
 
@@ -30,12 +30,22 @@ async def main() -> None:
     slack_webhook = os.environ.get("SLACK_WEBHOOK")
     slack_channel = os.environ.get("SLACK_CHANNEL")
 
-    client = AutoDocClient(openai_key, github_token, docs_repo, slack_webhook, slack_channel)
+    client = AutoDocClientV2(
+        openai_api_key=openai_key,
+        github_token=github_token,
+        docs_repo=docs_repo,
+        slack_webhook=slack_webhook,
+        slack_channel=slack_channel,
+        enable_semantic_search=True,
+        use_github_app=True,
+    )
 
-    diff = client.get_commit_diff(repo_dir, commit_hash)
+    diff = subprocess.check_output([
+        "git", "-C", repo_dir, "show", commit_hash
+    ], text=True)
     
     # Use context-aware analysis if available
-    if hasattr(client, 'analyze_diff_with_context') and client.enable_semantic_search:
+    if client.enable_semantic_search:
         from app.core.database import get_db
         async with get_db() as db:
             patch = await client.analyze_diff_with_context(diff, repo_dir, commit_hash, db)
@@ -52,16 +62,16 @@ async def main() -> None:
             logging.info(f"Documentation approval request sent to Slack (ID: {approval_id})")
         else:
             logging.warning("Failed to send Slack approval request, creating PR directly")
-            url = client.apply_patch(patch, commit_hash)
-            if url:
-                logging.info("Created documentation PR: %s", url)
+            pr_data = await client.create_pr_with_check_run(patch, commit_hash)
+            if pr_data and pr_data.get("pr_url"):
+                logging.info("Created documentation PR: %s", pr_data["pr_url"])
             else:
                 logging.error("Failed to create documentation PR")
     else:
-        # No Slack configured, create PR directly
-        url = client.apply_patch(patch, commit_hash)
-        if url:
-            logging.info("Created documentation PR: %s", url)
+        # No Slack configured, create PR directly via GitHub App API
+        pr_data = await client.create_pr_with_check_run(patch, commit_hash)
+        if pr_data and pr_data.get("pr_url"):
+            logging.info("Created documentation PR: %s", pr_data["pr_url"])
         else:
             logging.error("Failed to create documentation PR")
 

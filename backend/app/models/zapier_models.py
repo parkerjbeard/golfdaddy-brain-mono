@@ -1,9 +1,10 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, JSON, Text, ForeignKey, Enum
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
-import uuid
-import enum
 
 from app.db.database import Base
 
@@ -31,7 +32,7 @@ class EmployeeStatus(str, enum.Enum):
 
 class SocialMediaMetric(Base):
     __tablename__ = "social_media_metrics"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     platform = Column(String(50), nullable=False, index=True)
@@ -50,7 +51,7 @@ class SocialMediaMetric(Base):
 
 class UserFeedback(Base):
     __tablename__ = "user_feedback"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     csat_score = Column(Integer, nullable=False)  # 1-5 scale
@@ -69,7 +70,7 @@ class UserFeedback(Base):
 
 class Objective(Base):
     __tablename__ = "objectives"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     title = Column(String(255), nullable=False)
@@ -90,7 +91,7 @@ class Objective(Base):
 
 class Win(Base):
     __tablename__ = "wins"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     title = Column(String(255), nullable=False)
@@ -101,20 +102,20 @@ class Win(Base):
     ai_prompt = Column(Text)  # The prompt used to generate the win if AI-generated
     team_members = Column(JSON)  # Array of team members involved
     metrics = Column(JSON)  # Associated metrics/KPIs
-    related_objective_id = Column(UUID(as_uuid=True), ForeignKey('objectives.id'))
+    related_objective_id = Column(UUID(as_uuid=True), ForeignKey("objectives.id"))
     visibility = Column(String(50), default="public")  # public, team, private
     tags = Column(JSON)  # Array of tags
     zap_run_id = Column(String(255))
     raw_data = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
+
     # Relationship
     related_objective = relationship("Objective", backref="wins")
 
 
 class Analytics(Base):
     __tablename__ = "analytics"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     metric_name = Column(String(255), nullable=False, index=True)
@@ -136,7 +137,7 @@ class Analytics(Base):
 
 class FormSubmission(Base):
     __tablename__ = "form_submissions"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     form_id = Column(String(255), nullable=False, index=True)
@@ -159,7 +160,7 @@ class FormSubmission(Base):
 
 class Employee(Base):
     __tablename__ = "employees"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     employee_id = Column(String(100), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=False)
@@ -190,8 +191,8 @@ class Employee(Base):
 from sqlalchemy import Index
 
 # Composite indexes for common query patterns
-Index('idx_social_media_platform_timestamp', SocialMediaMetric.platform, SocialMediaMetric.timestamp)
-Index('idx_feedback_score_timestamp', UserFeedback.csat_score, UserFeedback.timestamp)
-Index('idx_analytics_category_metric', Analytics.category, Analytics.metric_name)
-Index('idx_form_type_status', FormSubmission.form_type, FormSubmission.status)
-Index('idx_employee_dept_status', Employee.department, Employee.status)
+Index("idx_social_media_platform_timestamp", SocialMediaMetric.platform, SocialMediaMetric.timestamp)
+Index("idx_feedback_score_timestamp", UserFeedback.csat_score, UserFeedback.timestamp)
+Index("idx_analytics_category_metric", Analytics.category, Analytics.metric_name)
+Index("idx_form_type_status", FormSubmission.form_type, FormSubmission.status)
+Index("idx_employee_dept_status", Employee.department, Employee.status)

@@ -7,7 +7,7 @@ information from log messages before they are written to any log handler.
 
 import logging
 import re
-from typing import List, Tuple, Pattern, Optional
+from typing import List, Optional, Pattern, Tuple
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -41,7 +41,7 @@ class SensitiveDataFilter(logging.Filter):
         ),
         # Standalone Bearer tokens
         (
-            re.compile(r'\b(Bearer\s+[A-Za-z0-9\-_\.]+)', re.IGNORECASE),
+            re.compile(r"\b(Bearer\s+[A-Za-z0-9\-_\.]+)", re.IGNORECASE),
             "Bearer REDACTED",
         ),
         # Password fields
@@ -53,7 +53,7 @@ class SensitiveDataFilter(logging.Filter):
         # Generic key patterns (catches various key formats)
         (
             re.compile(
-                r'([a-zA-Z0-9_-]*(?:key|token|secret|password)[a-zA-Z0-9_-]*)'
+                r"([a-zA-Z0-9_-]*(?:key|token|secret|password)[a-zA-Z0-9_-]*)"
                 r'\s*[:=]\s*["\']?([a-zA-Z0-9_\-\.\/\+]{10,})["\']?',
                 re.IGNORECASE,
             ),
@@ -129,6 +129,7 @@ class SensitiveDataFilter(logging.Filter):
         if record.exc_info:
             # Format the exception to get the full traceback
             import traceback
+
             if record.exc_info[0] is not None:
                 exc_lines = traceback.format_exception(*record.exc_info)
                 sanitized_lines = []
@@ -138,7 +139,7 @@ class SensitiveDataFilter(logging.Filter):
                         sanitized_line = pattern.sub(replacement, sanitized_line)
                     sanitized_lines.append(sanitized_line)
                 # Store sanitized exception text
-                record.exc_text = ''.join(sanitized_lines).strip()
+                record.exc_text = "".join(sanitized_lines).strip()
 
         return True
 

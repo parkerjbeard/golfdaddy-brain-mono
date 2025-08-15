@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
 import asyncio
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
-from app.models.user import User
-from app.schemas.user_preferences import UserPreferencesUpdate, UserPreferencesResponse, NotificationPreferences
-from app.repositories.user_repository import UserRepository
 from app.core.database import get_db
-from sqlalchemy.orm import Session
-import logging
+from app.models.user import User
+from app.repositories.user_repository import UserRepository
+from app.schemas.user_preferences import NotificationPreferences, UserPreferencesResponse, UserPreferencesUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field, HttpUrl, EmailStr
-from typing import Optional, Dict, Any, List
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, EmailStr, Field, HttpUrl
+
 
 class CommitPayload(BaseModel):
     commit_hash: str = Field(..., description="Unique commit SHA")
@@ -18,13 +20,13 @@ class CommitPayload(BaseModel):
     additions: Optional[int] = Field(None, description="Number of additions in the commit")
     deletions: Optional[int] = Field(None, description="Number of deletions in the commit")
     parent_commit: Optional[str] = Field(None, description="SHA of the parent commit")
-    
+
     # Additional fields for compatibility
     repository: Optional[str] = Field(None, description="Full repository name in owner/repo format")
     diff_data: Optional[str] = Field(None, description="Alias for commit_diff")
-    
+
     class Config:
-        from_attributes = True # Replaced orm_mode
+        from_attributes = True  # Replaced orm_mode
         str_strip_whitespace = True
 
 
@@ -37,48 +39,52 @@ class CommitFileData(BaseModel):
     patch: Optional[str] = None
 
     class Config:
-        from_attributes = True # Replaced orm_mode
+        from_attributes = True  # Replaced orm_mode
 
-        
+
 class CommitDetail(BaseModel):
     commit_hash: str
     repository: str
     files_changed: List[str]
     additions: int
     deletions: int
-    retrieved_at: str # Consider changing to datetime if appropriate
+    retrieved_at: str  # Consider changing to datetime if appropriate
     author: Dict[str, Any]
     committer: Dict[str, Any]
     message: str
-    url: str # Consider HttpUrl
+    url: str  # Consider HttpUrl
     verification: Dict[str, Any]
     files: List[CommitFileData]
 
     class Config:
-        from_attributes = True # Replaced orm_mode
+        from_attributes = True  # Replaced orm_mode
+
 
 class GitHubRepo(BaseModel):
     id: int
-    name: str # e.g., "octocat/Hello-World"
+    name: str  # e.g., "octocat/Hello-World"
     url: HttpUrl
 
     class Config:
-        from_attributes = True # Allows compatibility if needed later, good practice
+        from_attributes = True  # Allows compatibility if needed later, good practice
+
 
 class GitHubUser(BaseModel):
-    login: str # Username
+    login: str  # Username
     name: Optional[str] = None
     email: Optional[EmailStr] = None
 
     class Config:
         from_attributes = True
 
+
 class Commit(BaseModel):
-    id: str # SHA
+    id: str  # SHA
     distinct: bool
 
     class Config:
         from_attributes = True
+
 
 class PushEvent(BaseModel):
     ref: Optional[str] = None

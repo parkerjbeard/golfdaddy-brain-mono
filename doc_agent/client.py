@@ -154,10 +154,24 @@ class AutoDocClient:
         }
 
         async def _call_openai() -> Any:
+            if str(self.openai_model).startswith("gpt-5"):
+                return await self.openai_client.responses.create(
+                    model=self.openai_model,
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": diff}
+                    ]
+                )
             return await self.openai_client.chat.completions.create(**api_params)
 
         try:
             response = await _async_retry(_call_openai, exceptions=(OpenAIError,))
+            if str(self.openai_model).startswith("gpt-5"):
+                content = getattr(response, "output_text", None)
+                if not content and hasattr(response, "choices") and response.choices:
+                    content = response.choices[0].message.content
+                return (content or "").strip()
             if response.choices and response.choices[0].message:
                 content = response.choices[0].message.content
                 return content.strip() if content else ""
@@ -355,20 +369,37 @@ class AutoDocClient:
             return ""
         
         try:
-            completion = await _async_retry(
-                self.openai_client.chat.completions.create,
-                model=settings.DOC_AGENT_OPENAI_MODEL,  # Use settings
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert technical writer who understands code changes and creates precise documentation updates. You have deep knowledge of the repository structure and conventions."
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,
-                max_tokens=2000,
-            )
-            content = completion.choices[0].message.content
+            if str(settings.DOC_AGENT_OPENAI_MODEL).startswith("gpt-5"):
+                completion = await _async_retry(
+                    self.openai_client.responses.create,
+                    model=settings.DOC_AGENT_OPENAI_MODEL,
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert technical writer who understands code changes and creates precise documentation updates. You have deep knowledge of the repository structure and conventions."
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                content = getattr(completion, "output_text", None)
+                if not content and hasattr(completion, "choices") and completion.choices:
+                    content = completion.choices[0].message.content
+            else:
+                completion = await _async_retry(
+                    self.openai_client.chat.completions.create,
+                    model=settings.DOC_AGENT_OPENAI_MODEL,  # Use settings
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert technical writer who understands code changes and creates precise documentation updates. You have deep knowledge of the repository structure and conventions."
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=2000,
+                )
+                content = completion.choices[0].message.content
             if content:
                 return content.strip() if content else ""
             logger.error("OpenAI response did not contain expected content.")

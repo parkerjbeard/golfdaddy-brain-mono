@@ -1,13 +1,16 @@
 """
 Pydantic schemas for semantic search API.
 """
-from typing import Optional, List, Dict, Any
+
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
 class SearchRequest(BaseModel):
     """Request model for document search."""
+
     query: str = Field(..., description="Search query in natural language")
     repository: Optional[str] = Field(None, description="Filter by repository")
     doc_type: Optional[str] = Field(None, description="Filter by document type")
@@ -17,6 +20,7 @@ class SearchRequest(BaseModel):
 
 class SearchResult(BaseModel):
     """Individual search result."""
+
     id: str
     title: str
     content: str
@@ -30,6 +34,7 @@ class SearchResult(BaseModel):
 
 class SearchResponse(BaseModel):
     """Response model for document search."""
+
     query: str
     repository: Optional[str]
     results: List[SearchResult]
@@ -40,6 +45,7 @@ class SearchResponse(BaseModel):
 
 class DocumentationGap(BaseModel):
     """Model for documentation gap information."""
+
     file_path: str
     module: Optional[str]
     classes: Optional[int] = 0
@@ -49,6 +55,7 @@ class DocumentationGap(BaseModel):
 
 class PoorlyDocumentedFile(BaseModel):
     """Model for poorly documented file."""
+
     file_path: str
     best_match: str
     match_score: float
@@ -57,6 +64,7 @@ class PoorlyDocumentedFile(BaseModel):
 
 class DocumentationSuggestion(BaseModel):
     """Model for documentation suggestion."""
+
     file_path: str
     priority: str = Field(..., pattern="^(high|medium|low)$")
     suggested_sections: List[str]
@@ -64,6 +72,7 @@ class DocumentationSuggestion(BaseModel):
 
 class CoverageSummary(BaseModel):
     """Model for coverage summary."""
+
     total_files: int
     documented_files: int
     coverage_percentage: float = Field(..., ge=0.0, le=100.0)
@@ -71,6 +80,7 @@ class CoverageSummary(BaseModel):
 
 class DocumentationGapsResponse(BaseModel):
     """Response model for documentation gaps analysis."""
+
     undocumented_files: List[DocumentationGap]
     poorly_documented_files: List[PoorlyDocumentedFile]
     suggested_documentation: List[DocumentationSuggestion]
@@ -79,6 +89,7 @@ class DocumentationGapsResponse(BaseModel):
 
 class GraphNode(BaseModel):
     """Model for graph node."""
+
     id: str
     label: str
     type: str
@@ -87,6 +98,7 @@ class GraphNode(BaseModel):
 
 class GraphEdge(BaseModel):
     """Model for graph edge."""
+
     source: str
     target: str
     weight: float
@@ -95,6 +107,7 @@ class GraphEdge(BaseModel):
 
 class GraphStatistics(BaseModel):
     """Model for graph statistics."""
+
     total_nodes: int
     total_edges: int
     average_connections: float
@@ -102,6 +115,7 @@ class GraphStatistics(BaseModel):
 
 class DocumentGraphResponse(BaseModel):
     """Response model for documentation graph."""
+
     nodes: List[GraphNode]
     edges: List[GraphEdge]
     statistics: GraphStatistics
@@ -109,6 +123,7 @@ class DocumentGraphResponse(BaseModel):
 
 class QualityMetrics(BaseModel):
     """Model for document quality metrics."""
+
     length: int
     has_examples: bool
     has_links: bool
@@ -117,6 +132,7 @@ class QualityMetrics(BaseModel):
 
 class ImprovementItem(BaseModel):
     """Model for improvement suggestion item."""
+
     type: str
     priority: str = Field(..., pattern="^(high|medium|low)$")
     description: str
@@ -124,6 +140,7 @@ class ImprovementItem(BaseModel):
 
 class RelatedUpdate(BaseModel):
     """Model for related update suggestion."""
+
     commit: str
     date: str
     file: str
@@ -132,6 +149,7 @@ class RelatedUpdate(BaseModel):
 
 class ImprovementSuggestionsResponse(BaseModel):
     """Response model for improvement suggestions."""
+
     document_id: str
     title: str
     current_quality: QualityMetrics
@@ -141,6 +159,7 @@ class ImprovementSuggestionsResponse(BaseModel):
 
 class CoverageRecommendation(BaseModel):
     """Model for coverage recommendation."""
+
     type: str
     message: str
     priority: str = Field(..., pattern="^(high|medium|low)$")
@@ -148,6 +167,7 @@ class CoverageRecommendation(BaseModel):
 
 class CoverageResponse(BaseModel):
     """Response model for documentation coverage."""
+
     repository: str
     total_files: int
     documented_files: int

@@ -37,6 +37,7 @@ class PatchedCommitAnalyzer(CommitAnalyzer):
             "o3-mini-", 
             "o4-mini-",
             "o3-",
+            "gpt-5",
             "text-embedding-",
             "-e-",
             "text-search-"
@@ -137,11 +138,27 @@ class PatchedCommitAnalyzer(CommitAnalyzer):
             print(f"🔧 Temperature included: {'temperature' in api_params}")
             print(f"🔧 Client type: {type(self.client)}")
 
-            # Make API call to OpenAI
-            response = await self.client.chat.completions.create(**api_params)
+            # Make API call to OpenAI (Responses API for reasoning/GPT-5)
+            if is_reasoning:
+                resp = await self.client.responses.create(
+                    model=api_params["model"],
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {"role": "system", "content": api_params["messages"][0]["content"]},
+                        {"role": "user", "content": api_params["messages"][1]["content"]},
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                content_text = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
+                response_content = content_text
+            else:
+                response = await self.client.chat.completions.create(**api_params)
+                response_content = response.choices[0].message.content
             
             # Parse and enhance the response
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response_content)
             result.update({
                 "analyzed_at": datetime.now().isoformat(),
                 "commit_hash": commit_data.get("commit_hash"),

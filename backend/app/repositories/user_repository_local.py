@@ -2,18 +2,22 @@
 Local user repository for development that uses PostgreSQL instead of Supabase.
 This allows us to test without needing Supabase database access.
 """
+
 import asyncio
-from typing import List, Optional, Dict, Any
-from uuid import UUID
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-from app.models.user import User, UserRole
-from app.db.database import SessionLocal
 import logging
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
+from app.db.database import SessionLocal
+from app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
+
 
 class LocalUserRepository:
     def __init__(self):
@@ -42,7 +46,7 @@ class LocalUserRepository:
             personal_mastery=row.personal_mastery or {},
             last_login_at=row.last_login_at,
             is_active=row.is_active,
-            preferences=row.preferences or {}
+            preferences=row.preferences or {},
         )
 
     async def create_user(self, user_data: User) -> Optional[User]:
@@ -51,24 +55,25 @@ class LocalUserRepository:
         try:
             # Convert User model to dict for insertion
             user_dict = {
-                'id': str(user_data.id),
-                'email': user_data.email,
-                'name': user_data.name,
-                'slack_id': user_data.slack_id,
-                'team': user_data.team,
-                'role': user_data.role.value if isinstance(user_data.role, UserRole) else user_data.role,
-                'avatar_url': user_data.avatar_url,
-                'metadata': user_data.metadata,
-                'github_username': user_data.github_username,
-                'team_id': str(user_data.team_id) if user_data.team_id else None,
-                'reports_to_id': str(user_data.reports_to_id) if user_data.reports_to_id else None,
-                'personal_mastery': user_data.personal_mastery,
-                'is_active': user_data.is_active,
-                'preferences': user_data.preferences
+                "id": str(user_data.id),
+                "email": user_data.email,
+                "name": user_data.name,
+                "slack_id": user_data.slack_id,
+                "team": user_data.team,
+                "role": user_data.role.value if isinstance(user_data.role, UserRole) else user_data.role,
+                "avatar_url": user_data.avatar_url,
+                "metadata": user_data.metadata,
+                "github_username": user_data.github_username,
+                "team_id": str(user_data.team_id) if user_data.team_id else None,
+                "reports_to_id": str(user_data.reports_to_id) if user_data.reports_to_id else None,
+                "personal_mastery": user_data.personal_mastery,
+                "is_active": user_data.is_active,
+                "preferences": user_data.preferences,
             }
-            
+
             # Use raw SQL for simplicity
-            query = text("""
+            query = text(
+                """
                 INSERT INTO users (
                     id, email, name, slack_id, team, role, avatar_url, 
                     metadata, github_username, team_id, reports_to_id, 
@@ -78,18 +83,19 @@ class LocalUserRepository:
                     :metadata, :github_username, :team_id, :reports_to_id,
                     :personal_mastery, :is_active, :preferences
                 ) RETURNING *
-            """)
-            
+            """
+            )
+
             result = db.execute(query, user_dict)
             db.commit()
-            
+
             row = result.fetchone()
             if row:
                 logger.info(f"Successfully created user profile for ID: {row.id}")
                 return self._row_to_user(row)
             else:
                 raise DatabaseError("Failed to create user profile: No data returned.")
-                
+
         except Exception as e:
             db.rollback()
             logger.error(f"Error creating user profile: {e}", exc_info=True)
@@ -104,13 +110,13 @@ class LocalUserRepository:
             query = text("SELECT * FROM users WHERE id = :user_id")
             result = db.execute(query, {"user_id": str(user_id)})
             row = result.fetchone()
-            
+
             if row:
                 return self._row_to_user(row)
             else:
                 logger.info(f"User with ID {user_id} not found.")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error getting user by ID {user_id}: {e}", exc_info=True)
             raise DatabaseError(f"Error getting user by ID {user_id}: {str(e)}")
@@ -124,13 +130,13 @@ class LocalUserRepository:
             query = text("SELECT * FROM users WHERE email = :email")
             result = db.execute(query, {"email": email})
             row = result.fetchone()
-            
+
             if row:
                 return self._row_to_user(row)
             else:
                 logger.info(f"User with email {email} not found.")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error getting user by email {email}: {e}", exc_info=True)
             raise DatabaseError(f"Error getting user by email {email}: {str(e)}")
@@ -144,9 +150,9 @@ class LocalUserRepository:
             # Build SET clause dynamically
             set_clauses = []
             params = {"user_id": str(user_id)}
-            
+
             for key, value in update_data.items():
-                if key not in ['id', 'created_at']:  # Don't update these fields
+                if key not in ["id", "created_at"]:  # Don't update these fields
                     set_clauses.append(f"{key} = :{key}")
                     if isinstance(value, UUID):
                         params[key] = str(value)
@@ -154,27 +160,29 @@ class LocalUserRepository:
                         params[key] = value.value
                     else:
                         params[key] = value
-            
+
             if not set_clauses:
                 return await self.get_user_by_id(user_id)
-            
-            query = text(f"""
+
+            query = text(
+                f"""
                 UPDATE users 
                 SET {', '.join(set_clauses)}, updated_at = NOW()
                 WHERE id = :user_id
                 RETURNING *
-            """)
-            
+            """
+            )
+
             result = db.execute(query, params)
             db.commit()
-            
+
             row = result.fetchone()
             if row:
                 logger.info(f"Successfully updated user {user_id}")
                 return self._row_to_user(row)
             else:
                 return None
-                
+
         except Exception as e:
             db.rollback()
             logger.error(f"Error updating user {user_id}: {e}", exc_info=True)
@@ -184,6 +192,7 @@ class LocalUserRepository:
 
     async def get_all_users(self, limit: int = 100, offset: int = 0) -> List[User]:
         """Retrieves all users with pagination."""
+
         # Use asyncio.to_thread for blocking database operations
         def _get_users():
             db = self._get_db()
@@ -197,11 +206,12 @@ class LocalUserRepository:
                 raise DatabaseError(f"Error getting all users: {str(e)}")
             finally:
                 db.close()
-        
+
         return await asyncio.to_thread(_get_users)
 
     async def get_users_by_role(self, role: UserRole) -> List[User]:
         """Retrieves users by role."""
+
         def _get_users_by_role():
             db = self._get_db()
             try:
@@ -214,5 +224,5 @@ class LocalUserRepository:
                 raise DatabaseError(f"Error getting users by role {role}: {str(e)}")
             finally:
                 db.close()
-        
+
         return await asyncio.to_thread(_get_users_by_role)

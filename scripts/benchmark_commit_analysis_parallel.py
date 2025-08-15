@@ -97,7 +97,7 @@ class ParallelCommitAnalysisBenchmark:
             start_time = time.time()
             
             # Import commit analyzer directly for separate benchmarking
-            from backend.app.integrations.commit_analysis import CommitAnalyzer
+            from app.integrations.commit_analysis import CommitAnalyzer
             commit_analyzer = CommitAnalyzer()
             
             # Prepare analysis data in the format expected by CommitAnalyzer
@@ -349,7 +349,7 @@ Results will be saved to: `benchmark_results/benchmark_{self.current_benchmark_i
         
         repo_name = Prompt.ask(
             "Enter repository name",
-            default=f"{self.config['github_username']}/golfdaddy-brain-mono"
+            default="GolfDaddy-game/unity-game"
         )
         
         headers = {"Authorization": f"token {self.config['github_token']}"}

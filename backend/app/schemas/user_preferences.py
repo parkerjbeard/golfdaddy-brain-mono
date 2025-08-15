@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional
 from datetime import time
+from typing import Optional
 from zoneinfo import available_timezones
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class NotificationPreferences(BaseModel):

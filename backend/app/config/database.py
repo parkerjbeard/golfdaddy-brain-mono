@@ -1,11 +1,13 @@
-from supabase import create_client, Client
-from app.config.settings import settings
 import os
 from typing import Generator
+
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.config.settings import settings
+from supabase import Client, create_client
+
 # Initialize Supabase client
-supabase_url: str = str(settings.SUPABASE_URL) # Ensure URL is string
+supabase_url: str = str(settings.SUPABASE_URL)  # Ensure URL is string
 supabase_key: str = settings.SUPABASE_SERVICE_KEY
 
 # Check if settings were loaded correctly
@@ -21,15 +23,17 @@ supabase: Client = create_client(supabase_url, supabase_key)
 # if supabase_anon_key:
 #     supabase_anon = create_client(supabase_url, supabase_anon_key)
 
+
 def get_supabase_client() -> Client:
     """Dependency function to get the Supabase client."""
     return supabase
+
 
 def get_db() -> Generator[Client, None, None]:
     """
     Dependency function to get database client for FastAPI dependency injection.
     This is a wrapper around get_supabase_client that handles the client as a generator.
-    
+
     Yields:
         Client: The Supabase client instance for database operations.
     """
@@ -39,5 +43,6 @@ def get_db() -> Generator[Client, None, None]:
     finally:
         # No need to close the connection with Supabase
         pass
+
 
 engine = create_async_engine(settings.DATABASE_URL, echo=True)

@@ -1,13 +1,14 @@
-from typing import Dict, Any, Optional, List
-import requests
+import asyncio
 import json
+import logging
 import os
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import openai
+import requests
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
-import asyncio
-import logging
 
 from app.config.settings import settings
 from app.integrations.commit_analysis import CommitAnalyzer
@@ -15,9 +16,10 @@ from app.models.daily_report import ClarificationRequest, ClarificationStatus
 
 logger = logging.getLogger(__name__)
 
+
 class AIIntegration:
     """Integration with OpenAI API for various AI-powered tasks."""
-    
+
     def __init__(self):
         """Initialize the OpenAI integration with API key from settings."""
         self.api_key = settings.OPENAI_API_KEY
@@ -25,30 +27,27 @@ class AIIntegration:
             # In a production system, consider raising an error or having a clear fallback
             logger.error("OpenAI API key not configured in settings. AIIntegration may not function.")
             # raise ValueError("OpenAI API key not configured in settings") # Or handle gracefully
-            self.client = None # Ensure client is None if API key is missing
+            self.client = None  # Ensure client is None if API key is missing
         else:
             self.client = AsyncOpenAI(api_key=self.api_key)
-        
+
         self.model = settings.OPENAI_MODEL or "gpt-4-0125-preview"  # General purpose model
-        self.code_quality_model = settings.CODE_QUALITY_MODEL or self.model # Use specific or fallback to general
-        self.eod_analysis_model = settings.OPENAI_MODEL or self.model # Model for EOD analysis
-        
+        self.code_quality_model = settings.CODE_QUALITY_MODEL or self.model  # Use specific or fallback to general
+        self.eod_analysis_model = settings.OPENAI_MODEL or self.model  # Model for EOD analysis
+
         # Models that might have different parameter support (e.g., for temperature)
-        self.reasoning_models = [
-            "o3-mini-", 
-            "o4-mini-",
-            "text-embedding-",
-            "-e-",
-            "text-search-"
-        ]
-        
+        self.reasoning_models = ["o3-mini-", "o4-mini-", "gpt-5", "text-embedding-", "-e-", "text-search-"]
+
         # Initialize the commit analyzer (assuming it does not need the AI client itself for init)
         self.commit_analyzer = CommitAnalyzer()
-        logger.info(f"AIIntegration service initialized. General model: {self.model}, Code quality model: {self.code_quality_model}, EOD model: {self.eod_analysis_model}")
+        logger.info(
+            f"AIIntegration service initialized. General model: {self.model}, Code quality model: {self.code_quality_model}, EOD model: {self.eod_analysis_model}"
+        )
 
     def _is_reasoning_model(self, model_name: str) -> bool:
         """Check if the model is a reasoning model that might not support temperature or other params."""
-        if not model_name: return False # Should not happen with proper init
+        if not model_name:
+            return False  # Should not happen with proper init
         return any(prefix in model_name for prefix in self.reasoning_models)
 
     async def _make_openai_call(self, api_params: Dict[str, Any]) -> Optional[ChatCompletion]:
@@ -57,23 +56,52 @@ class AIIntegration:
             logger.error("OpenAI client not initialized. Cannot make API call.")
             return None
         try:
-            response = await self.client.chat.completions.create(**api_params)
-            return response
+            model_name = api_params.get("model", "")
+            if model_name and (model_name.startswith("gpt-5") or self._is_reasoning_model(model_name)):
+                # Convert messages to Responses API input
+                messages = api_params.get("messages", [])
+                response_format = api_params.get("response_format")
+                resp = await self.client.responses.create(
+                    model=model_name,
+                    input=[{"role": m.get("role"), "content": m.get("content")} for m in messages],
+                    response_format=response_format,
+                )
+                # Normalize to ChatCompletion-like object
+                content_text = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
+
+                class _Msg:
+                    def __init__(self, content: str):
+                        self.content = content
+
+                class _Choice:
+                    def __init__(self, content: str):
+                        self.message = _Msg(content)
+
+                class _Response:
+                    def __init__(self, content: str):
+                        self.choices = [_Choice(content)]
+
+                return _Response(content_text or "")
+            else:
+                response = await self.client.chat.completions.create(**api_params)
+                return response
         except openai.APIError as api_err:
             logger.error(f"OpenAI API Error: {api_err}", exc_info=True)
             # Potentially re-raise or return a specific error object/dict
-            raise # Re-raise for the caller to handle or convert to an app-specific exception
+            raise  # Re-raise for the caller to handle or convert to an app-specific exception
         except Exception as e:
             logger.error(f"Unexpected error during OpenAI API call: {e}", exc_info=True)
-            raise # Re-raise
+            raise  # Re-raise
 
     async def generate_development_task_content(
-        self, 
-        manager_name: str, 
-        development_area: str, 
+        self,
+        manager_name: str,
+        development_area: str,
         task_type: str,
         company_context: Optional[str] = None,
-        existing_skills: Optional[List[str]] = None
+        existing_skills: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Generates content for a manager development task using an AI model.
@@ -88,7 +116,7 @@ class AIIntegration:
                 "description": "Error: AI service not available.",
                 "learning_objectives": [],
                 "suggested_resources": [],
-                "success_metrics": []
+                "success_metrics": [],
             }
 
         prompt = (
@@ -108,41 +136,60 @@ class AIIntegration:
             "- 'success_metrics': A list of 2-4 clear metrics to evaluate the successful completion and impact of this task. These should be observable and, where possible, quantifiable.\n"
             "Ensure the entire output is a single, valid JSON object with only these keys."
         )
-        
+
         api_params = {
-            "model": self.model, # Use the general purpose model or a dedicated one if configured
+            "model": self.model,  # Use the general purpose model or a dedicated one if configured
             "messages": [
-                {"role": "system", "content": "You are an expert in leadership development and corporate training. Your goal is to create highly relevant and effective development tasks for managers."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are an expert in leadership development and corporate training. Your goal is to create highly relevant and effective development tasks for managers.",
+                },
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
         }
 
         try:
-            response = await self._make_openai_call(api_params)
-            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
-                raw_json_output = response.choices[0].message.content
-                logger.debug(f"Raw AI response for dev task content: {raw_json_output}")
-                content = json.loads(raw_json_output)
-                # Basic validation of expected keys
-                for key in ["description", "learning_objectives", "suggested_resources", "success_metrics"]:
-                    if key not in content:
-                        logger.error(f"AI response for dev task content missing key: {key}")
-                        raise ValueError(f"AI response malformed, missing key: {key}")
-                logger.info(f"Successfully generated development task content for {manager_name} in {development_area}.")
-                return content
+            if str(self.model).startswith("gpt-5"):
+                # Use Responses API
+                resp = await self.client.responses.create(
+                    model=self.model,
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {"role": "system", "content": api_params["messages"][0]["content"]},
+                        {"role": "user", "content": api_params["messages"][1]["content"]},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                raw_json_output = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
             else:
+                response = await self._make_openai_call(api_params)
+                raw_json_output = response.choices[0].message.content if response and response.choices else ""
+            if not raw_json_output:
                 logger.error("AI response for dev task content was empty or malformed.")
                 raise ValueError("AI response was empty or malformed.")
+            logger.debug(f"Raw AI response for dev task content: {raw_json_output}")
+            content = json.loads(raw_json_output)
+            for key in ["description", "learning_objectives", "suggested_resources", "success_metrics"]:
+                if key not in content:
+                    logger.error(f"AI response for dev task content missing key: {key}")
+                    raise ValueError(f"AI response malformed, missing key: {key}")
+            logger.info(f"Successfully generated development task content for {manager_name} in {development_area}.")
+            return content
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI-generated JSON for development task content: {e}. Raw: {raw_json_output}", exc_info=True)
+            logger.error(
+                f"Failed to parse AI-generated JSON for development task content: {e}. Raw: {raw_json_output}",
+                exc_info=True,
+            )
             # Fallback or error structure
             return {
                 "description": "Error: Could not parse AI-generated content.",
                 "learning_objectives": [],
                 "suggested_resources": [],
-                "success_metrics": []
+                "success_metrics": [],
             }
         except Exception as e:
             logger.error(f"Unexpected error generating development task content: {e}", exc_info=True)
@@ -150,9 +197,9 @@ class AIIntegration:
                 "description": f"Error: An unexpected error occurred while generating content: {str(e)}.",
                 "learning_objectives": [],
                 "suggested_resources": [],
-                "success_metrics": []
+                "success_metrics": [],
             }
-    
+
     # --- Methods from the original file (potentially with minor adjustments for consistency) ---
 
     async def analyze_commit_diff(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -163,10 +210,10 @@ class AIIntegration:
         # Assuming CommitAnalyzer is initialized in __init__ and handles its own AI calls if any, or is refactored.
         # If CommitAnalyzer needs self.client, it should be passed during its init or to this method.
         if not self.commit_analyzer:
-             logger.error("CommitAnalyzer not initialized.")
-             return {"error": "CommitAnalyzer not available"}
+            logger.error("CommitAnalyzer not initialized.")
+            return {"error": "CommitAnalyzer not available"}
         return await self.commit_analyzer.analyze_commit_diff(commit_data)
-    
+
     async def generate_doc(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate documentation using OpenAI's API.
@@ -204,7 +251,7 @@ class AIIntegration:
         File References:
         {json.dumps(context.get('file_references', []), indent=2)}"""
 
-        if commit_data := context.get('commit_data'):
+        if commit_data := context.get("commit_data"):
             prompt += f"""
             
             Commit Information:
@@ -217,54 +264,68 @@ class AIIntegration:
         api_params = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are an expert technical writer and documentation specialist. Focus on clarity, completeness, and technical accuracy."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are an expert technical writer and documentation specialist. Focus on clarity, completeness, and technical accuracy.",
+                },
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
         }
-        
+
         try:
-            response = await self._make_openai_call(api_params)
-            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
-                result_json_str = response.choices[0].message.content
-                result = json.loads(result_json_str)
-                return {
-                    **result,
-                    "metadata": {
-                        **(result.get("metadata", {})),
-                        "generated_at": datetime.now().isoformat(),
-                        "model_used": self.model
-                    }
-                }
+            if str(self.model).startswith("gpt-5"):
+                resp = await self.client.responses.create(
+                    model=self.model,
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {"role": "system", "content": api_params["messages"][0]["content"]},
+                        {"role": "user", "content": api_params["messages"][1]["content"]},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                result_json_str = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
             else:
+                response = await self._make_openai_call(api_params)
+                result_json_str = response.choices[0].message.content if response and response.choices else ""
+            if not result_json_str:
                 logger.error("AI response for generate_doc was empty or malformed.")
-                return self.error_handling(Exception("AI response was empty or malformed for generate_doc."))    
+                return self.error_handling(Exception("AI response was empty or malformed for generate_doc."))
+            result = json.loads(result_json_str)
+            return {
+                **result,
+                "metadata": {
+                    **(result.get("metadata", {})),
+                    "generated_at": datetime.now().isoformat(),
+                    "model_used": self.model,
+                },
+            }
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON in generate_doc: {e}. Raw: {result_json_str}", exc_info=True)
             return self.error_handling(e)
         except Exception as e:
             logger.error(f"Error in generate_doc: {e}", exc_info=True)
             return self.error_handling(e)
-    
+
     def error_handling(self, error: Exception) -> Dict[str, Any]:
         """
         Handle errors from OpenAI API.
         """
         error_message = str(error)
         logger.error(f"AIIntegration Error: {error_message}", exc_info=True)
-        return {
-            "error": True,
-            "message": error_message,
-            "timestamp": datetime.now().isoformat()
-        }
+        return {"error": True, "message": error_message, "timestamp": datetime.now().isoformat()}
 
-    async def generate_documentation_from_diff(self, diff_content: str, existing_docs: Optional[str] = None) -> Dict[str, str]:
+    async def generate_documentation_from_diff(
+        self, diff_content: str, existing_docs: Optional[str] = None
+    ) -> Dict[str, str]:
         """Generates documentation based on code diffs. Placeholder implementation."""
         logger.warning("generate_documentation_from_diff is a placeholder and not fully implemented.")
         # This would involve a more complex prompt and potentially multiple LLM calls.
         return {
             "new_documentation_section": "Placeholder: Documentation for diff content.",
-            "updated_existing_docs": existing_docs or "Placeholder: No existing docs to update."
+            "updated_existing_docs": existing_docs or "Placeholder: No existing docs to update.",
         }
 
     async def analyze_eod_report_text(self, report_text: str) -> Dict[str, Any]:
@@ -311,52 +372,73 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
         api_params = {
             "model": self.eod_analysis_model,
             "messages": [
-                {"role": "system", "content": "You are an AI assistant helping to process and understand employee End-of-Day reports."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant helping to process and understand employee End-of-Day reports.",
+                },
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}, 
+            "response_format": {"type": "json_object"},
         }
-        raw_json_output = "" # Initialize for error logging
+        raw_json_output = ""  # Initialize for error logging
         try:
-            response = await self._make_openai_call(api_params)
-            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
-                raw_json_output = response.choices[0].message.content
-                logger.debug(f"Raw AI response for EOD analysis: {raw_json_output}")
-                analysis_result = json.loads(raw_json_output)
-
-                if "clarification_requests" in analysis_result and isinstance(analysis_result["clarification_requests"], list):
-                    valid_requests = []
-                    for req_data in analysis_result["clarification_requests"]:
-                        if isinstance(req_data, dict) and "question" in req_data and "original_text" in req_data:
-                            req_data.setdefault("status", ClarificationStatus.PENDING.value)
-                            req_data.setdefault("requested_by_ai", True)
-                            # Attempt to create ClarificationRequest model for validation, though we return dict
-                            try:
-                                ClarificationRequest(**req_data)
-                                valid_requests.append(req_data)
-                            except Exception as val_err:
-                                logger.warning(f"Skipping invalid clarification request data (validation error): {req_data}, Error: {val_err}")
-                        else:
-                            logger.warning(f"Skipping invalid clarification request data (missing keys): {req_data}")
-                    analysis_result["clarification_requests"] = valid_requests
-                else:
-                    analysis_result["clarification_requests"] = []
-
-                analysis_result.setdefault("key_achievements", [])
-                analysis_result.setdefault("estimated_hours", 0.0)
-                analysis_result.setdefault("estimated_difficulty", "Unknown")
-                analysis_result.setdefault("sentiment", "Neutral")
-                analysis_result.setdefault("potential_blockers", [])
-                analysis_result.setdefault("summary", "No summary provided.")
-                
-                logger.info(f"Successfully analyzed EOD report. Summary: {analysis_result.get('summary')}")
-                return analysis_result
+            if str(self.eod_analysis_model).startswith("gpt-5"):
+                resp = await self.client.responses.create(
+                    model=self.eod_analysis_model,
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {"role": "system", "content": api_params["messages"][0]["content"]},
+                        {"role": "user", "content": api_params["messages"][1]["content"]},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                raw_json_output = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
             else:
+                response = await self._make_openai_call(api_params)
+                raw_json_output = response.choices[0].message.content if response and response.choices else ""
+            logger.debug(f"Raw AI response for EOD analysis: {raw_json_output}")
+            if not raw_json_output:
                 logger.error("AI response for EOD analysis was empty or malformed.")
                 return self._default_eod_analysis_error_payload("AI response was empty or malformed.")
+            analysis_result = json.loads(raw_json_output)
+
+            if "clarification_requests" in analysis_result and isinstance(
+                analysis_result["clarification_requests"], list
+            ):
+                valid_requests = []
+                for req_data in analysis_result["clarification_requests"]:
+                    if isinstance(req_data, dict) and "question" in req_data and "original_text" in req_data:
+                        req_data.setdefault("status", ClarificationStatus.PENDING.value)
+                        req_data.setdefault("requested_by_ai", True)
+                        try:
+                            ClarificationRequest(**req_data)
+                            valid_requests.append(req_data)
+                        except Exception as val_err:
+                            logger.warning(
+                                f"Skipping invalid clarification request data (validation error): {req_data}, Error: {val_err}"
+                            )
+                    else:
+                        logger.warning(f"Skipping invalid clarification request data (missing keys): {req_data}")
+                analysis_result["clarification_requests"] = valid_requests
+            else:
+                analysis_result["clarification_requests"] = []
+
+            analysis_result.setdefault("key_achievements", [])
+            analysis_result.setdefault("estimated_hours", 0.0)
+            analysis_result.setdefault("estimated_difficulty", "Unknown")
+            analysis_result.setdefault("sentiment", "Neutral")
+            analysis_result.setdefault("potential_blockers", [])
+            analysis_result.setdefault("summary", "No summary provided.")
+
+            logger.info(f"Successfully analyzed EOD report. Summary: {analysis_result.get('summary')}")
+            return analysis_result
 
         except json.JSONDecodeError as e:
-            logger.error(f"Error decoding JSON from AI response for EOD analysis: {e}. Raw: {raw_json_output}", exc_info=True)
+            logger.error(
+                f"Error decoding JSON from AI response for EOD analysis: {e}. Raw: {raw_json_output}", exc_info=True
+            )
             return self._default_eod_analysis_error_payload(f"AI response was not valid JSON: {e}")
         except Exception as e:
             logger.error(f"Error during AI EOD report analysis: {e}", exc_info=True)
@@ -372,14 +454,10 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
             "potential_blockers": ["Error during analysis."],
             "summary": f"Failed to analyze EOD report: {error_message}",
             "clarification_requests": [],
-            "error_message": error_message
+            "error_message": error_message,
         }
 
-    async def check_if_clarification_needed(
-        self,
-        report_text: str,
-        ai_analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def check_if_clarification_needed(self, report_text: str, ai_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """
         Simple check to determine if clarification is needed for a report.
         Returns a single clarification question if needed, or None.
@@ -388,16 +466,16 @@ Ensure your entire response is a single, valid JSON object. Do not include any e
         if not self.client:
             logger.error("AI client not available for clarification check")
             return {"needs_clarification": False, "clarification_question": None}
-        
+
         # If AI already found clarification requests, use the first one
         if ai_analysis.get("clarification_requests") and len(ai_analysis["clarification_requests"]) > 0:
             first_request = ai_analysis["clarification_requests"][0]
             return {
                 "needs_clarification": True,
                 "clarification_question": first_request.get("question"),
-                "original_text": first_request.get("original_text")
+                "original_text": first_request.get("original_text"),
             }
-        
+
         # Otherwise, do a quick check for clarity
         prompt = f"""Review this EOD report and determine if ONE clarification is needed:
 
@@ -413,32 +491,44 @@ Respond with JSON:
     "original_text": "the specific part needing clarification, null otherwise"
 }}
 """
-        
+
         api_params = {
             "model": self.eod_analysis_model,
             "messages": [
-                {"role": "system", "content": "You are reviewing end-of-day reports. Only ask for clarification if absolutely necessary for understanding the work done."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are reviewing end-of-day reports. Only ask for clarification if absolutely necessary for understanding the work done.",
+                },
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
         }
-        
+
         try:
-            response = await self._make_openai_call(api_params)
-            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
-                result = json.loads(response.choices[0].message.content)
-                return result
+            if str(self.eod_analysis_model).startswith("gpt-5"):
+                resp = await self.client.responses.create(
+                    model=self.eod_analysis_model,
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {"role": "system", "content": api_params["messages"][0]["content"]},
+                        {"role": "user", "content": api_params["messages"][1]["content"]},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                content_text = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
+                result = json.loads(content_text or "{}")
             else:
-                return {"needs_clarification": False, "clarification_question": None}
+                response = await self._make_openai_call(api_params)
+                result = json.loads(response.choices[0].message.content)
+            return result
         except Exception as e:
             logger.error(f"Error checking for clarification: {e}", exc_info=True)
             return {"needs_clarification": False, "clarification_question": None}
 
     async def process_eod_clarification(
-        self, 
-        original_report: str, 
-        user_message: str, 
-        conversation_history: List[Dict[str, str]]
+        self, original_report: str, user_message: str, conversation_history: List[Dict[str, str]]
     ) -> Dict[str, Any]:
         """
         Process a user's clarification message in the context of their EOD report.
@@ -451,9 +541,9 @@ Respond with JSON:
                 "response": "I'm having trouble processing your response. Please try again.",
                 "needs_clarification": False,
                 "conversation_complete": False,
-                "error": "AI client not initialized"
+                "error": "AI client not initialized",
             }
-        
+
         # Build conversation context
         conversation_context = f"Original EOD Report:\n{original_report}\n\n"
         if conversation_history:
@@ -461,7 +551,7 @@ Respond with JSON:
             for exchange in conversation_history[-5:]:  # Last 5 exchanges
                 conversation_context += f"User: {exchange.get('user', '')}\n"
                 conversation_context += f"AI: {exchange.get('ai', '')}\n\n"
-        
+
         prompt = f"""{conversation_context}
         
         Latest user message: {user_message}
@@ -476,24 +566,37 @@ Respond with JSON:
         
         Be friendly and conversational. If the user provides the requested clarification, acknowledge it and update your understanding.
         """
-        
+
         api_params = {
             "model": self.eod_analysis_model,
             "messages": [
                 {
-                    "role": "system", 
-                    "content": "You are a helpful AI assistant processing end-of-day work reports. Be conversational and extract clear information about work completed."
+                    "role": "system",
+                    "content": "You are a helpful AI assistant processing end-of-day work reports. Be conversational and extract clear information about work completed.",
                 },
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
         }
-        
+
         try:
-            response = await self._make_openai_call(api_params)
-            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
+            if str(self.eod_analysis_model).startswith("gpt-5"):
+                resp = await self.client.responses.create(
+                    model=self.eod_analysis_model,
+                    input=[
+                        {"role": "system", "content": api_params["messages"][0]["content"]},
+                        {"role": "user", "content": api_params["messages"][1]["content"]},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                content_text = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
+                result = json.loads(content_text or "{}")
+            else:
+                response = await self._make_openai_call(api_params)
                 result = json.loads(response.choices[0].message.content)
-                
+
                 # Ensure all expected fields exist
                 result.setdefault("response", "Thank you for the clarification.")
                 result.setdefault("needs_clarification", False)
@@ -501,25 +604,26 @@ Respond with JSON:
                 result.setdefault("updated_summary", None)
                 result.setdefault("updated_hours", None)
                 result.setdefault("key_insights", [])
-                
+
                 logger.info(f"EOD clarification processed. Needs more info: {result['needs_clarification']}")
                 return result
-            else:
+            # If result is empty or missing expected fields, return a friendly fallback
+            if not result:
                 logger.error("AI response for EOD clarification was empty")
                 return {
                     "response": "I understand. Thank you for the information.",
                     "needs_clarification": False,
                     "conversation_complete": True,
-                    "error": "Empty AI response"
+                    "error": "Empty AI response",
                 }
-                
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse EOD clarification response: {e}", exc_info=True)
             return {
                 "response": "I understand. Thank you for the clarification.",
                 "needs_clarification": False,
                 "conversation_complete": True,
-                "error": f"JSON decode error: {str(e)}"
+                "error": f"JSON decode error: {str(e)}",
             }
         except Exception as e:
             logger.error(f"Error processing EOD clarification: {e}", exc_info=True)
@@ -527,14 +631,11 @@ Respond with JSON:
                 "response": "I'm having trouble processing that. Could you please rephrase?",
                 "needs_clarification": True,
                 "conversation_complete": False,
-                "error": str(e)
+                "error": str(e),
             }
-    
+
     async def analyze_semantic_similarity(
-        self, 
-        text1: str, 
-        text2: str, 
-        context: Optional[str] = None
+        self, text1: str, text2: str, context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Analyze semantic similarity between two pieces of text.
@@ -544,16 +645,16 @@ Respond with JSON:
         if not self.client:
             logger.error("AI client not available for similarity analysis")
             return {"similarity_score": 0.0, "is_duplicate": False, "reasoning": "AI client not available"}
-        
+
         prompt = f"""Compare these two work descriptions and determine if they describe the same work:
 
         Text 1: {text1}
         Text 2: {text2}
         """
-        
+
         if context:
             prompt += f"\nAdditional context: {context}"
-        
+
         prompt += """
         
         Provide a JSON response with:
@@ -564,24 +665,24 @@ Respond with JSON:
         - "unique_to_text1": List of aspects unique to the first text
         - "unique_to_text2": List of aspects unique to the second text
         """
-        
+
         api_params = {
             "model": self.model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are an expert at analyzing work descriptions and identifying duplicates. Be precise in identifying whether two descriptions refer to the same work."
+                    "content": "You are an expert at analyzing work descriptions and identifying duplicates. Be precise in identifying whether two descriptions refer to the same work.",
                 },
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
         }
-        
+
         try:
             response = await self._make_openai_call(api_params)
             if response and response.choices and response.choices[0].message and response.choices[0].message.content:
                 result = json.loads(response.choices[0].message.content)
-                
+
                 # Ensure all fields exist
                 result.setdefault("similarity_score", 0.0)
                 result.setdefault("is_duplicate", result["similarity_score"] > 0.7)
@@ -589,7 +690,7 @@ Respond with JSON:
                 result.setdefault("overlapping_aspects", [])
                 result.setdefault("unique_to_text1", [])
                 result.setdefault("unique_to_text2", [])
-                
+
                 logger.info(f"Similarity analysis complete. Score: {result['similarity_score']}")
                 return result
             else:
@@ -600,9 +701,9 @@ Respond with JSON:
                     "reasoning": "AI response was empty",
                     "overlapping_aspects": [],
                     "unique_to_text1": [],
-                    "unique_to_text2": []
+                    "unique_to_text2": [],
                 }
-                
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse similarity analysis response: {e}", exc_info=True)
             return {
@@ -611,7 +712,7 @@ Respond with JSON:
                 "reasoning": f"JSON decode error: {str(e)}",
                 "overlapping_aspects": [],
                 "unique_to_text1": [],
-                "unique_to_text2": []
+                "unique_to_text2": [],
             }
         except Exception as e:
             logger.error(f"Error in similarity analysis: {e}", exc_info=True)
@@ -621,7 +722,7 @@ Respond with JSON:
                 "reasoning": f"Error: {str(e)}",
                 "overlapping_aspects": [],
                 "unique_to_text1": [],
-                "unique_to_text2": []
+                "unique_to_text2": [],
             }
 
     async def analyze_commit_code_quality(self, commit_diff: str, commit_message: str) -> Dict[str, Any]:
@@ -668,16 +769,12 @@ Ensure your entire response is a single, valid JSON object.
 
         api_params = {
             "model": self.code_quality_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "response_format": {"type": "json_object"}
+            "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            "response_format": {"type": "json_object"},
         }
 
-
         logger.debug(f"Sending request to LLM for code quality analysis. Model: {self.code_quality_model}")
-        raw_json_output = "" # Initialize for error logging
+        raw_json_output = ""  # Initialize for error logging
         try:
             response = await self._make_openai_call(api_params)
             if response and response.choices and response.choices[0].message and response.choices[0].message.content:
@@ -688,25 +785,27 @@ Ensure your entire response is a single, valid JSON object.
                 analysis_result = {
                     **result,
                     "generated_at": datetime.now().isoformat(),
-                    "model_used": self.code_quality_model
+                    "model_used": self.code_quality_model,
                 }
                 logger.info(f"Successfully completed AI code quality analysis for commit: {commit_message[:70]}")
                 return analysis_result
             else:
                 logger.error("LLM response for code quality was empty or malformed.")
-                return self.error_handling(Exception("LLM response was empty or malformed for code quality."))    
+                return self.error_handling(Exception("LLM response was empty or malformed for code quality."))
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON response from LLM for code quality: {e}. Raw: {raw_json_output}", exc_info=True)
+            logger.error(
+                f"Failed to parse JSON response from LLM for code quality: {e}. Raw: {raw_json_output}", exc_info=True
+            )
             return self.error_handling(Exception(f"LLM returned invalid JSON for code quality: {e}"))
         except Exception as e:
             logger.error(f"Unexpected error during AI code quality analysis: {e}", exc_info=True)
             return self.error_handling(e)
-    
+
     async def analyze_daily_work(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze a full day's worth of commits along with daily report for holistic hour estimation.
-        
+
         Args:
             context: Dictionary containing:
                 - analysis_date: ISO format date string
@@ -716,7 +815,7 @@ Ensure your entire response is a single, valid JSON object.
                 - repositories: List of unique repositories
                 - total_lines_changed: Sum of additions and deletions
                 - daily_report: Optional daily report data
-                
+
         Returns:
             Dictionary with analysis results including:
                 - total_estimated_hours: Total hours for the day
@@ -727,14 +826,11 @@ Ensure your entire response is a single, valid JSON object.
                 - recommendations: Suggestions for improvement
         """
         logger.info(f"Analyzing daily work for {context.get('user_name')} on {context.get('analysis_date')}")
-        
+
         if not self.client:
             logger.error("AI client not available for daily work analysis")
-            return {
-                "total_estimated_hours": 0.0,
-                "error": "AI client not initialized"
-            }
-        
+            return {"total_estimated_hours": 0.0, "error": "AI client not initialized"}
+
         # Build the prompt using the same calibration guidelines from commit analysis
         prompt = f"""You are analyzing a developer's complete work for {context.get('analysis_date')}.
         
@@ -744,10 +840,10 @@ Repositories: {', '.join(context.get('repositories', []))}
 Total Lines Changed: {context.get('total_lines_changed')}
 
 """
-        
+
         # Add daily report context if available
-        if context.get('daily_report'):
-            report = context['daily_report']
+        if context.get("daily_report"):
+            report = context["daily_report"]
             prompt += f"""
 Daily Report Summary:
 - Summary: {report.get('summary', 'N/A')}
@@ -756,24 +852,24 @@ Daily Report Summary:
 - Support Needed: {report.get('support_needed', 'None mentioned')}
 
 """
-            if report.get('ai_analysis'):
-                ai_analysis = report['ai_analysis']
+            if report.get("ai_analysis"):
+                ai_analysis = report["ai_analysis"]
                 prompt += f"""Previous AI Analysis of Report:
 - Estimated Hours: {ai_analysis.get('estimated_hours', 0)}
 - Key Achievements: {', '.join(ai_analysis.get('key_achievements', []))}
 
 """
-        
+
         # Add commit details
         prompt += "Commits for the day:\n"
-        for i, commit in enumerate(context.get('commits', []), 1):
+        for i, commit in enumerate(context.get("commits", []), 1):
             prompt += f"""
 {i}. [{commit['timestamp']}] {commit['repository']}
    Message: {commit['message']}
    Changes: +{commit['additions']} -{commit['deletions']} ({len(commit.get('files_changed', []))} files)
    Previous AI estimate: {commit.get('ai_estimated_hours', 'N/A')} hours
 """
-        
+
         prompt += """
 
 Based on all commits for the day and any daily report provided, estimate the TOTAL productive hours.
@@ -809,25 +905,24 @@ Respond with a JSON object containing:
     "recommendations": [<list of 1-3 suggestions for the developer>]
 }
 """
-        
+
         api_params = {
             "model": self.model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a senior engineering manager analyzing developer productivity. Provide accurate hour estimates based on actual work completed."
+                    "content": "You are a senior engineering manager analyzing developer productivity. Provide accurate hour estimates based on actual work completed.",
                 },
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
         }
-        
-        
+
         try:
             response = await self._make_openai_call(api_params)
             if response and response.choices and response.choices[0].message and response.choices[0].message.content:
                 result = json.loads(response.choices[0].message.content)
-                
+
                 # Ensure all expected fields exist
                 result.setdefault("total_estimated_hours", 0.0)
                 result.setdefault("average_complexity_score", 5)
@@ -837,116 +932,107 @@ Respond with a JSON object containing:
                 result.setdefault("hour_estimation_reasoning", "")
                 result.setdefault("consistency_with_report", True)
                 result.setdefault("recommendations", [])
-                
+
                 # Round hours to 1 decimal place
                 result["total_estimated_hours"] = round(float(result["total_estimated_hours"]), 1)
-                
+
                 logger.info(f"✓ Daily work analysis complete: {result['total_estimated_hours']} hours estimated")
                 return result
             else:
                 logger.error("AI response for daily work analysis was empty")
-                return {
-                    "total_estimated_hours": 0.0,
-                    "error": "Empty AI response"
-                }
-                
+                return {"total_estimated_hours": 0.0, "error": "Empty AI response"}
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse daily work analysis response: {e}", exc_info=True)
-            return {
-                "total_estimated_hours": 0.0,
-                "error": f"JSON decode error: {str(e)}"
-            }
+            return {"total_estimated_hours": 0.0, "error": f"JSON decode error: {str(e)}"}
         except Exception as e:
             logger.error(f"Error analyzing daily work: {e}", exc_info=True)
-            return {
-                "total_estimated_hours": 0.0,
-                "error": str(e)
-            }
+            return {"total_estimated_hours": 0.0, "error": str(e)}
 
     async def analyze_unified_daily_work(self, prompt: str) -> Dict[str, Any]:
         """
         Analyze unified daily work using a custom prompt provided by the caller.
         This method is designed for flexible analysis of daily work data.
-        
+
         Args:
             prompt: The complete prompt to send to the AI model
-            
+
         Returns:
             Dictionary containing the structured response from the AI model
         """
         logger.info("Analyzing unified daily work with custom prompt")
-        
+
         if not self.client:
             logger.error("AI client not available for unified daily work analysis")
             return {
                 "error": "AI client not initialized",
                 "message": "OpenAI client is not available. Please check API key configuration.",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
-        
+
         # Use gpt-4 for complex reasoning tasks
-        model_to_use = "gpt-4" if "gpt-4" in self.model else self.model
-        
+        model_to_use = self.model
+
         api_params = {
             "model": model_to_use,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are an expert at analyzing developer work patterns and productivity. Provide detailed, structured analysis based on the data provided."
+                    "content": "You are an expert at analyzing developer work patterns and productivity. Provide detailed, structured analysis based on the data provided.",
                 },
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
         }
-        
+
         # Check if model supports temperature parameter
         if not self._is_reasoning_model(model_to_use):
             api_params["temperature"] = 0.7
-        
+
         try:
             logger.debug(f"Sending unified daily work analysis request to model: {model_to_use}")
-            response = await self._make_openai_call(api_params)
-            
-            if response and response.choices and response.choices[0].message and response.choices[0].message.content:
-                raw_json_output = response.choices[0].message.content
-                logger.debug(f"Raw AI response for unified daily work (first 500 chars): {raw_json_output[:500]}...")
-                
-                try:
-                    result = json.loads(raw_json_output)
-                    
-                    # Add metadata to the response
-                    result["_metadata"] = {
-                        "generated_at": datetime.now().isoformat(),
-                        "model_used": model_to_use,
-                        "analysis_type": "unified_daily_work"
-                    }
-                    
-                    logger.info("Successfully completed unified daily work analysis")
-                    return result
-                    
-                except json.JSONDecodeError as json_err:
-                    logger.error(f"Failed to parse JSON response: {json_err}. Raw output: {raw_json_output}", exc_info=True)
-                    return {
-                        "error": "JSON parsing error",
-                        "message": f"Failed to parse AI response as JSON: {str(json_err)}",
-                        "raw_response": raw_json_output[:1000],  # Include first 1000 chars for debugging
-                        "timestamp": datetime.now().isoformat()
-                    }
+            if str(model_to_use).startswith("gpt-5"):
+                resp = await self.client.responses.create(
+                    model=model_to_use,
+                    reasoning={"effort": settings.openai_reasoning_effort},
+                    input=[
+                        {"role": "system", "content": api_params["messages"][0]["content"]},
+                        {"role": "user", "content": api_params["messages"][1]["content"]},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                raw_json_output = getattr(resp, "output_text", None) or (
+                    resp.choices[0].message.content if hasattr(resp, "choices") and resp.choices else ""
+                )
             else:
-                logger.error("AI response for unified daily work analysis was empty or malformed")
-                return {
-                    "error": "Empty response",
-                    "message": "AI model returned an empty or malformed response",
-                    "timestamp": datetime.now().isoformat()
+                response = await self._make_openai_call(api_params)
+                raw_json_output = response.choices[0].message.content if response and response.choices else ""
+            logger.debug(f"Raw AI response for unified daily work (first 500 chars): {raw_json_output[:500]}...")
+            try:
+                result = json.loads(raw_json_output)
+                result["_metadata"] = {
+                    "generated_at": datetime.now().isoformat(),
+                    "model_used": model_to_use,
+                    "analysis_type": "unified_daily_work",
                 }
-                
+                logger.info("Successfully completed unified daily work analysis")
+                return result
+            except json.JSONDecodeError as json_err:
+                logger.error(f"Failed to parse JSON response: {json_err}. Raw output: {raw_json_output}", exc_info=True)
+                return {
+                    "error": "JSON parsing error",
+                    "message": f"Failed to parse AI response as JSON: {str(json_err)}",
+                    "raw_response": raw_json_output[:1000],
+                    "timestamp": datetime.now().isoformat(),
+                }
+
         except openai.APIError as api_err:
             logger.error(f"OpenAI API error during unified daily work analysis: {api_err}", exc_info=True)
             return {
                 "error": "API error",
                 "message": f"OpenAI API error: {str(api_err)}",
                 "error_type": type(api_err).__name__,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
         except Exception as e:
             logger.error(f"Unexpected error during unified daily work analysis: {e}", exc_info=True)
@@ -954,8 +1040,9 @@ Respond with a JSON object containing:
                 "error": "Unexpected error",
                 "message": f"An unexpected error occurred: {str(e)}",
                 "error_type": type(e).__name__,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
+
 
 # Example of how to potentially get an instance (e.g., using FastAPI dependency injection pattern)
 # Needs to be adapted if settings are not directly accessible or if async init is needed.
@@ -964,5 +1051,5 @@ Respond with a JSON object containing:
 #     global _ai_integration_instance
 #     if _ai_integration_instance is None:
 #         # Consider if AIIntegration init needs to be async if it does IO
-#         _ai_integration_instance = AIIntegration() 
+#         _ai_integration_instance = AIIntegration()
 #     return _ai_integration_instance

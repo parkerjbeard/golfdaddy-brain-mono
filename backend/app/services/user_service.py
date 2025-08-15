@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from app.models.user import User
@@ -30,11 +30,11 @@ class UserService:
         """Placeholder for password change logic."""
         # TODO: integrate with authentication provider to change password
         return False
-    
+
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
         """Get user by ID (alias for get_user)."""
         return await self.get_user(user_id)
-    
+
     async def get_all_active_users(self) -> List[User]:
         """Get all active users with Slack IDs configured."""
         all_users, _ = await self.user_repo.list_all_users(limit=1000)
