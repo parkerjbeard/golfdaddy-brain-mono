@@ -181,6 +181,17 @@ const search = {
   },
 };
 
+// Documentation approvals endpoints
+const docApprovals = {
+  list: (params?: { status?: string; repo?: string; limit?: number; offset?: number }) => {
+    const qs = params ? `?${new URLSearchParams(params as any).toString()}` : ''
+    return apiClient.get(`/api/v1/doc-approvals${qs}`)
+  },
+  get: (id: string) => apiClient.get(`/api/v1/doc-approvals/${id}`),
+  approve: (id: string) => apiClient.post(`/api/v1/doc-approvals/${id}/approve`),
+  reject: (id: string, reason: string) => apiClient.post(`/api/v1/doc-approvals/${id}/reject`, { reason }),
+}
+
 export const api = {
   auth,
   users,
@@ -193,6 +204,7 @@ export const api = {
   webhook,
   batch,
   search,
+  docApprovals,
 };
 
 export default api;

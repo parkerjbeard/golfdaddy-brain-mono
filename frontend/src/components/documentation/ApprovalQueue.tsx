@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import api from '@/services/api/endpoints';
 import { formatDistanceToNow } from 'date-fns';
 
 interface DocApproval {
@@ -73,85 +74,27 @@ export function ApprovalQueue() {
   const loadApprovals = async () => {
     try {
       setLoading(true);
-      // TODO: Fetch from API
-      const mockApprovals: DocApproval[] = [
-        {
-          id: '1',
-          commitHash: 'abc123def456',
-          repository: 'golfdaddy/brain',
-          diffContent: `--- a/docs/api.md
-+++ b/docs/api.md
-@@ -10,6 +10,14 @@ The GolfDaddy Brain API provides endpoints for documentation management.
-
- All requests require authentication via JWT tokens.
-
-+### Rate Limiting
-+
-+API requests are rate limited to:
-+- 1000 requests per hour for authenticated users
-+- 100 requests per hour for unauthenticated users
-+
-+Exceeded limits return HTTP 429.
-+
- ## Endpoints
-
- ### GET /api/v1/docs`,
-          patchContent: `@@ -10,6 +10,14 @@ The GolfDaddy Brain API provides endpoints for documentation management.
- 
- All requests require authentication via JWT tokens.
- 
-+### Rate Limiting
-+
-+API requests are rate limited to:
-+- 1000 requests per hour for authenticated users  
-+- 100 requests per hour for unauthenticated users
-+
-+Exceeded limits return HTTP 429.
-+
- ## Endpoints
- 
- ### GET /api/v1/docs`,
-          status: 'pending',
-          createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 mins ago
-          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 23.5).toISOString(), // 23.5 hours from now
-          metadata: {
-            commitMessage: 'Add rate limiting documentation',
-            filesAffected: 1,
-            additions: 8,
-            deletions: 0
-          }
+      const res = await api.docApprovals.list({ limit: 100 }) as any;
+      const items = (res?.data?.approvals || []).map((a: any) => ({
+        id: a.id,
+        commitHash: a.commit_hash,
+        repository: a.repository,
+        diffContent: a.diff_content || '',
+        patchContent: a.patch_content || '',
+        status: a.status,
+        createdAt: a.created_at,
+        expiresAt: a.expires_at,
+        metadata: {
+          commitMessage: a.approval_metadata?.commit_message,
+          filesAffected: a.approval_metadata?.files_affected,
+          additions: a.approval_metadata?.additions,
+          deletions: a.approval_metadata?.deletions,
         },
-        {
-          id: '2',
-          commitHash: 'def789ghi012',
-          repository: 'golfdaddy/brain',
-          diffContent: `--- a/README.md
-+++ b/README.md
-@@ -1,4 +1,4 @@
--# GolfDaddy Brain
-+# GolfDaddy Brain - AI Documentation Assistant
- 
- Automated documentation management system.`,
-          patchContent: `@@ -1,4 +1,4 @@
--# GolfDaddy Brain
-+# GolfDaddy Brain - AI Documentation Assistant
- 
- Automated documentation management system.`,
-          status: 'approved',
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 22).toISOString(),
-          metadata: {
-            commitMessage: 'Update project title',
-            filesAffected: 1,
-            additions: 1,
-            deletions: 1
-          },
-          approvedBy: 'user123',
-          approvedAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-          prUrl: 'https://github.com/golfdaddy/brain/pull/123'
-        }
-      ];
-      setApprovals(mockApprovals);
+        approvedBy: a.approved_by,
+        approvedAt: a.approved_at,
+        prUrl: a.pr_url,
+      })) as DocApproval[];
+      setApprovals(items);
     } catch (error) {
       console.error('Error loading approvals:', error);
       toast({
@@ -167,12 +110,11 @@ export function ApprovalQueue() {
   const handleApprove = async (approval: DocApproval) => {
     try {
       setProcessingId(approval.id);
-      // TODO: Call API to approve
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+      const res = await api.docApprovals.approve(approval.id);
       
       toast({
         title: 'Approved!',
-        description: 'Documentation update has been approved and PR created.',
+        description: 'Documentation update has been approved.',
       });
       
       await loadApprovals();
@@ -192,8 +134,7 @@ export function ApprovalQueue() {
     
     try {
       setProcessingId(selectedApproval.id);
-      // TODO: Call API to reject with reason
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+      await api.docApprovals.reject(selectedApproval.id, rejectionReason);
       
       toast({
         title: 'Rejected',

@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import api from '@/services/api/endpoints';
 
 interface ApprovalRequest {
   id: string;
@@ -79,67 +80,21 @@ export function ApprovalWorkflow() {
   const loadApprovalRequests = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual API call
-      const mockRequests: ApprovalRequest[] = [
-        {
-          id: '1',
-          title: 'API Authentication Guide',
-          doc_type: 'api',
-          author: 'John Doe',
-          status: 'pending',
-          created_at: '2024-01-15T10:30:00Z',
-          expires_at: '2024-01-18T10:30:00Z',
-          quality_score: 85,
-          reviewers: ['reviewer1', 'reviewer2'],
-          reviews: []
-        },
-        {
-          id: '2',
-          title: 'User Onboarding Tutorial',
-          doc_type: 'tutorial',
-          author: 'Jane Smith',
-          status: 'needs_review',
-          created_at: '2024-01-14T15:45:00Z',
-          quality_score: 78,
-          reviewers: ['reviewer1'],
-          reviews: [
-            {
-              reviewer_id: 'reviewer1',
-              reviewer_role: 'technical_reviewer',
-              decision: 'request_changes',
-              comments: 'Please add more screenshots and clarify step 3.',
-              reviewed_at: '2024-01-15T09:15:00Z'
-            }
-          ]
-        },
-        {
-          id: '3',
-          title: 'Database Schema Reference',
-          doc_type: 'reference',
-          author: 'Bob Johnson',
-          status: 'approved',
-          created_at: '2024-01-13T09:15:00Z',
-          quality_score: 92,
-          reviewers: ['reviewer1', 'reviewer2'],
-          reviews: [
-            {
-              reviewer_id: 'reviewer1',
-              reviewer_role: 'technical_reviewer',
-              decision: 'approve',
-              comments: 'Excellent documentation with clear examples.',
-              reviewed_at: '2024-01-14T11:30:00Z'
-            },
-            {
-              reviewer_id: 'reviewer2',
-              reviewer_role: 'content_reviewer',
-              decision: 'approve',
-              comments: 'Well structured and easy to follow.',
-              reviewed_at: '2024-01-14T14:20:00Z'
-            }
-          ]
-        }
-      ];
-      setRequests(mockRequests);
+      const res = await api.docApprovals.list({ limit: 100 }) as any;
+      const approvals = (res?.data?.approvals || []) as any[];
+      const mapped: ApprovalRequest[] = approvals.map((a) => ({
+        id: a.id,
+        title: a.approval_metadata?.commit_message || `${a.repository} ${a.commit_hash?.slice(0,7)}`,
+        doc_type: 'api',
+        author: a.opened_by || 'system',
+        status: a.status,
+        created_at: a.created_at,
+        expires_at: a.expires_at,
+        quality_score: undefined,
+        reviewers: [],
+        reviews: [],
+      }))
+      setRequests(mapped);
     } catch (error) {
       console.error('Error loading approval requests:', error);
     } finally {
@@ -152,25 +107,12 @@ export function ApprovalWorkflow() {
 
     setSubmittingReview(true);
     try {
-      // TODO: Replace with actual API call
-      const response = await fetch(`/api/documentation/approvals/${selectedRequest.id}/review`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          decision: reviewDecision,
-          comments: reviewComments,
-          reviewer_role: 'technical_reviewer'
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to submit review');
+      if (reviewDecision === 'approve') {
+        await api.docApprovals.approve(selectedRequest.id)
+      } else if (reviewDecision === 'reject') {
+        await api.docApprovals.reject(selectedRequest.id, reviewComments || 'Rejected')
       }
-
-      // Reload requests
-      await loadApprovalRequests();
+      await loadApprovalRequests()
       
       // Reset form
       setSelectedRequest(null);
