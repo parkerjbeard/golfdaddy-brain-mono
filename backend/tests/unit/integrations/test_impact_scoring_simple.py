@@ -13,11 +13,11 @@ def test_impact_score_calculation():
     technical_complexity = 6
     code_quality = 1.2
     risk_factor = 1.5
-    
+
     # Calculate impact score
     impact_score = (business_value * technical_complexity * code_quality) / risk_factor
     impact_score = round(impact_score, 1)
-    
+
     # Expected: (8 * 6 * 1.2) / 1.5 = 38.4
     assert impact_score == 38.4
 
@@ -31,7 +31,7 @@ def test_calibration_examples():
             "6": "Internal tool that improves team productivity significantly",
             "4": "Nice-to-have feature, UI improvements",
             "2": "Code cleanup, non-critical refactoring",
-            "1": "Typo fixes, comment updates"
+            "1": "Typo fixes, comment updates",
         },
         "technical_complexity": {
             "10": "Distributed system coordination, complex algorithms (e.g., physics engine)",
@@ -39,26 +39,26 @@ def test_calibration_examples():
             "6": "Multi-service integration, moderate algorithmic work",
             "4": "Standard CRUD operations with some business logic",
             "2": "Simple API endpoint, basic UI component",
-            "1": "Config changes, simple bug fixes"
+            "1": "Config changes, simple bug fixes",
         },
         "code_quality": {
             "1.5": "Comprehensive tests (>90% coverage), excellent documentation, follows all patterns",
             "1.2": "Good test coverage (70-90%), clear documentation",
             "1.0": "Adequate tests (50-70%), basic documentation",
             "0.8": "Minimal tests (<50%), sparse documentation",
-            "0.5": "No tests, no documentation, technical debt introduced"
-        }
+            "0.5": "No tests, no documentation, technical debt introduced",
+        },
     }
-    
+
     # Verify structure
     assert "business_value" in CALIBRATION_EXAMPLES
     assert "technical_complexity" in CALIBRATION_EXAMPLES
     assert "code_quality" in CALIBRATION_EXAMPLES
-    
+
     # Verify business value scores
     assert "10" in CALIBRATION_EXAMPLES["business_value"]
     assert "1" in CALIBRATION_EXAMPLES["business_value"]
-    
+
     # Verify code quality multipliers
     assert "1.5" in CALIBRATION_EXAMPLES["code_quality"]
     assert "0.5" in CALIBRATION_EXAMPLES["code_quality"]
@@ -118,7 +118,7 @@ Your factor: ___
 
 FINAL CALCULATION:
 Impact Score = (Business Value × Technical Complexity × Code Quality) / Risk Factor"""
-    
+
     # Verify key elements are present
     assert "Impact Points System" in prompt_template
     assert "Business Value Score (1-10)" in prompt_template
@@ -139,7 +139,6 @@ def test_combined_result_structure():
         "seniority_score": 7,
         "seniority_rationale": "Well-structured implementation",
         "key_changes": ["Feature A", "Test B"],
-        
         # Impact scoring analysis (prefixed with impact_)
         "impact_business_value": 8,
         "impact_business_value_reasoning": "Direct revenue impact",
@@ -151,29 +150,28 @@ def test_combined_result_structure():
         "impact_risk_factor_reasoning": "Financial risk",
         "impact_score": 38.4,
         "impact_dominant_category": "feature",
-        
         # Metadata
         "analyzed_at": "2024-01-01T12:00:00",
         "commit_hash": "abc123",
         "repository": "test-repo",
         "model_used": "gpt-4",
-        "scoring_methods": ["hours_estimation", "impact_points"]
+        "scoring_methods": ["hours_estimation", "impact_points"],
     }
-    
+
     # Verify all fields are present
     # Hours fields
     assert "complexity_score" in combined_result
     assert "estimated_hours" in combined_result
     assert "risk_level" in combined_result
     assert "seniority_score" in combined_result
-    
+
     # Impact fields (all prefixed)
     assert "impact_business_value" in combined_result
     assert "impact_technical_complexity" in combined_result
     assert "impact_code_quality" in combined_result
     assert "impact_risk_factor" in combined_result
     assert "impact_score" in combined_result
-    
+
     # Metadata
     assert combined_result["scoring_methods"] == ["hours_estimation", "impact_points"]
 

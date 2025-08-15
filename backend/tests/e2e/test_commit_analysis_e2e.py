@@ -3,67 +3,69 @@ End-to-end tests for commit analysis functionality.
 These tests verify the complete flow with minimal mocking.
 """
 
+import asyncio
+import json
+import uuid
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
-from datetime import datetime, timezone, date
-import uuid
-import json
-from decimal import Decimal
-import asyncio
 
+from app.integrations.commit_analysis import CommitAnalyzer
+from app.integrations.github_integration import GitHubIntegration
 from app.models.commit import Commit
+from app.models.daily_report import AiAnalysis, DailyReport
 from app.models.user import User, UserRole
-from app.models.daily_report import DailyReport, AiAnalysis
+from app.repositories.commit_repository import CommitRepository
+from app.repositories.daily_commit_analysis_repository import DailyCommitAnalysisRepository
+from app.repositories.daily_report_repository import DailyReportRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.github_event import CommitPayload
 from app.services.commit_analysis_service import CommitAnalysisService
 from app.services.daily_commit_analysis_service import DailyCommitAnalysisService
-from app.integrations.github_integration import GitHubIntegration
-from app.integrations.commit_analysis import CommitAnalyzer
-from app.repositories.commit_repository import CommitRepository
-from app.repositories.user_repository import UserRepository
-from app.repositories.daily_report_repository import DailyReportRepository
-from app.repositories.daily_commit_analysis_repository import DailyCommitAnalysisRepository
 from supabase import Client
 
 
 class TestCommitAnalysisE2E:
     """End-to-end tests for the complete commit analysis flow"""
-    
+
     @pytest_asyncio.fixture
     async def mock_supabase_client(self):
         """Mock Supabase client with in-memory storage"""
+
         class MockSupabaseClient:
             def __init__(self):
                 self.commits = {}
                 self.users = {}
                 self.daily_reports = {}
                 self.daily_analyses = {}
-            
+
             def table(self, table_name):
                 return self
-            
+
             def select(self, *args, **kwargs):
                 return self
-            
+
             def eq(self, column, value):
                 return self
-            
+
             def execute(self):
                 # Simple mock implementation
                 return {"data": [], "error": None}
-            
+
             def insert(self, data):
                 return self
-            
+
             def update(self, data):
                 return self
-            
+
             def upsert(self, data):
                 return self
-        
+
         return MockSupabaseClient()
-    
+
     @pytest_asyncio.fixture
     async def real_commit_payload(self):
         """Create a realistic commit payload"""
@@ -80,15 +82,15 @@ class TestCommitAnalysisE2E:
             diff_url="https://github.com/testorg/authservice/commit/f47ac10b58cc3726b5b0f3e7f1a8f3d2c8b9e4a1.diff",
             files_changed=[
                 "src/auth/oauth_provider.py",
-                "src/auth/token_validator.py", 
+                "src/auth/token_validator.py",
                 "src/auth/session_manager.py",
                 "tests/test_oauth.py",
-                "tests/test_token_validation.py"
+                "tests/test_token_validation.py",
             ],
             additions=385,
-            deletions=42
+            deletions=42,
         )
-    
+
     @pytest_asyncio.fixture
     async def realistic_diff_content(self):
         """Create realistic diff content for testing"""
@@ -262,20 +264,19 @@ index 0000000..b234567
 +        assert "exp" in decoded
 +        assert "iat" in decoded
 """
-    
+
     @pytest.mark.asyncio
     async def test_complete_commit_flow_with_real_components(
-        self, 
-        mock_supabase_client,
-        real_commit_payload,
-        realistic_diff_content
+        self, mock_supabase_client, real_commit_payload, realistic_diff_content
     ):
         """Test the complete flow with minimal mocking - only external services"""
-        
+
         # Only mock external services (GitHub API and OpenAI)
-        with patch('app.integrations.github_integration.requests.get') as mock_github_get, \
-             patch('app.integrations.commit_analysis.AsyncOpenAI') as mock_openai_class:
-            
+        with (
+            patch("app.integrations.github_integration.requests.get") as mock_github_get,
+            patch("app.integrations.commit_analysis.AsyncOpenAI") as mock_openai_class,
+        ):
+
             # Set up GitHub API mock
             github_response = MagicMock()
             github_response.status_code = 200
@@ -286,15 +287,16 @@ index 0000000..b234567
                         "status": "added",
                         "additions": 145,
                         "deletions": 0,
-                        "patch": realistic_diff_content.split("diff --git a/tests/test_oauth.py")[0]
+                        "patch": realistic_diff_content.split("diff --git a/tests/test_oauth.py")[0],
                     },
                     {
                         "filename": "tests/test_oauth.py",
-                        "status": "added", 
+                        "status": "added",
                         "additions": 98,
                         "deletions": 0,
-                        "patch": "diff --git a/tests/test_oauth.py" + realistic_diff_content.split("diff --git a/tests/test_oauth.py")[1]
-                    }
+                        "patch": "diff --git a/tests/test_oauth.py"
+                        + realistic_diff_content.split("diff --git a/tests/test_oauth.py")[1],
+                    },
                 ],
                 "stats": {"additions": 385, "deletions": 42},
                 "commit": {
@@ -302,53 +304,57 @@ index 0000000..b234567
                     "author": {
                         "name": "John Doe",
                         "email": "john.doe@example.com",
-                        "date": real_commit_payload.commit_timestamp.isoformat()
-                    }
-                }
+                        "date": real_commit_payload.commit_timestamp.isoformat(),
+                    },
+                },
             }
             github_response.raise_for_status = MagicMock()
             mock_github_get.return_value = github_response
-            
+
             # Set up OpenAI mock
             mock_openai = AsyncMock()
             mock_openai_class.return_value = mock_openai
-            
+
             # Create realistic AI response
             mock_completion = AsyncMock()
             mock_completion.choices = [
                 MagicMock(
                     message=MagicMock(
-                        content=json.dumps({
-                            "complexity_score": 7,
-                            "estimated_hours": 4.5,
-                            "risk_level": "medium",
-                            "seniority_score": 8,
-                            "seniority_rationale": "Demonstrates strong understanding of OAuth2 flow, security best practices with RSA key generation, proper async patterns, and comprehensive test coverage. The implementation shows senior-level architecture decisions.",
-                            "key_changes": [
-                                "Implemented complete OAuth2 provider with authorization flow",
-                                "Added RSA-based JWT token generation for secure authentication",
-                                "Created comprehensive async HTTP client integration",
-                                "Included thorough test coverage with mocking strategies"
-                            ]
-                        })
+                        content=json.dumps(
+                            {
+                                "complexity_score": 7,
+                                "estimated_hours": 4.5,
+                                "risk_level": "medium",
+                                "seniority_score": 8,
+                                "seniority_rationale": "Demonstrates strong understanding of OAuth2 flow, security best practices with RSA key generation, proper async patterns, and comprehensive test coverage. The implementation shows senior-level architecture decisions.",
+                                "key_changes": [
+                                    "Implemented complete OAuth2 provider with authorization flow",
+                                    "Added RSA-based JWT token generation for secure authentication",
+                                    "Created comprehensive async HTTP client integration",
+                                    "Included thorough test coverage with mocking strategies",
+                                ],
+                            }
+                        )
                     )
                 )
             ]
             mock_openai.chat.completions.create.return_value = mock_completion
-            
+
             # Mock repository operations
-            with patch('app.repositories.commit_repository.CommitRepository') as mock_commit_repo_class, \
-                 patch('app.repositories.user_repository.UserRepository') as mock_user_repo_class, \
-                 patch('app.repositories.daily_report_repository.DailyReportRepository') as mock_report_repo_class:
-                
+            with (
+                patch("app.repositories.commit_repository.CommitRepository") as mock_commit_repo_class,
+                patch("app.repositories.user_repository.UserRepository") as mock_user_repo_class,
+                patch("app.repositories.daily_report_repository.DailyReportRepository") as mock_report_repo_class,
+            ):
+
                 # Set up repository mocks with in-memory storage
                 commits_storage = {}
                 users_storage = {}
-                
+
                 # User repository mock
                 mock_user_repo = AsyncMock()
                 mock_user_repo_class.return_value = mock_user_repo
-                
+
                 # Create test user
                 test_user = User(
                     id=uuid.uuid4(),
@@ -358,45 +364,45 @@ index 0000000..b234567
                     role=UserRole.EMPLOYEE,
                     created_at=datetime.now(timezone.utc),
                     updated_at=datetime.now(timezone.utc),
-                    is_active=True
+                    is_active=True,
                 )
                 users_storage[test_user.github_username] = test_user
-                
+
                 async def mock_get_user_by_github_username(username):
                     return users_storage.get(username)
-                
+
                 async def mock_get_user_by_email(email):
                     for user in users_storage.values():
                         if user.email == email:
                             return user
                     return None
-                
+
                 async def mock_create_user(user_data):
                     users_storage[user_data.github_username] = user_data
                     return user_data
-                
+
                 mock_user_repo.get_user_by_github_username = mock_get_user_by_github_username
                 mock_user_repo.get_user_by_email = mock_get_user_by_email
                 mock_user_repo.create_user = mock_create_user
-                
+
                 # Commit repository mock
                 mock_commit_repo = AsyncMock()
                 mock_commit_repo_class.return_value = mock_commit_repo
-                
+
                 async def mock_get_commit_by_hash(commit_hash):
                     return commits_storage.get(commit_hash)
-                
+
                 def mock_save_commit(commit):
                     commits_storage[commit.commit_hash] = commit
                     return commit
-                
+
                 mock_commit_repo.get_commit_by_hash = mock_get_commit_by_hash
                 mock_commit_repo.save_commit = mock_save_commit
-                
+
                 # Daily report repository mock
                 mock_report_repo = AsyncMock()
                 mock_report_repo_class.return_value = mock_report_repo
-                
+
                 # Create test daily report
                 test_report = DailyReport(
                     id=uuid.uuid4(),
@@ -412,25 +418,25 @@ index 0000000..b234567
                         key_achievements=[
                             "OAuth2 provider integration",
                             "JWT token implementation",
-                            "Security best practices"
+                            "Security best practices",
                         ],
-                        sentiment="positive"
-                    )
+                        sentiment="positive",
+                    ),
                 )
-                
+
                 async def mock_get_daily_report(user_id, date):
                     if user_id == test_user.id:
                         return test_report
                     return None
-                
+
                 mock_report_repo.get_daily_reports_by_user_and_date = mock_get_daily_report
-                
+
                 # Initialize service with real components
                 service = CommitAnalysisService(mock_supabase_client)
-                
+
                 # Process the commit
                 result = await service.process_commit(real_commit_payload)
-                
+
                 # Verify the complete flow worked
                 assert result is not None
                 assert result.commit_hash == real_commit_payload.commit_hash
@@ -444,20 +450,20 @@ index 0000000..b234567
                 assert result.eod_report_id == test_report.id
                 assert result.comparison_notes is not None
                 assert "EOD report" in result.comparison_notes
-                
+
                 # Verify the commit was saved
                 saved_commit = commits_storage.get(real_commit_payload.commit_hash)
                 assert saved_commit is not None
                 assert saved_commit.author_id == test_user.id
-    
+
     @pytest.mark.asyncio
     async def test_daily_batch_analysis_flow(self, mock_supabase_client):
         """Test the daily batch analysis flow end-to-end"""
-        
+
         # Set up test data
         test_user_id = uuid.uuid4()
         test_date = date.today()
-        
+
         # Create multiple commits for batch analysis
         test_commits = []
         for i in range(5):
@@ -469,80 +475,82 @@ index 0000000..b234567
                 commit_timestamp=datetime.combine(test_date, datetime.min.time()) + timedelta(hours=i),
                 repository_name="testorg/testrepo",
                 commit_message=f"feat: Feature {i} implementation",
-                additions=50 + i*20,
-                deletions=10 + i*5,
+                additions=50 + i * 20,
+                deletions=10 + i * 5,
                 complexity_score=5,  # Default values
                 seniority_score=5,
-                model_used="none (batch analysis mode)"
+                model_used="none (batch analysis mode)",
             )
             test_commits.append(commit)
-        
+
         # Mock only external dependencies
-        with patch('app.integrations.commit_analysis.AsyncOpenAI') as mock_openai_class, \
-             patch('app.repositories.commit_repository.CommitRepository') as mock_commit_repo_class, \
-             patch('app.repositories.daily_commit_analysis_repository.DailyCommitAnalysisRepository') as mock_daily_repo_class, \
-             patch('app.repositories.user_repository.UserRepository') as mock_user_repo_class:
-            
+        with (
+            patch("app.integrations.commit_analysis.AsyncOpenAI") as mock_openai_class,
+            patch("app.repositories.commit_repository.CommitRepository") as mock_commit_repo_class,
+            patch(
+                "app.repositories.daily_commit_analysis_repository.DailyCommitAnalysisRepository"
+            ) as mock_daily_repo_class,
+            patch("app.repositories.user_repository.UserRepository") as mock_user_repo_class,
+        ):
+
             # Set up OpenAI mock for batch analysis
             mock_openai = AsyncMock()
             mock_openai_class.return_value = mock_openai
-            
+
             mock_completion = AsyncMock()
             mock_completion.choices = [
                 MagicMock(
                     message=MagicMock(
-                        content=json.dumps({
-                            "total_estimated_hours": 12.5,
-                            "average_complexity_score": 6.5,
-                            "average_seniority_score": 7,
-                            "summary": "Productive day with multiple feature implementations showing consistent quality",
-                            "key_insights": [
-                                "Consistent code quality across commits",
-                                "Progressive feature development", 
-                                "Good test coverage maintained"
-                            ],
-                            "recommendations": [
-                                "Consider refactoring common patterns",
-                                "Add integration tests for new features"
-                            ]
-                        })
+                        content=json.dumps(
+                            {
+                                "total_estimated_hours": 12.5,
+                                "average_complexity_score": 6.5,
+                                "average_seniority_score": 7,
+                                "summary": "Productive day with multiple feature implementations showing consistent quality",
+                                "key_insights": [
+                                    "Consistent code quality across commits",
+                                    "Progressive feature development",
+                                    "Good test coverage maintained",
+                                ],
+                                "recommendations": [
+                                    "Consider refactoring common patterns",
+                                    "Add integration tests for new features",
+                                ],
+                            }
+                        )
                     )
                 )
             ]
             mock_openai.chat.completions.create.return_value = mock_completion
-            
+
             # Set up repository mocks
             mock_commit_repo = AsyncMock()
             mock_daily_repo = AsyncMock()
             mock_user_repo = AsyncMock()
-            
+
             mock_commit_repo_class.return_value = mock_commit_repo
             mock_daily_repo_class.return_value = mock_daily_repo
             mock_user_repo_class.return_value = mock_user_repo
-            
+
             # Mock repository methods
             async def mock_get_commits_by_user_in_range(author_id, start_date, end_date):
                 if author_id == test_user_id:
                     return test_commits
                 return []
-            
+
             mock_commit_repo.get_commits_by_user_in_range = mock_get_commits_by_user_in_range
-            
+
             # Mock user lookup
-            test_user = User(
-                id=test_user_id,
-                name="Test Developer",
-                email="test@example.com"
-            )
+            test_user = User(id=test_user_id, name="Test Developer", email="test@example.com")
             mock_user_repo.get_by_id = AsyncMock(return_value=test_user)
-            
+
             # Mock daily analysis repository
             daily_analyses = {}
-            
+
             async def mock_get_by_user_and_date(user_id, analysis_date):
                 key = f"{user_id}_{analysis_date}"
                 return daily_analyses.get(key)
-            
+
             async def mock_create_analysis(analysis_data):
                 analysis = MagicMock()
                 analysis.id = uuid.uuid4()
@@ -551,18 +559,18 @@ index 0000000..b234567
                 analysis.total_estimated_hours = analysis_data.total_estimated_hours
                 analysis.commit_count = analysis_data.commit_count
                 analysis.ai_analysis = analysis_data.ai_analysis
-                
+
                 key = f"{analysis_data.user_id}_{analysis_data.analysis_date}"
                 daily_analyses[key] = analysis
                 return analysis
-            
+
             mock_daily_repo.get_by_user_and_date = mock_get_by_user_and_date
             mock_daily_repo.create = mock_create_analysis
-            
+
             # Initialize service and run analysis
             service = DailyCommitAnalysisService()
             result = await service.analyze_for_date(test_user_id, test_date)
-            
+
             # Verify results
             assert result is not None
             assert result.total_estimated_hours == Decimal("12.5")
@@ -571,78 +579,80 @@ index 0000000..b234567
             assert result.ai_analysis["average_seniority_score"] == 7
             assert len(result.ai_analysis["key_insights"]) == 3
             assert len(result.ai_analysis["recommendations"]) == 2
-    
-    @pytest.mark.asyncio 
+
+    @pytest.mark.asyncio
     async def test_error_recovery_and_retries(self, mock_supabase_client, real_commit_payload):
         """Test error handling and recovery mechanisms"""
-        
-        with patch('app.integrations.github_integration.requests.get') as mock_github_get, \
-             patch('app.integrations.commit_analysis.AsyncOpenAI') as mock_openai_class, \
-             patch('app.repositories.commit_repository.CommitRepository') as mock_commit_repo_class, \
-             patch('app.repositories.user_repository.UserRepository') as mock_user_repo_class:
-            
+
+        with (
+            patch("app.integrations.github_integration.requests.get") as mock_github_get,
+            patch("app.integrations.commit_analysis.AsyncOpenAI") as mock_openai_class,
+            patch("app.repositories.commit_repository.CommitRepository") as mock_commit_repo_class,
+            patch("app.repositories.user_repository.UserRepository") as mock_user_repo_class,
+        ):
+
             # Set up mocks
             mock_user_repo = AsyncMock()
             mock_commit_repo = AsyncMock()
             mock_user_repo_class.return_value = mock_user_repo
             mock_commit_repo_class.return_value = mock_commit_repo
-            
+
             # First attempt: GitHub API fails
             mock_github_get.side_effect = Exception("GitHub API timeout")
-            
+
             # User exists
             test_user = User(id=uuid.uuid4(), github_username="johndoe")
             mock_user_repo.get_user_by_github_username.return_value = test_user
             mock_commit_repo.get_commit_by_hash.return_value = None
-            
+
             # Initialize service
             service = CommitAnalysisService(mock_supabase_client)
-            
+
             # First attempt should fail gracefully
             result = await service.process_commit(real_commit_payload)
             assert result is None
-            
+
             # Reset GitHub mock to succeed, but make OpenAI fail
             mock_github_get.side_effect = None
             github_response = MagicMock()
             github_response.json.return_value = {"files": [], "stats": {"additions": 10, "deletions": 5}}
             mock_github_get.return_value = github_response
-            
+
             mock_openai = AsyncMock()
             mock_openai_class.return_value = mock_openai
             mock_openai.chat.completions.create.side_effect = Exception("OpenAI API error")
-            
+
             # Second attempt should also fail gracefully
             result = await service.process_commit(real_commit_payload)
             assert result is None
-            
+
             # Finally, let everything succeed
             mock_openai.chat.completions.create.side_effect = None
             mock_completion = AsyncMock()
             mock_completion.choices = [
                 MagicMock(
                     message=MagicMock(
-                        content=json.dumps({
-                            "complexity_score": 5,
-                            "estimated_hours": 2.0,
-                            "risk_level": "low", 
-                            "seniority_score": 6,
-                            "seniority_rationale": "Standard implementation",
-                            "key_changes": ["Basic feature"]
-                        })
+                        content=json.dumps(
+                            {
+                                "complexity_score": 5,
+                                "estimated_hours": 2.0,
+                                "risk_level": "low",
+                                "seniority_score": 6,
+                                "seniority_rationale": "Standard implementation",
+                                "key_changes": ["Basic feature"],
+                            }
+                        )
                     )
                 )
             ]
             mock_openai.chat.completions.create.return_value = mock_completion
-            
+
             # Mock successful save
             saved_commit = Commit(
-                commit_hash=real_commit_payload.commit_hash,
-                author_id=test_user.id,
-                ai_estimated_hours=Decimal("2.0")
+                commit_hash=real_commit_payload.commit_hash, author_id=test_user.id, ai_estimated_hours=Decimal("2.0")
             )
             mock_commit_repo.save_commit.return_value = saved_commit
-            
+
             # Third attempt should succeed
             result = await service.process_commit(real_commit_payload)
             assert result is not None
@@ -652,20 +662,22 @@ index 0000000..b234567
 # Performance and load testing
 class TestCommitAnalysisPerformance:
     """Performance tests for commit analysis"""
-    
+
     @pytest.mark.asyncio
     async def test_concurrent_commit_processing(self, mock_supabase_client):
         """Test processing multiple commits concurrently"""
-        
-        with patch('app.integrations.commit_analysis.AsyncOpenAI') as mock_openai_class, \
-             patch('app.repositories.commit_repository.CommitRepository') as mock_commit_repo_class, \
-             patch('app.repositories.user_repository.UserRepository') as mock_user_repo_class, \
-             patch('app.integrations.github_integration.requests.get') as mock_github_get:
-            
+
+        with (
+            patch("app.integrations.commit_analysis.AsyncOpenAI") as mock_openai_class,
+            patch("app.repositories.commit_repository.CommitRepository") as mock_commit_repo_class,
+            patch("app.repositories.user_repository.UserRepository") as mock_user_repo_class,
+            patch("app.integrations.github_integration.requests.get") as mock_github_get,
+        ):
+
             # Set up mocks
             mock_openai = AsyncMock()
             mock_openai_class.return_value = mock_openai
-            
+
             # Configure AI to return quickly
             async def mock_ai_response(*args, **kwargs):
                 await asyncio.sleep(0.1)  # Simulate API delay
@@ -673,37 +685,39 @@ class TestCommitAnalysisPerformance:
                     choices=[
                         MagicMock(
                             message=MagicMock(
-                                content=json.dumps({
-                                    "complexity_score": 5,
-                                    "estimated_hours": 1.0,
-                                    "risk_level": "low",
-                                    "seniority_score": 5,
-                                    "seniority_rationale": "Standard",
-                                    "key_changes": ["Change"]
-                                })
+                                content=json.dumps(
+                                    {
+                                        "complexity_score": 5,
+                                        "estimated_hours": 1.0,
+                                        "risk_level": "low",
+                                        "seniority_score": 5,
+                                        "seniority_rationale": "Standard",
+                                        "key_changes": ["Change"],
+                                    }
+                                )
                             )
                         )
                     ]
                 )
-            
+
             mock_openai.chat.completions.create = mock_ai_response
-            
+
             # Set up other mocks
             mock_user_repo = AsyncMock()
             mock_commit_repo = AsyncMock()
             mock_user_repo_class.return_value = mock_user_repo
             mock_commit_repo_class.return_value = mock_commit_repo
-            
+
             test_user = User(id=uuid.uuid4(), github_username="testuser")
             mock_user_repo.get_user_by_github_username.return_value = test_user
             mock_commit_repo.get_commit_by_hash.return_value = None
             mock_commit_repo.save_commit.side_effect = lambda c: c
-            
+
             # Mock GitHub responses
             mock_github_get.return_value = MagicMock(
                 json=MagicMock(return_value={"files": [], "stats": {"additions": 10, "deletions": 5}})
             )
-            
+
             # Create multiple commit payloads
             commit_payloads = []
             for i in range(10):
@@ -717,26 +731,26 @@ class TestCommitAnalysisPerformance:
                     repository_name="testorg/repo",
                     repository_url="https://github.com/testorg/repo",
                     branch="main",
-                    diff_url=f"https://github.com/repo/commit/hash{i}.diff"
+                    diff_url=f"https://github.com/repo/commit/hash{i}.diff",
                 )
                 commit_payloads.append(payload)
-            
+
             # Process commits concurrently
             service = CommitAnalysisService(mock_supabase_client)
-            
+
             start_time = asyncio.get_event_loop().time()
             tasks = [service.process_commit(payload) for payload in commit_payloads]
             results = await asyncio.gather(*tasks)
             end_time = asyncio.get_event_loop().time()
-            
+
             # Verify all processed
             assert len(results) == 10
             assert all(r is not None for r in results)
-            
+
             # Verify concurrent execution (should be much faster than sequential)
             elapsed_time = end_time - start_time
             assert elapsed_time < 2.0  # Should complete in under 2 seconds for 10 commits
-            
+
             # Verify AI was called 10 times
             assert mock_openai.chat.completions.create.call_count == 10
 

@@ -7,10 +7,11 @@ Only run this test when you want to see actual AI analysis.
 """
 
 import asyncio
+import json
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
-import json
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -18,10 +19,11 @@ load_dotenv()
 
 # Add the backend directory to the Python path
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.integrations.commit_analysis import CommitAnalyzer
 from app.config.settings import settings
+from app.integrations.commit_analysis import CommitAnalyzer
 
 
 async def test_real_commit_analysis():
@@ -29,26 +31,26 @@ async def test_real_commit_analysis():
     Test commit analysis with actual OpenAI API calls.
     This shows exactly what the AI returns for real commits.
     """
-    
-    print("\n" + "="*80)
+
+    print("\n" + "=" * 80)
     print("COMMIT ANALYSIS WITH REAL OPENAI API")
-    print("="*80)
+    print("=" * 80)
     print(f"Using model: {settings.commit_analysis_model}")
     print(f"API Key configured: {'Yes' if settings.openai_api_key else 'No'}")
-    
+
     if not settings.openai_api_key:
         print("\n❌ ERROR: OpenAI API key not configured!")
         print("Please set OPENAI_API_KEY in your .env file")
         return
-    
+
     # Create the analyzer
     analyzer = CommitAnalyzer()
-    
+
     # Example 1: Simple bug fix commit
-    print("\n" + "-"*80)
+    print("\n" + "-" * 80)
     print("EXAMPLE 1: Simple Bug Fix")
-    print("-"*80)
-    
+    print("-" * 80)
+
     simple_commit = {
         "commit_hash": "abc123",
         "repository": "myapp/backend",
@@ -70,19 +72,19 @@ index 1234567..abcdefg 100644
 +            return user.profile
 +        else:
 +            raise UserNotFoundError(f"User {user_id} or profile not found")
-"""
+""",
     }
-    
+
     print(f"Analyzing commit: {simple_commit['message']}")
     result1 = await analyzer.analyze_commit_diff(simple_commit)
     print(f"\nAI Analysis Results:")
     print(json.dumps(result1, indent=2))
-    
+
     # Example 2: Feature implementation
-    print("\n" + "-"*80)
+    print("\n" + "-" * 80)
     print("EXAMPLE 2: Feature Implementation")
-    print("-"*80)
-    
+    print("-" * 80)
+
     feature_commit = {
         "commit_hash": "def456",
         "repository": "myapp/backend",
@@ -191,30 +193,30 @@ index 0000000..2345678
 +            }
 +            result = await provider.exchange_code_for_token("test_code")
 +            assert result["access_token"] == "test_token"
-"""
+""",
     }
-    
+
     print(f"Analyzing commit: {feature_commit['message']}")
     result2 = await analyzer.analyze_commit_diff(feature_commit)
     print(f"\nAI Analysis Results:")
     print(json.dumps(result2, indent=2))
-    
+
     # Example 3: Complex refactoring
-    print("\n" + "-"*80)
+    print("\n" + "-" * 80)
     print("EXAMPLE 3: Complex Refactoring")
-    print("-"*80)
-    
+    print("-" * 80)
+
     refactor_commit = {
         "commit_hash": "ghi789",
         "repository": "myapp/backend",
         "message": "refactor: Migrate from synchronous to async database operations",
         "author_name": "Senior Developer",
-        "author_email": "senior@example.com", 
+        "author_email": "senior@example.com",
         "files_changed": [
             "src/db/connection.py",
             "src/repositories/base.py",
             "src/repositories/user_repo.py",
-            "src/services/user_service.py"
+            "src/services/user_service.py",
         ],
         "additions": 450,
         "deletions": 380,
@@ -267,34 +269,34 @@ index 1234567..abcdefg 100644
 +        )
 +        await self.session.commit()
 +        return await self.get_by_id(id)
-"""
+""",
     }
-    
+
     print(f"Analyzing commit: {refactor_commit['message']}")
     result3 = await analyzer.analyze_commit_diff(refactor_commit)
     print(f"\nAI Analysis Results:")
     print(json.dumps(result3, indent=2))
-    
+
     # Summary
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("ANALYSIS SUMMARY")
-    print("="*80)
-    
+    print("=" * 80)
+
     print(f"\n1. Bug Fix: {simple_commit['message']}")
     print(f"   - Estimated Hours: {result1.get('estimated_hours', 'N/A')}")
     print(f"   - Complexity: {result1.get('complexity_score', 'N/A')}/10")
     print(f"   - Seniority: {result1.get('seniority_score', 'N/A')}/10")
-    
+
     print(f"\n2. Feature: {feature_commit['message']}")
     print(f"   - Estimated Hours: {result2.get('estimated_hours', 'N/A')}")
     print(f"   - Complexity: {result2.get('complexity_score', 'N/A')}/10")
     print(f"   - Seniority: {result2.get('seniority_score', 'N/A')}/10")
-    
+
     print(f"\n3. Refactor: {refactor_commit['message']}")
     print(f"   - Estimated Hours: {result3.get('estimated_hours', 'N/A')}")
     print(f"   - Complexity: {result3.get('complexity_score', 'N/A')}/10")
     print(f"   - Seniority: {result3.get('seniority_score', 'N/A')}/10")
-    
+
     print("\n✅ Real API test complete!")
     print("Note: These are actual AI-generated estimates, not mocked data.")
 

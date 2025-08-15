@@ -1,22 +1,25 @@
+import asyncio
 import logging
 import sys
 import types
-import asyncio
 from unittest.mock import MagicMock
 
 # Provide a stub 'github' module if PyGithub is unavailable
-if 'github' not in sys.modules:
-    github_stub = types.ModuleType('github')
+if "github" not in sys.modules:
+    github_stub = types.ModuleType("github")
+
     class Github:
         def __init__(self, token):
             self.token = token
+
     class GithubException(Exception):
         pass
+
     github_stub.Github = Github
     github_stub.GithubException = GithubException
-    sys.modules['github'] = github_stub
+    sys.modules["github"] = github_stub
 
-from doc_agent.client import AutoDocClient
+from app.doc_agent.client import AutoDocClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ index 1111111..2222222 100644
 +New content
 """
 
+
 def test_auto_doc_flow(monkeypatch):
     """Demonstrate the AutoDocClient end-to-end flow using mocks."""
     client = AutoDocClient("fake-openai", "fake-token", "owner/docs")
@@ -37,7 +41,11 @@ def test_auto_doc_flow(monkeypatch):
     # Mock OpenAI completion
     mock_openai = MagicMock()
     mock_openai.chat.completions.create.return_value = MagicMock(
-        choices=[MagicMock(message=MagicMock(content="--- a/README.md\n+++ b/README.md\n@@\n-Old content\n+New content added\n"))]
+        choices=[
+            MagicMock(
+                message=MagicMock(content="--- a/README.md\n+++ b/README.md\n@@\n-Old content\n+New content added\n")
+            )
+        ]
     )
     client.openai_client = mock_openai
 

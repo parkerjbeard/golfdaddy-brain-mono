@@ -1,14 +1,15 @@
-import pytest
 from datetime import datetime
+
+import pytest
 from pydantic import ValidationError
 
 from app.schemas.github_event import (
-    CommitPayload,
-    CommitFileData,
+    Commit,
     CommitDetail,
+    CommitFileData,
+    CommitPayload,
     GitHubRepo,
     GitHubUser,
-    Commit,
     PushEvent,
 )
 

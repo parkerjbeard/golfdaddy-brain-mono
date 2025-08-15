@@ -8,9 +8,9 @@ Usage:
     python tests/run_semantic_tests.py integration  # Run only integration tests
     python tests/run_semantic_tests.py coverage     # Run with coverage report
 """
-import sys
-import subprocess
 import os
+import subprocess
+import sys
 
 
 def run_tests(test_type="all"):
@@ -20,13 +20,11 @@ def run_tests(test_type="all"):
             "tests/unit/services/semantic/test_embedding_service.py",
             "tests/unit/services/semantic/test_context_analyzer.py",
             "tests/unit/services/semantic/test_semantic_search_service.py",
-            "tests/unit/doc_agent/test_auto_doc_client_semantic.py"
+            "tests/unit/doc_agent/test_auto_doc_client_semantic.py",
         ],
-        "integration": [
-            "tests/integration/test_semantic_search_integration.py"
-        ]
+        "integration": ["tests/integration/test_semantic_search_integration.py"],
     }
-    
+
     if test_type == "all":
         paths = test_paths["unit"] + test_paths["integration"]
     elif test_type in test_paths:
@@ -34,14 +32,14 @@ def run_tests(test_type="all"):
     else:
         print(f"Unknown test type: {test_type}")
         return 1
-    
+
     # Run pytest with verbose output
     cmd = ["pytest", "-v", "--tb=short"] + paths
-    
+
     print(f"Running {test_type} tests for semantic search features...")
     print(f"Command: {' '.join(cmd)}")
     print("-" * 60)
-    
+
     result = subprocess.run(cmd, cwd=os.path.dirname(os.path.abspath(__file__)) + "/..")
     return result.returncode
 
@@ -56,21 +54,21 @@ def run_with_coverage():
         "--cov=doc_agent.client",
         "--cov-report=term-missing",
         "--cov-report=html",
-        "-v"
+        "-v",
     ] + [
         "tests/unit/services/semantic/",
         "tests/unit/doc_agent/test_auto_doc_client_semantic.py",
-        "tests/integration/test_semantic_search_integration.py"
+        "tests/integration/test_semantic_search_integration.py",
     ]
-    
+
     print("Running semantic search tests with coverage...")
     print("-" * 60)
-    
+
     result = subprocess.run(cmd, cwd=os.path.dirname(os.path.abspath(__file__)) + "/..")
-    
+
     if result.returncode == 0:
         print("\nCoverage report generated in htmlcov/index.html")
-    
+
     return result.returncode
 
 
