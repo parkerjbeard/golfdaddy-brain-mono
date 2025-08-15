@@ -1,0 +1,12 @@
+# Additional requirements for Batch 1: GitHub App & Critical Infrastructure
+# Add these to your existing backend/requirements.txt
+
+# GitHub App authentication
+cryptography>=3.4.0  # For JWT generation
+
+# Type hints for development
+types-requests>=2.32.0
+types-jwt>=1.0.0
+
+# Testing improvements
+pytest-env>=1.0.0  # For environment variable mocking in tests
