@@ -494,7 +494,7 @@ class AutoDocClientV2:
                 commit_hash=commit_hash,
                 repository=self.docs_repo,
                 commit_message=commit_message or "No commit message",
-                diff_preview=diff[:2000],
+                diff_preview=patch[:2000],
                 files_affected=files_affected,
                 additions=additions,
                 deletions=deletions,

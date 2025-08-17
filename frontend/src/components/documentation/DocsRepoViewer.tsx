@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FileText, GitBranch, GitCommit, RefreshCw, Search, Diff } from 'lucide-react'
+import { FileText, GitBranch, GitCommit, RefreshCw, Search, Diff, Save, Wand2 } from 'lucide-react'
 
 type PRItem = {
   number: number
@@ -30,8 +30,12 @@ export default function DocsRepoViewer() {
   const [activeTab, setActiveTab] = useState('render')
   const [selectedPath, setSelectedPath] = useState<string>('')
   const [fileContent, setFileContent] = useState<string>('')
+  const [fileSha, setFileSha] = useState<string>('')
   const [diff, setDiff] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isRefining, setIsRefining] = useState(false)
+  const [feedback, setFeedback] = useState('')
 
   const [owner, repo] = useMemo(() => {
     const parts = ownerRepo.split('/')
@@ -70,9 +74,43 @@ export default function DocsRepoViewer() {
       const resp = await fetch(`/api/v1/docs/${owner}/${repo}/${prNumber}/file?path=${encodeURIComponent(path)}`)
       const data = await resp.json()
       setFileContent(data.content || '')
+      setFileSha(data.sha || '')
       setSelectedPath(path)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const saveFile = async () => {
+    if (!owner || !repo || !prNumber || !selectedPath) return
+    setIsSaving(true)
+    try {
+      const resp = await fetch(`/api/v1/docs/${owner}/${repo}/${prNumber}/file?path=${encodeURIComponent(selectedPath)}` ,{
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: fileContent, sha: fileSha }),
+      })
+      if (!resp.ok) throw new Error('Failed to save')
+      await loadTree()
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const refineWithAI = async () => {
+    if (!owner || !repo || !prNumber || !selectedPath) return
+    setIsRefining(true)
+    try {
+      const resp = await fetch(`/api/v1/docs/${owner}/${repo}/${prNumber}/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: selectedPath, content: fileContent, feedback }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.detail || 'Failed to refine')
+      setFileContent(data.content || '')
+    } finally {
+      setIsRefining(false)
     }
   }
 
@@ -176,7 +214,27 @@ export default function DocsRepoViewer() {
                 </div>
               </TabsContent>
               <TabsContent value="source" className="mt-3">
-                <pre className="bg-muted p-3 rounded overflow-auto max-h-[540px]"><code>{fileContent}</code></pre>
+                <div className="flex gap-2 mb-2">
+                  <Button size="sm" onClick={saveFile} disabled={isSaving || !selectedPath}>
+                    <Save className="h-4 w-4 mr-1" /> {isSaving ? 'Saving...' : 'Save'}
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="border rounded px-2 py-1 text-sm w-80"
+                      placeholder="Give the AI guidance (tone, sections, fixes)"
+                      value={feedback}
+                      onChange={(e) => setFeedback(e.target.value)}
+                    />
+                    <Button size="sm" variant="secondary" onClick={refineWithAI} disabled={isRefining || !selectedPath}>
+                      <Wand2 className="h-4 w-4 mr-1" /> {isRefining ? 'Refining...' : 'Refine with AI'}
+                    </Button>
+                  </div>
+                </div>
+                <textarea
+                  className="w-full bg-muted p-3 rounded overflow-auto h-[540px] font-mono text-sm"
+                  value={fileContent}
+                  onChange={(e) => setFileContent(e.target.value)}
+                />
               </TabsContent>
               <TabsContent value="diff" className="mt-3">
                 <pre className="bg-muted p-3 rounded overflow-auto max-h-[540px]"><code>{diff}</code></pre>

@@ -58,6 +58,10 @@ export function ApprovalQueue() {
   const [loading, setLoading] = useState(true);
   const [selectedApproval, setSelectedApproval] = useState<DocApproval | null>(null);
   const [showDiffDialog, setShowDiffDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showRefineDialog, setShowRefineDialog] = useState(false);
+  const [editPatch, setEditPatch] = useState('');
+  const [refineFeedback, setRefineFeedback] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -124,6 +128,38 @@ export function ApprovalQueue() {
         description: 'Failed to approve documentation update',
         variant: 'destructive'
       });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!selectedApproval) return;
+    try {
+      setProcessingId(selectedApproval.id);
+      await api.docApprovals.edit(selectedApproval.id, editPatch);
+      setShowEditDialog(false);
+      setEditPatch('');
+      await loadApprovals();
+      toast({ title: 'Saved', description: 'Patch updated.' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to save patch', variant: 'destructive' });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRefine = async () => {
+    if (!selectedApproval || !refineFeedback.trim()) return;
+    try {
+      setProcessingId(selectedApproval.id);
+      const res = await api.docApprovals.refine(selectedApproval.id, refineFeedback) as any;
+      setShowRefineDialog(false);
+      setRefineFeedback('');
+      await loadApprovals();
+      toast({ title: 'Refined', description: 'Patch refined with AI.' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to refine patch', variant: 'destructive' });
     } finally {
       setProcessingId(null);
     }
@@ -318,6 +354,28 @@ export function ApprovalQueue() {
                                 </Button>
                                 <Button
                                   size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedApproval(approval);
+                                    setEditPatch(approval.patchContent || '');
+                                    setShowEditDialog(true);
+                                  }}
+                                >
+                                  Edit Patch
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedApproval(approval);
+                                    setRefineFeedback('');
+                                    setShowRefineDialog(true);
+                                  }}
+                                >
+                                  Refine with AI
+                                </Button>
+                                <Button
+                                  size="sm"
                                   variant="destructive"
                                   onClick={() => {
                                     setSelectedApproval(approval);
@@ -428,6 +486,46 @@ export function ApprovalQueue() {
                 <XCircle className="h-4 w-4 mr-2" />
               )}
               Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Patch Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Edit Proposed Patch</DialogTitle>
+            <DialogDescription>Modify the unified diff patch before approving</DialogDescription>
+          </DialogHeader>
+          <div className="my-4">
+            <Textarea value={editPatch} onChange={(e) => setEditPatch(e.target.value)} rows={20} className="font-mono" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
+            <Button onClick={handleEdit} disabled={!editPatch.trim() || processingId !== null}>
+              {processingId ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refine Dialog */}
+      <Dialog open={showRefineDialog} onOpenChange={setShowRefineDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refine with AI</DialogTitle>
+            <DialogDescription>Give the AI guidance; it will propose a refined patch</DialogDescription>
+          </DialogHeader>
+          <div className="my-4">
+            <Textarea value={refineFeedback} onChange={(e) => setRefineFeedback(e.target.value)} rows={6} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRefineDialog(false)}>Cancel</Button>
+            <Button onClick={handleRefine} disabled={!refineFeedback.trim() || processingId !== null}>
+              {processingId ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Submit
             </Button>
           </DialogFooter>
         </DialogContent>

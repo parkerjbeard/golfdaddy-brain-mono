@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 
 from app.integrations.github_app import GitHubApp
 
@@ -149,7 +149,7 @@ def get_pr_file(owner: str, repo: str, pr_number: int, path: str) -> Dict[str, A
       raw = base64.b64decode(content_b64).decode("utf-8", errors="ignore")
     except Exception:
       raw = ""
-    return {"path": path, "ref": head_sha, "content": raw}
+    return {"path": path, "ref": head_sha, "content": raw, "sha": file_data.get("sha")}
   except HTTPException:
     raise
   except Exception as e:
@@ -169,3 +169,75 @@ def get_pr_diff(owner: str, repo: str, pr_number: int) -> Dict[str, Any]:
     raise HTTPException(status_code=502, detail="Failed to fetch PR diff")
 
 
+@router.post("/docs/{owner}/{repo}/{pr_number}/file")
+def update_pr_file(
+  owner: str,
+  repo: str,
+  pr_number: int,
+  path: str = Query(..., description="Path of the file to update"),
+  body: Dict[str, Any] = Body(..., description="Payload with content, message, and optional branch/sha"),
+) -> Dict[str, Any]:
+  """Update a file in the PR branch using the Contents API.
+
+  Body expects: { content: string, message?: string, branch?: string, sha?: string }
+  If branch is not provided, uses PR head ref. If sha is not provided, fetches it.
+  """
+  gh = _gh()
+  try:
+    # Get PR head ref
+    pr_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+    pr_resp = requests.get(pr_url, headers=gh.get_headers())
+    pr_resp.raise_for_status()
+    pr_json = pr_resp.json()
+    head_ref = (pr_json.get("head") or {}).get("ref")
+    if not head_ref:
+      raise HTTPException(status_code=404, detail="PR head branch not found")
+
+    branch = body.get("branch") or head_ref
+    content = body.get("content") or ""
+    message = body.get("message") or f"docs: update {path} via dashboard"
+    sha = body.get("sha")
+
+    # If no sha provided, fetch it
+    if not sha:
+      file_meta = gh.get_file_contents(owner, repo, path, ref=branch)
+      sha = file_meta.get("sha")
+
+    result = gh.create_or_update_file(owner, repo, path, message, content, branch, sha)
+    return {"ok": True, "commit": result.get("commit"), "content": result.get("content")}
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"Failed to update file {path} for {owner}/{repo}#{pr_number}: {e}")
+    raise HTTPException(status_code=502, detail="Failed to update file")
+
+
+@router.post("/docs/{owner}/{repo}/{pr_number}/refine")
+async def refine_doc_with_ai(
+  owner: str,
+  repo: str,
+  pr_number: int,
+  body: Dict[str, Any] = Body(..., description="Payload with path, content, and feedback"),
+) -> Dict[str, Any]:
+  """Refine a documentation file content using AI and return updated content.
+
+  Body expects: { path: string, content: string, feedback: string }
+  """
+  try:
+    from app.integrations.ai_integration_v2 import AIIntegrationV2
+    ai = AIIntegrationV2()
+    path = body.get("path") or ""
+    content = body.get("content") or ""
+    feedback = body.get("feedback") or ""
+    if not path:
+      raise HTTPException(status_code=400, detail="Missing path")
+    prompt = {"path": path, "original_content": content, "feedback": feedback}
+    updated = await ai.update_doc(prompt)
+    if not updated:
+      raise HTTPException(status_code=502, detail="AI failed to refine content")
+    return {"path": path, "content": updated}
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"Failed to refine doc for {owner}/{repo}#{pr_number}: {e}")
+    raise HTTPException(status_code=502, detail="Failed to refine content")

@@ -50,8 +50,7 @@ class DocApproval(Base):
     # Additional data
     # Align with DB column named 'metadata' while exposing Python attribute 'approval_metadata'
     approval_metadata = Column('metadata', JSON, default=dict)
-    # Expiration handling (exists in initial migration)
-    expires_at = Column(DateTime)
+    # Timestamps and expiration
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     expires_at = Column(DateTime)  # Auto-expire after certain time
