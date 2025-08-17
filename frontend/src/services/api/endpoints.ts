@@ -190,6 +190,8 @@ const docApprovals = {
   get: (id: string) => apiClient.get(`/api/v1/doc-approvals/${id}`),
   approve: (id: string) => apiClient.post(`/api/v1/doc-approvals/${id}/approve`),
   reject: (id: string, reason: string) => apiClient.post(`/api/v1/doc-approvals/${id}/reject`, { reason }),
+  edit: (id: string, patch: string) => apiClient.post(`/api/v1/doc-approvals/${id}/edit`, { patch }),
+  refine: (id: string, feedback: string) => apiClient.post(`/api/v1/doc-approvals/${id}/refine`, { feedback }),
 }
 
 export const api = {

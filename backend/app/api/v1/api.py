@@ -4,12 +4,16 @@ from app.api.v1.endpoints import kpi, users  # Add other endpoint modules here a
 from fastapi import APIRouter
 from app.core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Body
 from app.repositories.doc_approval_repository import DocApprovalRepository
 from app.models.doc_approval import DocApproval
 from uuid import UUID
 from typing import Optional
 from app.integrations.github_app import GitHubApp, CheckRunStatus, CheckRunConclusion
+from app.doc_agent.client_v2 import AutoDocClientV2
+from app.config.settings import settings
+from app.integrations.ai_integration_v2 import AIIntegrationV2
+from typing import Dict
 
 # Example: from .endpoints import items, other_resources
 
@@ -68,26 +72,50 @@ async def approve_doc_approval(approval_id: UUID, db: AsyncSession = Depends(get
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
 
-    # Update GitHub Check Run if available
-    if approval.repository and approval.check_run_id:
+    # Create PR and Check Run like Slack flow
+    try:
+        client = AutoDocClientV2(
+            openai_api_key=settings.OPENAI_API_KEY or "",
+            docs_repo=approval.repository or (settings.DOCS_REPOSITORY or ""),
+            slack_channel=settings.SLACK_DEFAULT_CHANNEL,
+            enable_semantic_search=False,
+            use_github_app=True,
+        )
+        pr_result = await client.create_pr_with_check_run(
+            approval.patch_content,
+            approval.commit_hash,
+            approval_id=str(approval.id),
+        )
+    except Exception:
+        pr_result = None
+
+    # Update Check Run if exists; mark approved in DB with PR info
+    if pr_result:
         try:
-            owner, repo = approval.repository.split("/")
-            gh = GitHubApp()
-            gh.update_check_run(owner, repo, int(approval.check_run_id), status=CheckRunStatus.COMPLETED, conclusion=CheckRunConclusion.SUCCESS)
+            await repo_layer.update_check_run(approval_id, str(pr_result.get("check_run_id")), head_sha=pr_result.get("head_sha"))
         except Exception:
             pass
+        approval = await repo_layer.approve_request(
+            approval_id,
+            approved_by="dashboard",
+            pr_url=pr_result.get("pr_url"),
+            pr_number=pr_result.get("pr_number"),
+        )
+    else:
+        # Fallback: just mark approved (no PR)
+        approval = await repo_layer.approve_request(approval_id, approved_by="dashboard")
 
-    approval = await repo_layer.approve_request(approval_id, approved_by="dashboard")
-    return {"id": str(approval.id), "status": approval.status, "pr_url": approval.pr_url}
+    return {"id": str(approval.id), "status": approval.status, "pr_url": approval.pr_url, "pr_number": approval.pr_number}
 
 
 @api_v1_router.post("/doc-approvals/{approval_id}/reject")
-async def reject_doc_approval(approval_id: UUID, reason: str = "", db: AsyncSession = Depends(get_db)):
+async def reject_doc_approval(approval_id: UUID, payload: Dict[str, str] = Body(default={}), db: AsyncSession = Depends(get_db)):
     repo_layer = DocApprovalRepository(db)
     approval = await repo_layer.get_approval_by_id(approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
 
+    reason = (payload or {}).get("reason", "")
     # Update GitHub Check Run if available
     if approval.repository and approval.check_run_id:
         try:
@@ -102,3 +130,42 @@ async def reject_doc_approval(approval_id: UUID, reason: str = "", db: AsyncSess
 
     approval = await repo_layer.reject_request(approval_id, rejected_by="dashboard", reason=reason or "Rejected")
     return {"id": str(approval.id), "status": approval.status, "rejection_reason": approval.rejection_reason}
+
+
+@api_v1_router.post("/doc-approvals/{approval_id}/edit")
+async def edit_doc_approval(approval_id: UUID, payload: Dict[str, str] = Body(...), db: AsyncSession = Depends(get_db)):
+    repo_layer = DocApprovalRepository(db)
+    approval = await repo_layer.get_approval_by_id(approval_id)
+    if not approval:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    new_patch = (payload or {}).get("patch")
+    if not new_patch:
+        raise HTTPException(status_code=400, detail="Missing patch")
+    approval.patch_content = new_patch
+    approval.updated_at = approval.updated_at
+    await db.commit()
+    return {"id": str(approval.id), "patch_content": approval.patch_content}
+
+
+@api_v1_router.post("/doc-approvals/{approval_id}/refine")
+async def refine_doc_approval(approval_id: UUID, payload: Dict[str, str] = Body(...), db: AsyncSession = Depends(get_db)):
+    repo_layer = DocApprovalRepository(db)
+    approval = await repo_layer.get_approval_by_id(approval_id)
+    if not approval:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    feedback = (payload or {}).get("feedback", "")
+    if not feedback:
+        raise HTTPException(status_code=400, detail="Missing feedback")
+    ai = AIIntegrationV2()
+    updated_patch = await ai.refine_patch(approval.patch_content or "", feedback)
+    if not updated_patch:
+        raise HTTPException(status_code=502, detail="AI failed to refine patch")
+    approval.patch_content = updated_patch
+    # Append feedback history
+    meta = approval.approval_metadata or {}
+    feedback_list = meta.get("feedback", [])
+    feedback_list.append({"by": "dashboard", "at": "", "feedback": feedback})
+    meta["feedback"] = feedback_list
+    approval.approval_metadata = meta
+    await db.commit()
+    return {"id": str(approval.id), "patch_content": approval.patch_content}

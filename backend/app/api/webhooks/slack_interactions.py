@@ -104,6 +104,10 @@ async def handle_block_actions(payload: Dict[str, Any], db: AsyncSession) -> Dic
         return await handle_doc_rejection(value, payload, db)
     elif action_id == "view_full_diff":
         return await handle_view_full_diff(value, payload, db)
+    elif action_id == "edit_doc_update":
+        return await handle_edit_doc_request(value, payload, db)
+    elif action_id == "refine_doc_update":
+        return await handle_refine_doc_request(value, payload, db)
     else:
         logger.warning(f"Unhandled action_id: {action_id}")
         return {"text": "Action received"}
@@ -359,5 +363,139 @@ async def handle_view_full_diff(approval_id: str, payload: Dict[str, Any], db: A
 
 async def handle_view_submission(payload: Dict[str, Any], db: AsyncSession) -> Dict[str, Any]:
     """Handle modal view submissions."""
-    # Placeholder for future modal interactions
-    return {"response_action": "clear"}
+    try:
+        callback_id = payload.get("view", {}).get("callback_id", "")
+        state_values = (payload.get("view", {}).get("state", {}) or {}).get("values", {})
+        user = payload.get("user", {})
+        user_id = user.get("id")
+        private_metadata = payload.get("view", {}).get("private_metadata")
+
+        # Extract textarea value generically
+        def _extract_text(values: Dict[str, Any]) -> str:
+            for block in values.values():
+                for elem in block.values():
+                    if isinstance(elem, dict) and elem.get("type") == "plain_text_input":
+                        return elem.get("value", "")
+            return ""
+
+        if callback_id.startswith("edit_doc_"):
+            approval_id = callback_id.replace("edit_doc_", "")
+            new_content = _extract_text(state_values)
+            # Store suggestion in approval metadata for audit and future reference
+            result = await db.execute(select(DocApproval).where(DocApproval.id == approval_id))
+            approval = result.scalar_one_or_none()
+            if not approval:
+                return {"response_action": "clear"}
+            meta = approval.approval_metadata or {}
+            suggestions = meta.get("suggestions", [])
+            suggestions.append({"by": user_id, "at": datetime.utcnow().isoformat(), "content": new_content})
+            meta["suggestions"] = suggestions
+            approval.approval_metadata = meta
+            approval.updated_at = datetime.utcnow()
+            await db.commit()
+            return {"response_action": "clear"}
+
+        if callback_id.startswith("refine_doc_"):
+            approval_id = callback_id.replace("refine_doc_", "")
+            feedback = _extract_text(state_values)
+            # Persist feedback; AI refinement will occur in dashboard or follow-up action
+            result = await db.execute(select(DocApproval).where(DocApproval.id == approval_id))
+            approval = result.scalar_one_or_none()
+            if not approval:
+                return {"response_action": "clear"}
+            meta = approval.approval_metadata or {}
+            feedback_list = meta.get("feedback", [])
+            feedback_list.append({"by": user_id, "at": datetime.utcnow().isoformat(), "feedback": feedback})
+            meta["feedback"] = feedback_list
+            approval.approval_metadata = meta
+            approval.updated_at = datetime.utcnow()
+            await db.commit()
+            return {"response_action": "clear"}
+
+        return {"response_action": "clear"}
+    except Exception as e:
+        logger.error(f"Error handling view submission: {e}")
+        return {"response_action": "clear"}
+
+
+async def handle_edit_doc_request(approval_id: str, payload: Dict[str, Any], db: AsyncSession) -> Dict[str, Any]:
+    """Open a modal with a textarea to allow manual edits to the proposed doc content."""
+    try:
+        result = await db.execute(select(DocApproval).where(DocApproval.id == approval_id))
+        approval = result.scalar_one_or_none()
+        if not approval:
+            return {"response_type": "ephemeral", "text": "❌ Approval not found."}
+
+        trigger_id = payload.get("trigger_id")
+        if not trigger_id:
+            return {"response_type": "ephemeral", "text": "⚠️ Cannot open editor without trigger."}
+
+        slack_service = SlackService()
+
+        # Prefill with extracted content from patch/diff if available
+        prefill = approval.diff_content[:3000] if approval.diff_content else ""
+        view = {
+            "type": "modal",
+            "callback_id": f"edit_doc_{approval_id}",
+            "title": {"type": "plain_text", "text": "Edit Proposed Doc"},
+            "submit": {"type": "plain_text", "text": "Save"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "doc_edit_block",
+                    "label": {"type": "plain_text", "text": "Proposed content (edit below)"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "doc_edit_input",
+                        "multiline": True,
+                        "initial_value": prefill,
+                    },
+                }
+            ],
+        }
+        await slack_service.open_modal(trigger_id, view)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Error opening edit modal: {e}")
+        return {"response_type": "ephemeral", "text": "❌ Failed to open editor."}
+
+
+async def handle_refine_doc_request(approval_id: str, payload: Dict[str, Any], db: AsyncSession) -> Dict[str, Any]:
+    """Open a modal to collect feedback for AI refinement of the proposed doc."""
+    try:
+        result = await db.execute(select(DocApproval).where(DocApproval.id == approval_id))
+        approval = result.scalar_one_or_none()
+        if not approval:
+            return {"response_type": "ephemeral", "text": "❌ Approval not found."}
+
+        trigger_id = payload.get("trigger_id")
+        if not trigger_id:
+            return {"response_type": "ephemeral", "text": "⚠️ Cannot open modal without trigger."}
+
+        slack_service = SlackService()
+        view = {
+            "type": "modal",
+            "callback_id": f"refine_doc_{approval_id}",
+            "title": {"type": "plain_text", "text": "Refine with AI"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "feedback_block",
+                    "label": {"type": "plain_text", "text": "Tell the AI what to change"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "feedback_input",
+                        "multiline": True,
+                        "placeholder": {"type": "plain_text", "text": "e.g., Add an Examples section, simplify intro, fix API names..."},
+                    },
+                }
+            ],
+        }
+        await slack_service.open_modal(trigger_id, view)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Error opening refine modal: {e}")
+        return {"response_type": "ephemeral", "text": "❌ Failed to open refine modal."}

@@ -83,3 +83,10 @@ class BadRequestError(AppExceptionBase):
 
     def __init__(self, message: str = "Bad request. Please check your input."):
         super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST, code="BAD_REQUEST")
+
+
+class ValidationError(AppExceptionBase):
+    """Raised when input validation fails."""
+
+    def __init__(self, message: str = "Validation failed. Please check your input."):
+        super().__init__(message=message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, code="VALIDATION_ERROR")

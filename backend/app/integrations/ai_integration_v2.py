@@ -421,6 +421,48 @@ Provide a JSON response with:
             logger.error(f"Failed to parse JSON response: {e}")
             return {"similarity_score": 0.0, "is_duplicate": False, "error": "Invalid response format"}
 
+    async def refine_document(self, original_content: str, feedback: str, path: Optional[str] = None) -> Optional[str]:
+        """Refine markdown documentation based on feedback and return updated content."""
+        messages: List[ChatCompletionMessageParam] = [
+            {
+                "role": "system",
+                "content": "You are an expert technical writer. Improve the provided markdown based on the user's feedback. Keep the structure, accuracy, and frontmatter. Return only full updated markdown, no extra commentary.",
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"File: {path or 'document.md'}\n\n"
+                    f"Original Markdown:\n\n{original_content}\n\n"
+                    f"Feedback:\n\n{feedback}\n\n"
+                    "Please produce the refined full markdown document."
+                ),
+            },
+        ]
+        return await self._make_completion_request(messages, temperature=0.3, max_tokens=3000)
+
+    async def update_doc(self, ai_input: Dict[str, Any]) -> Optional[str]:
+        """Backward-compatible alias used by services. ai_input requires original_content and feedback."""
+        original = ai_input.get("original_content", "")
+        feedback = ai_input.get("feedback", "")
+        path = ai_input.get("path")
+        return await self.refine_document(original, feedback, path)
+
+    async def refine_patch(self, patch_diff: str, feedback: str) -> Optional[str]:
+        """Refine a unified diff patch based on feedback; return an updated unified diff only."""
+        messages: List[ChatCompletionMessageParam] = [
+            {
+                "role": "system",
+                "content": "You are an expert documentation editor. Given a unified diff and feedback, return an improved unified diff making the requested changes. Output ONLY the diff, no prose.",
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Original patch (unified diff):\n\n" + patch_diff[:12000] + "\n\nFeedback:\n\n" + feedback + "\n\nReturn only the updated unified diff."
+                ),
+            },
+        ]
+        return await self._make_completion_request(messages, temperature=0.3, max_tokens=3000)
+
     async def analyze_daily_work(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze a full day's work using standardized API.

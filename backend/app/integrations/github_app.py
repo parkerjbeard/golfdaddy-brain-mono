@@ -353,6 +353,28 @@ class GitHubApp:
         logger.info(f"{'Updated' if sha else 'Created'} file {path} on branch {branch}")
         return result
 
+    def create_branch(self, owner: str, repo: str, branch: str, from_sha: str) -> Dict[str, Any]:
+        """Create a new branch (git ref) from the given SHA.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            branch: New branch name (without refs/heads/)
+            from_sha: SHA to base the new branch from
+
+        Returns:
+            The created ref data
+        """
+        url = f"{self.base_url}/repos/{owner}/{repo}/git/refs"
+        headers = self.get_headers()
+        data = {"ref": f"refs/heads/{branch}", "sha": from_sha}
+        response = requests.post(url, json=data, headers=headers)
+        # If branch exists, GitHub returns 422; surface as error to caller
+        response.raise_for_status()
+        ref_data = response.json()
+        logger.info(f"Created branch {branch} at {from_sha[:8]} for {owner}/{repo}")
+        return ref_data
+
     def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
         """
         Get the diff for a pull request.
