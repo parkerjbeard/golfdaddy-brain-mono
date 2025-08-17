@@ -190,4 +190,4 @@ backend/scripts/validate_enhanced_seeding.py
 
 # Development documentation and analysis outputs
 backend/dev_docs/
-backend/github_analysis_*.json
+backend/github_analysis_*.json/dev-docs/
