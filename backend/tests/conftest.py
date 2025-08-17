@@ -4,15 +4,25 @@ Shared fixtures for all tests in the project.
 This file contains pytest fixtures that are accessible to all tests.
 """
 
+import asyncio
 import os
 import sys
-from unittest.mock import MagicMock, patch
+import uuid
+from datetime import datetime, timedelta
+from typing import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.config.settings import settings
 from app.config.supabase_client import get_supabase_client
+from app.core.database import Base
 from app.main import app
 
 # Add the project root to the path so that we can import from the package
@@ -130,3 +140,230 @@ def client(mock_supabase_client):
     """Create a FastAPI TestClient with mocked Supabase dependency."""
     with TestClient(app) as test_client:
         yield test_client
+
+
+# ========== Database Fixtures for Integration Tests ==========
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+TEST_DATABASE_URL_SYNC = "sqlite:///:memory:"
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_test_engine():
+    """Create an async SQLAlchemy engine for testing."""
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
+    
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    yield engine
+    
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(async_test_engine) -> AsyncGenerator[AsyncSession, None]:
+    """Create an async database session for testing."""
+    async_session = async_sessionmaker(
+        async_test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    
+    async with async_session() as session:
+        yield session
+        await session.rollback()
+
+
+# ========== Doc Agent Specific Fixtures ==========
+
+@pytest.fixture
+def sample_diff():
+    """Sample git diff for testing."""
+    return """diff --git a/src/api.py b/src/api.py
+index abc1234..def5678 100644
+--- a/src/api.py
++++ b/src/api.py
+@@ -10,6 +10,18 @@ def authenticate(token: str) -> bool:
+     return token.startswith("valid_")
+ 
+ 
++def get_user_profile(user_id: str) -> dict:
++    \"\"\"
++    Get user profile by ID.
++    
++    Args:
++        user_id: The user's unique identifier
++        
++    Returns:
++        User profile dictionary
++    \"\"\"
++    return {"id": user_id, "name": "Test User"}
++
++
+ def main():
+     pass"""
+
+
+@pytest.fixture
+def sample_doc_patch():
+    """Sample documentation patch for testing."""
+    return """--- a/docs/api.md
++++ b/docs/api.md
+@@ -5,3 +5,15 @@
+ ### authenticate(token: str) -> bool
+ Authenticates a user with the provided token.
++
++### get_user_profile(user_id: str) -> dict
++Retrieves user profile information.
++
++**Parameters:**
++- `user_id` (str): The user's unique identifier
++
++**Returns:**
++- dict: User profile containing id and name
++
++**Example:**
++```python
++profile = get_user_profile("user123")
++```"""
+
+
+@pytest.fixture
+def sample_slack_payload():
+    """Sample Slack interaction payload."""
+    return {
+        "type": "block_actions",
+        "user": {
+            "id": "U123456789",
+            "username": "test_user",
+            "name": "Test User",
+        },
+        "channel": {
+            "id": "C123456",
+            "name": "docs-approval"
+        },
+        "message": {
+            "ts": "1234567890.123456",
+            "blocks": []
+        },
+        "actions": [
+            {
+                "action_id": "approve_doc_update",
+                "value": str(uuid.uuid4()),
+            }
+        ]
+    }
+
+
+@pytest.fixture
+def sample_github_webhook():
+    """Sample GitHub webhook payload."""
+    return {
+        "ref": "refs/heads/main",
+        "after": "def1234567890",
+        "repository": {
+            "name": "test-repo",
+            "full_name": "test-owner/test-repo",
+            "clone_url": "https://github.com/test-owner/test-repo.git",
+        },
+        "commits": [
+            {
+                "id": "def1234567890",
+                "message": "Add user profile endpoint",
+                "author": {
+                    "name": "Test User",
+                    "email": "test@example.com",
+                },
+                "modified": ["src/api.py"]
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def sample_doc_approval():
+    """Sample DocApproval object for testing."""
+    from app.models.doc_approval import DocApproval
+    
+    return DocApproval(
+        id=uuid.uuid4(),
+        commit_hash="test123456",
+        repository="test-owner/test-repo",
+        diff_content="test diff content",
+        patch_content="test patch content",
+        status="pending",
+        slack_channel="#docs-approval",
+        slack_message_ts="1234567890.123456",
+        expires_at=datetime.utcnow() + timedelta(hours=24),
+        approval_metadata={
+            "commit_message": "Test commit",
+            "files_affected": 2,
+            "additions": 10,
+            "deletions": 5
+        }
+    )
+
+
+@pytest.fixture
+def mock_openai_client():
+    """Mock OpenAI client for testing."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Test documentation patch"
+    
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+    
+    return mock_client
+
+
+@pytest.fixture
+def mock_github_client():
+    """Mock GitHub client for testing."""
+    mock_client = MagicMock()
+    mock_repo = MagicMock()
+    mock_repo.default_branch = "main"
+    mock_repo.create_pull = MagicMock(
+        return_value=MagicMock(html_url="https://github.com/test/pr/123")
+    )
+    
+    mock_client.get_repo = MagicMock(return_value=mock_repo)
+    
+    return mock_client
+
+
+@pytest.fixture
+def mock_slack_service():
+    """Mock Slack service for testing."""
+    mock_service = MagicMock()
+    mock_service.send_message = AsyncMock(return_value={"ts": "1234567890.123456"})
+    mock_service.update_message = AsyncMock(return_value={"ok": True})
+    
+    return mock_service
+
+
+# ========== Test Markers ==========
+
+def pytest_configure(config):
+    """Configure custom pytest markers."""
+    config.addinivalue_line("markers", "integration: mark test as integration test")
+    config.addinivalue_line("markers", "unit: mark test as unit test")
+    config.addinivalue_line("markers", "slow: mark test as slow running")
+    config.addinivalue_line("markers", "github: mark test as requiring GitHub API")
+    config.addinivalue_line("markers", "slack: mark test as requiring Slack API")
+    config.addinivalue_line("markers", "openai: mark test as requiring OpenAI API")
+    config.addinivalue_line("markers", "doc_agent: mark test as doc agent specific")
