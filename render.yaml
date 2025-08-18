@@ -4,5 +4,3 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.backend-only
     healthCheckPath: /health
-    envVarGroups:
-      - brain-secrets
