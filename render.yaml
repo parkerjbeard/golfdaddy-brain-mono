@@ -17,27 +17,6 @@ services:
         fromGroup: brain-secrets
       - key: OPENAI_API_KEY
         fromGroup: brain-secrets
-  - type: worker
-    name: brain-worker
-    env: docker
-    plan: starter
-    dockerfilePath: Dockerfile.backend-only
-    startCommand: python -m backend.scripts.run_daily_analysis
-    envVars:
-      - key: DATABASE_URL
-        fromGroup: brain-secrets
-      - key: SUPABASE_URL
-        fromGroup: brain-secrets
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        fromGroup: brain-secrets
-      - key: OPENAI_API_KEY
-        fromGroup: brain-secrets
-  - type: cron
-    name: brain-daily-batch
-    schedule: "0 2 * * *"
-    command: python -m backend.scripts.run_daily_analysis
-    env: docker
-    dockerfilePath: Dockerfile.backend-only
 staticSites:
   - name: brain-frontend
     buildCommand: npm ci && npm run build
