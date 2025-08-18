@@ -14,7 +14,7 @@ services:
       cd frontend && \
       rm -rf node_modules && \
       npm install && \
-      npm install @rollup/rollup-linux-x64-gnu && \
+      npm install @rollup/rollup-linux-x64-gnu @swc/core-linux-x64-gnu && \
       npm run build
     staticPublishPath: ./frontend/dist
     envVars:
