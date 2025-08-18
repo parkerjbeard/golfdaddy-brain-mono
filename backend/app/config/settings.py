@@ -12,6 +12,16 @@ from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
+# Load .env file if it exists (for Render secret files)
+# Check multiple possible locations
+for env_path in [Path(".env"), Path("/etc/secrets/.env"), Path("/app/.env")]:
+    if env_path.exists():
+        load_dotenv(env_path)
+        logger.info(f"Loaded environment from {env_path}")
+        break
+else:
+    # Also try loading without a specific path (uses default search)
+    load_dotenv()
 
 class Settings(BaseSettings):
     # Supabase Config
