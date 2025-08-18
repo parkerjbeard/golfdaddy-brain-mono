@@ -6,3 +6,16 @@ services:
     healthCheckPath: /health
     envVars:
       - fromGroup: brain-secrets
+
+  - type: web
+    name: brain-frontend
+    env: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://brain-api.onrender.com
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
