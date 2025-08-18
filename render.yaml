@@ -2,10 +2,8 @@ services:
   - type: web
     name: brain-api
     env: docker
-    plan: starter
-    numInstances: 2
+    dockerfilePath: ./Dockerfile.backend-only
     healthCheckPath: /health
-    dockerfilePath: Dockerfile.backend-only
     envVars:
       - key: DATABASE_URL
         fromGroup: brain-secrets
@@ -17,12 +15,3 @@ services:
         fromGroup: brain-secrets
       - key: OPENAI_API_KEY
         fromGroup: brain-secrets
-staticSites:
-  - name: brain-frontend
-    buildCommand: npm ci && npm run build
-    publishPath: frontend/dist
-    envVars:
-      - key: VITE_API_BASE_URL
-        value: https://brain-api.onrender.com
-envVarGroups:
-  - name: brain-secrets
