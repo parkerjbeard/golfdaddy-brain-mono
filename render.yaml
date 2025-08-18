@@ -4,14 +4,5 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.backend-only
     healthCheckPath: /health
-    envVars:
-      - key: DATABASE_URL
-        fromGroup: brain-secrets
-      - key: SUPABASE_URL
-        fromGroup: brain-secrets
-      - key: SUPABASE_ANON_KEY
-        fromGroup: brain-secrets
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        fromGroup: brain-secrets
-      - key: OPENAI_API_KEY
-        fromGroup: brain-secrets
+    envVarGroups:
+      - brain-secrets
