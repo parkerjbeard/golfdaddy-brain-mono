@@ -150,19 +150,15 @@ class DocumentationWriter:
 
         # Call AI service
         # Try different methods depending on what's available
-        if hasattr(self.ai_integration, 'generate_text'):
+        if hasattr(self.ai_integration, "generate_text"):
             response = await self.ai_integration.generate_text(
                 prompt=prompt,
                 max_tokens=4000,
                 temperature=0.7,
                 response_format={"type": "json_object"},  # Request JSON response
             )
-        elif hasattr(self.ai_integration, 'generate'):
-            response = await self.ai_integration.generate(
-                prompt=prompt,
-                max_tokens=4000,
-                temperature=0.7
-            )
+        elif hasattr(self.ai_integration, "generate"):
+            response = await self.ai_integration.generate(prompt=prompt, max_tokens=4000, temperature=0.7)
         else:
             # Fallback
             response = await self.ai_integration(prompt)

@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from app.doc_agent.client import AutoDocClient
 
+from app.doc_agent.client import AutoDocClient
 from app.models.doc_approval import DocApproval
 
 
@@ -31,19 +31,19 @@ class TestAutoDocClient:
     @pytest.fixture
     def mock_github(self):
         """Mock GitHub client."""
-        with patch("doc_agent.client.Github") as mock:
+        with patch("app.doc_agent.client.Github") as mock:
             yield mock
 
     @pytest.fixture
     def mock_openai(self):
         """Mock OpenAI client."""
-        with patch("doc_agent.client.AsyncOpenAI") as mock:
+        with patch("app.doc_agent.client.AsyncOpenAI") as mock:
             yield mock
 
     @pytest.fixture
     def mock_slack_service(self):
         """Mock Slack service."""
-        with patch("doc_agent.client.SlackService") as mock:
+        with patch("app.doc_agent.client.SlackService") as mock:
             yield mock
 
     def test_init_validates_required_params(self):
@@ -135,7 +135,7 @@ class TestAutoDocClient:
         mock_slack_instance.send_message = AsyncMock(return_value={"ts": "123.456"})
         client.slack_service = mock_slack_instance
 
-        with patch("doc_agent.client.get_db") as mock_get_db:
+        with patch("app.doc_agent.client.get_db") as mock_get_db:
             mock_get_db.return_value.__aenter__.return_value = mock_db
             mock_db.add = Mock()
             mock_db.commit = AsyncMock()

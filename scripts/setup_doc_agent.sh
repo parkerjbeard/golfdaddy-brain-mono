@@ -205,9 +205,14 @@ if env_file.exists():
                 key, value = line.strip().split('=', 1)
                 os.environ[key] = value
 
-# Test imports
+# Add backend to path and test imports
+import sys
+from pathlib import Path
+backend_path = Path(__file__).parent.parent / 'backend'
+sys.path.insert(0, str(backend_path))
+
 try:
-    from doc_agent.client import AutoDocClient
+    from app.doc_agent.client import AutoDocClient
     print("✅ Doc agent module imported successfully")
 except ImportError as e:
     print(f"❌ Failed to import doc agent: {e}")

@@ -286,10 +286,16 @@ class SlackMessageTemplates:
             warnings.append("Deletions present")
 
         blocks = [
-            {"type": "header", "text": {"type": "plain_text", "text": "📝 Documentation Update Request", "emoji": True}},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "📝 Documentation Update Request", "emoji": True},
+            },
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*Repository:* `{repository}`\n*Commit:* `{commit_hash[:8]}`\n*Message:* _{commit_message}_"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Repository:* `{repository}`\n*Commit:* `{commit_hash[:8]}`\n*Message:* _{commit_message}_",
+                },
             },
             {
                 "type": "section",
@@ -302,26 +308,55 @@ class SlackMessageTemplates:
         ]
 
         if warnings:
-            blocks.extend([
-                {"type": "divider"},
-                {"type": "section", "text": {"type": "mrkdwn", "text": "*⚠️ Warnings:*\n" + "\n".join([f"• {w}" for w in warnings])}},
-            ])
+            blocks.extend(
+                [
+                    {"type": "divider"},
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "*⚠️ Warnings:*\n" + "\n".join([f"• {w}" for w in warnings])},
+                    },
+                ]
+            )
 
-        blocks.extend([
-            {"type": "divider"},
-            {"type": "section", "text": {"type": "mrkdwn", "text": "*📋 Proposed Documentation Changes:*"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"```\n{diff_preview}\n```"}},
-            {
-                "type": "actions",
-                "block_id": f"doc_approval_{approval_id}",
-                "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "✅ Approve & Create PR", "emoji": True}, "style": "primary", "action_id": "approve_doc_update", "value": approval_id},
-                    {"type": "button", "text": {"type": "plain_text", "text": "⚡ Quick Approve", "emoji": True}, "action_id": "quick_approve_doc_update", "value": approval_id},
-                    {"type": "button", "text": {"type": "plain_text", "text": "❌ Reject", "emoji": True}, "style": "danger", "action_id": "reject_doc_update", "value": approval_id},
-                    {"type": "button", "text": {"type": "plain_text", "text": "👀 View Full Diff", "emoji": True}, "action_id": "view_full_diff", "value": approval_id},
-                ],
-            },
-        ])
+        blocks.extend(
+            [
+                {"type": "divider"},
+                {"type": "section", "text": {"type": "mrkdwn", "text": "*📋 Proposed Documentation Changes:*"}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": f"```\n{diff_preview}\n```"}},
+                {
+                    "type": "actions",
+                    "block_id": f"doc_approval_{approval_id}",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "✅ Approve & Create PR", "emoji": True},
+                            "style": "primary",
+                            "action_id": "approve_doc_update",
+                            "value": approval_id,
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "⚡ Quick Approve", "emoji": True},
+                            "action_id": "quick_approve_doc_update",
+                            "value": approval_id,
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "❌ Reject", "emoji": True},
+                            "style": "danger",
+                            "action_id": "reject_doc_update",
+                            "value": approval_id,
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "👀 View Full Diff", "emoji": True},
+                            "action_id": "view_full_diff",
+                            "value": approval_id,
+                        },
+                    ],
+                },
+            ]
+        )
 
         link_elements: List[Dict[str, Any]] = []
         if dashboard_url:
@@ -331,7 +366,14 @@ class SlackMessageTemplates:
         if link_elements:
             blocks.append({"type": "context", "elements": link_elements})
 
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": "_This request will expire in 24 hours if no action is taken._"}]})
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": "_This request will expire in 24 hours if no action is taken._"}
+                ],
+            }
+        )
 
         return {"text": f"Documentation update request for {repository}@{commit_hash[:8]}", "blocks": blocks}
 
@@ -345,10 +387,16 @@ class SlackMessageTemplates:
     ) -> Dict[str, Any]:
         """Template for documentation update proposal."""
         blocks = [
-            {"type": "header", "text": {"type": "plain_text", "text": "📝 Documentation Update Proposal", "emoji": True}},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "📝 Documentation Update Proposal", "emoji": True},
+            },
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"<@{author_user_id}>, based on your recent commit, we've identified potential documentation updates:"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"<@{author_user_id}>, based on your recent commit, we've identified potential documentation updates:",
+                },
             },
             {
                 "type": "section",
@@ -362,20 +410,50 @@ class SlackMessageTemplates:
         ]
 
         for update in proposed_updates[:3]:
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{update['file']}*\n{update['description']}"}})
+            blocks.append(
+                {"type": "section", "text": {"type": "mrkdwn", "text": f"*{update['file']}*\n{update['description']}"}}
+            )
 
         if len(proposed_updates) > 3:
-            blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"_... and {len(proposed_updates) - 3} more updates_"}]})
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [{"type": "mrkdwn", "text": f"_... and {len(proposed_updates) - 3} more updates_"}],
+                }
+            )
 
         actions = []
         if pr_url:
-            actions.append({"type": "button", "text": {"type": "plain_text", "text": "Review PR", "emoji": True}, "url": pr_url, "style": "primary"})
+            actions.append(
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Review PR", "emoji": True},
+                    "url": pr_url,
+                    "style": "primary",
+                }
+            )
 
-        actions.extend([
-            {"type": "button", "text": {"type": "plain_text", "text": "Approve", "emoji": True}, "style": "primary", "action_id": "approve_docs"},
-            {"type": "button", "text": {"type": "plain_text", "text": "Suggest Changes", "emoji": True}, "action_id": "suggest_changes"},
-            {"type": "button", "text": {"type": "plain_text", "text": "Dismiss", "emoji": True}, "style": "danger", "action_id": "dismiss_docs"},
-        ])
+        actions.extend(
+            [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Approve", "emoji": True},
+                    "style": "primary",
+                    "action_id": "approve_docs",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Suggest Changes", "emoji": True},
+                    "action_id": "suggest_changes",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Dismiss", "emoji": True},
+                    "style": "danger",
+                    "action_id": "dismiss_docs",
+                },
+            ]
+        )
 
         blocks.append({"type": "actions", "elements": actions})
 
@@ -397,7 +475,10 @@ class SlackMessageTemplates:
             {"type": "header", "text": {"type": "plain_text", "text": "🔍 Commit Analysis Complete", "emoji": True}},
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"<@{author_user_id}>, here's the analysis of your commit `{commit_sha[:8]}`:"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"<@{author_user_id}>, here's the analysis of your commit `{commit_sha[:8]}`:",
+                },
             },
             {
                 "type": "section",
@@ -411,9 +492,24 @@ class SlackMessageTemplates:
 
         if impact_areas:
             blocks.append({"type": "divider"})
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*Impact Areas:*\n" + "\n".join([f"• {area}" for area in impact_areas[:5]])}})
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Impact Areas:*\n" + "\n".join([f"• {area}" for area in impact_areas[:5]]),
+                    },
+                }
+            )
 
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": "_This analysis helps track development velocity and plan future work._"}]})
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": "_This analysis helps track development velocity and plan future work._"}
+                ],
+            }
+        )
 
         return {"text": f"Commit analysis: {estimated_points} points, {estimated_hours:.1f} hours", "blocks": blocks}
 
@@ -436,13 +532,25 @@ class SlackMessageTemplates:
             {"type": "header", "text": {"type": "plain_text", "text": "🌅 End of Day Report", "emoji": True}},
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"{greeting}\n\nIt's time for your daily report. {commit_text}\n\nWhat else did you work on today? (meetings, planning, code reviews, debugging, etc.)"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"{greeting}\n\nIt's time for your daily report. {commit_text}\n\nWhat else did you work on today? (meetings, planning, code reviews, debugging, etc.)",
+                },
             },
             {
                 "type": "actions",
                 "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "Submit Report", "emoji": True}, "style": "primary", "action_id": "start_eod_report"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "Skip Today", "emoji": True}, "action_id": "skip_eod_report"},
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Submit Report", "emoji": True},
+                        "style": "primary",
+                        "action_id": "start_eod_report",
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Skip Today", "emoji": True},
+                        "action_id": "skip_eod_report",
+                    },
                 ],
             },
         ]
@@ -456,7 +564,13 @@ class SlackMessageTemplates:
         """Template for EOD report clarification request."""
         blocks = [
             {"type": "header", "text": {"type": "plain_text", "text": "🤔 Clarification Needed", "emoji": True}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"Thanks for your report, {user_name}! I need a bit more information to accurately track your work:"}},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"Thanks for your report, {user_name}! I need a bit more information to accurately track your work:",
+                },
+            },
         ]
 
         # Add clarification requests
@@ -469,7 +583,17 @@ class SlackMessageTemplates:
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": block_text}})
 
         blocks.append({"type": "divider"})
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": "_Please reply to this message with clarifications, and I'll update your report._"}]})
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "_Please reply to this message with clarifications, and I'll update your report._",
+                    }
+                ],
+            }
+        )
         return {"text": "I need some clarification on your daily report", "blocks": blocks}
 
     @staticmethod
@@ -485,20 +609,46 @@ class SlackMessageTemplates:
         """Template for EOD report summary after processing."""
         blocks = [
             {"type": "header", "text": {"type": "plain_text", "text": "✅ Daily Report Processed", "emoji": True}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"Thanks {user_name}! I've processed your report. Here's the summary:"}},
-            {"type": "section", "fields": [
-                {"type": "mrkdwn", "text": f"*Total Estimated Hours:*\n{estimated_hours:.1f}"},
-                {"type": "mrkdwn", "text": f"*From Commits:*\n{commit_hours:.1f}"},
-                {"type": "mrkdwn", "text": f"*Additional Work:*\n{additional_hours:.1f}"},
-            ]},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"Thanks {user_name}! I've processed your report. Here's the summary:",
+                },
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Total Estimated Hours:*\n{estimated_hours:.1f}"},
+                    {"type": "mrkdwn", "text": f"*From Commits:*\n{commit_hours:.1f}"},
+                    {"type": "mrkdwn", "text": f"*Additional Work:*\n{additional_hours:.1f}"},
+                ],
+            },
         ]
 
         if linked_commits > 0:
-            blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"_🔗 Linked to {linked_commits} commit{'s' if linked_commits != 1 else ''}_"}]})
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"_🔗 Linked to {linked_commits} commit{'s' if linked_commits != 1 else ''}_",
+                        }
+                    ],
+                }
+            )
         if summary:
             blocks.append({"type": "divider"})
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*📝 Summary:*\n{summary}"}})
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": "_Your report has been saved and will be included in weekly summaries._"}]})
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": "_Your report has been saved and will be included in weekly summaries._"}
+                ],
+            }
+        )
         return {"text": f"Daily report processed: {estimated_hours:.1f} hours total", "blocks": blocks}
 
 

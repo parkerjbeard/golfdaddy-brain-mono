@@ -12,7 +12,6 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../")))
 from app.doc_agent.client import AutoDocClient
-
 from app.models.doc_embeddings import CodeContext, DocEmbedding
 
 
@@ -22,8 +21,8 @@ class TestAutoDocClientSemantic:
     @pytest.fixture
     def client(self):
         """Create a test client instance with semantic search enabled."""
-        with patch("doc_agent.client.EmbeddingService") as mock_embedding:
-            with patch("doc_agent.client.ContextAnalyzer") as mock_context:
+        with patch("app.doc_agent.client.EmbeddingService") as mock_embedding:
+            with patch("app.doc_agent.client.ContextAnalyzer") as mock_context:
                 client = AutoDocClient(
                     openai_api_key="test-key",
                     github_token="test-github-token",

@@ -296,20 +296,20 @@ class HouseStyleConfig:
         # Remove forbidden phrases (with word boundaries)
         for phrase in self.forbidden_phrases:
             # Use word boundaries for better matching
-            pattern = re.compile(r'\b' + re.escape(phrase) + r'\b', re.IGNORECASE)
+            pattern = re.compile(r"\b" + re.escape(phrase) + r"\b", re.IGNORECASE)
             result = pattern.sub("", result)
 
         # Apply preferred phrases
         for old_phrase, new_phrase in self.preferred_phrases.items():
             # Case-insensitive replacement while preserving case
-            pattern = re.compile(r'\b' + re.escape(old_phrase) + r'\b', re.IGNORECASE)
-            
+            pattern = re.compile(r"\b" + re.escape(old_phrase) + r"\b", re.IGNORECASE)
+
             def replace_with_case(match):
                 original = match.group(0)
                 if original[0].isupper():
                     return new_phrase.capitalize()
                 return new_phrase
-                
+
             result = pattern.sub(replace_with_case, result)
 
         # Apply spelling preferences
@@ -445,12 +445,12 @@ class HouseStyleValidator:
             List of validation issues
         """
         import re
-        
+
         issues = []
 
         # Check for forbidden phrases (case-insensitive with word boundaries)
         for phrase in self.config.forbidden_phrases:
-            pattern = re.compile(r'\b' + re.escape(phrase) + r'\b', re.IGNORECASE)
+            pattern = re.compile(r"\b" + re.escape(phrase) + r"\b", re.IGNORECASE)
             if pattern.search(content):
                 issues.append(f"Found forbidden phrase: '{phrase}'")
 
@@ -462,7 +462,7 @@ class HouseStyleValidator:
 
         # Check for non-preferred phrases (case-insensitive with word boundaries)
         for old_phrase, new_phrase in self.config.preferred_phrases.items():
-            pattern = re.compile(r'\b' + re.escape(old_phrase) + r'\b', re.IGNORECASE)
+            pattern = re.compile(r"\b" + re.escape(old_phrase) + r"\b", re.IGNORECASE)
             if pattern.search(content):
                 issues.append(f"Found non-preferred phrase: '{old_phrase}' (use '{new_phrase}' instead)")
 
@@ -470,7 +470,7 @@ class HouseStyleValidator:
         if self.config.american_spelling:
             british_words = ["colour", "flavour", "centre", "organise", "analyse"]
             for word in british_words:
-                pattern = re.compile(r'\b' + re.escape(word) + r'\b', re.IGNORECASE)
+                pattern = re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
                 if pattern.search(content):
                     issues.append(f"Found British spelling: '{word}'")
 

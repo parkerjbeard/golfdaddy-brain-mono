@@ -165,12 +165,12 @@ async def async_test_engine():
         poolclass=StaticPool,
         echo=False,
     )
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield engine
-    
+
     await engine.dispose()
 
 
@@ -182,13 +182,14 @@ async def db_session(async_test_engine) -> AsyncGenerator[AsyncSession, None]:
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    
+
     async with async_session() as session:
         yield session
         await session.rollback()
 
 
 # ========== Doc Agent Specific Fixtures ==========
+
 
 @pytest.fixture
 def sample_diff():
@@ -252,20 +253,14 @@ def sample_slack_payload():
             "username": "test_user",
             "name": "Test User",
         },
-        "channel": {
-            "id": "C123456",
-            "name": "docs-approval"
-        },
-        "message": {
-            "ts": "1234567890.123456",
-            "blocks": []
-        },
+        "channel": {"id": "C123456", "name": "docs-approval"},
+        "message": {"ts": "1234567890.123456", "blocks": []},
         "actions": [
             {
                 "action_id": "approve_doc_update",
                 "value": str(uuid.uuid4()),
             }
-        ]
+        ],
     }
 
 
@@ -288,7 +283,7 @@ def sample_github_webhook():
                     "name": "Test User",
                     "email": "test@example.com",
                 },
-                "modified": ["src/api.py"]
+                "modified": ["src/api.py"],
             }
         ],
     }
@@ -298,7 +293,7 @@ def sample_github_webhook():
 def sample_doc_approval():
     """Sample DocApproval object for testing."""
     from app.models.doc_approval import DocApproval
-    
+
     return DocApproval(
         id=uuid.uuid4(),
         commit_hash="test123456",
@@ -309,12 +304,7 @@ def sample_doc_approval():
         slack_channel="#docs-approval",
         slack_message_ts="1234567890.123456",
         expires_at=datetime.utcnow() + timedelta(hours=24),
-        approval_metadata={
-            "commit_message": "Test commit",
-            "files_affected": 2,
-            "additions": 10,
-            "deletions": 5
-        }
+        approval_metadata={"commit_message": "Test commit", "files_affected": 2, "additions": 10, "deletions": 5},
     )
 
 
@@ -325,9 +315,9 @@ def mock_openai_client():
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "Test documentation patch"
-    
+
     mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-    
+
     return mock_client
 
 
@@ -337,12 +327,10 @@ def mock_github_client():
     mock_client = MagicMock()
     mock_repo = MagicMock()
     mock_repo.default_branch = "main"
-    mock_repo.create_pull = MagicMock(
-        return_value=MagicMock(html_url="https://github.com/test/pr/123")
-    )
-    
+    mock_repo.create_pull = MagicMock(return_value=MagicMock(html_url="https://github.com/test/pr/123"))
+
     mock_client.get_repo = MagicMock(return_value=mock_repo)
-    
+
     return mock_client
 
 
@@ -352,11 +340,12 @@ def mock_slack_service():
     mock_service = MagicMock()
     mock_service.send_message = AsyncMock(return_value={"ts": "1234567890.123456"})
     mock_service.update_message = AsyncMock(return_value={"ok": True})
-    
+
     return mock_service
 
 
 # ========== Test Markers ==========
+
 
 def pytest_configure(config):
     """Configure custom pytest markers."""

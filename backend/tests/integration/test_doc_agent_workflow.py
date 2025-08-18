@@ -10,10 +10,10 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from app.doc_agent.client import AutoDocClient
 
 from app.api.webhooks.slack_interactions import handle_slack_interactions
 from app.config.settings import settings
+from app.doc_agent.client import AutoDocClient
 from app.models.doc_approval import DocApproval
 
 

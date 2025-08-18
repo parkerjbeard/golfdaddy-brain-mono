@@ -1,10 +1,11 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+import json
 from uuid import UUID
 
 # Added for the new UserWidgetSummary model
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
 from app.models.commit import Commit
@@ -22,6 +23,12 @@ class UserWidgetSummary(BaseModel):
     name: Optional[str] = None
     avatar_url: Optional[str] = None
     total_ai_estimated_commit_hours: float
+    # New business points fields
+    total_business_points: float
+    efficiency_points_per_hour: float
+    # Small daily series for sparklines and trend chart
+    daily_hours_series: List[Dict[str, Any]] = Field(default_factory=list)  # [{"date": "YYYY-MM-DD", "hours": float}]
+    daily_points_series: List[Dict[str, Any]] = Field(default_factory=list)  # [{"date": "YYYY-MM-DD", "points": float}]
 
 
 class KpiService:
@@ -119,6 +126,11 @@ class KpiService:
         seniority_scores = [c.seniority_score for c in commits_in_period if c.seniority_score is not None]
         average_seniority_score = sum(seniority_scores) / len(seniority_scores) if seniority_scores else 0.0
 
+        # Aggregate business points and build daily series
+        total_business_points: float = 0.0
+        daily_hours: Dict[str, float] = {}
+        daily_points: Dict[str, float] = {}
+
         all_comparison_notes = []
         for commit in commits_in_period:
             if commit.comparison_notes:
@@ -129,6 +141,53 @@ class KpiService:
                         "notes": commit.comparison_notes,
                     }
                 )
+            # Daily aggregation (UTC date)
+            commit_date_key = commit.commit_timestamp.date().strftime("%Y-%m-%d")
+            daily_hours[commit_date_key] = daily_hours.get(commit_date_key, 0.0) + float(commit.ai_estimated_hours or 0.0)
+
+            # Parse impact score from ai_analysis_notes JSON when available
+            impact_score_val: float = 0.0
+            try:
+                if getattr(commit, "ai_analysis_notes", None):
+                    notes_obj = json.loads(commit.ai_analysis_notes)
+                    impact_score_val = float(notes_obj.get("impact_score", 0.0) or 0.0)
+            except Exception:
+                impact_score_val = 0.0
+            total_business_points += impact_score_val
+            daily_points[commit_date_key] = daily_points.get(commit_date_key, 0.0) + impact_score_val
+
+        daily_hours_series = [
+            {"date": k, "hours": round(v, 2)} for k, v in sorted(daily_hours.items(), key=lambda x: x[0])
+        ]
+        daily_points_series = [
+            {"date": k, "points": round(v, 2)} for k, v in sorted(daily_points.items(), key=lambda x: x[0])
+        ]
+
+        efficiency_pph = round(total_business_points / total_commit_ai_estimated_hours, 2) if total_commit_ai_estimated_hours > 0 else 0.0
+
+        # Top commits by impact
+        def _impact(c: Commit) -> float:
+            try:
+                if getattr(c, "ai_analysis_notes", None):
+                    n = json.loads(c.ai_analysis_notes)
+                    return float(n.get("impact_score", 0.0) or 0.0)
+            except Exception:
+                return 0.0
+            return 0.0
+
+        commits_sorted = sorted(commits_in_period, key=_impact, reverse=True)
+        top_commits_by_impact = []
+        for c in commits_sorted[:5]:
+            score = _impact(c)
+            top_commits_by_impact.append(
+                {
+                    "commit_hash": c.commit_hash,
+                    "impact_score": round(score, 2),
+                    "message": getattr(c, "commit_message", None),
+                    "url": getattr(c, "commit_url", None),
+                    "timestamp": c.commit_timestamp.isoformat() if c.commit_timestamp else None,
+                }
+            )
 
         return {
             "user_id": str(user_id),
@@ -140,6 +199,12 @@ class KpiService:
             "total_commit_ai_estimated_hours": round(total_commit_ai_estimated_hours, 2),
             "average_commit_seniority_score": round(average_seniority_score, 2),
             "commit_comparison_insights": all_comparison_notes,
+            # New business points metrics
+            "total_business_points": round(total_business_points, 2),
+            "efficiency_points_per_hour": efficiency_pph,
+            "daily_hours_series": daily_hours_series,
+            "daily_points_series": daily_points_series,
+            "top_commits_by_impact": top_commits_by_impact,
             # Could add task velocity here too if desired by calling self.calculate_task_velocity
         }
 
@@ -182,6 +247,32 @@ class KpiService:
                 )
 
                 total_hours = sum(float(c.ai_estimated_hours or 0.0) for c in commits)
+                # Sum business points by parsing impact_score from ai_analysis_notes
+                total_points: float = 0.0
+                daily_hours: Dict[str, float] = {}
+                daily_points: Dict[str, float] = {}
+                for c in commits:
+                    # Daily keys in UTC
+                    day_key = c.commit_timestamp.date().strftime("%Y-%m-%d")
+                    daily_hours[day_key] = daily_hours.get(day_key, 0.0) + float(c.ai_estimated_hours or 0.0)
+                    try:
+                        if getattr(c, "ai_analysis_notes", None):
+                            notes_obj = json.loads(c.ai_analysis_notes)
+                            pts = float(notes_obj.get("impact_score", 0.0) or 0.0)
+                        else:
+                            pts = 0.0
+                    except Exception:
+                        pts = 0.0
+                    total_points += pts
+                    daily_points[day_key] = daily_points.get(day_key, 0.0) + pts
+
+                daily_hours_series = [
+                    {"date": k, "hours": round(v, 2)} for k, v in sorted(daily_hours.items(), key=lambda x: x[0])
+                ]
+                daily_points_series = [
+                    {"date": k, "points": round(v, 2)} for k, v in sorted(daily_points.items(), key=lambda x: x[0])
+                ]
+                efficiency_pph = round(total_points / total_hours, 2) if total_hours > 0 else 0.0
 
                 widget_summaries.append(
                     UserWidgetSummary(
@@ -189,6 +280,10 @@ class KpiService:
                         name=user.name,
                         avatar_url=user.avatar_url,
                         total_ai_estimated_commit_hours=round(total_hours, 2),
+                        total_business_points=round(total_points, 2),
+                        efficiency_points_per_hour=efficiency_pph,
+                        daily_hours_series=daily_hours_series,
+                        daily_points_series=daily_points_series,
                     )
                 )
             except Exception as e:

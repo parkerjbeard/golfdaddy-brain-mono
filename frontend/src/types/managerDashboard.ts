@@ -29,6 +29,11 @@ export interface UserPerformanceSummary {
   total_commit_ai_estimated_hours: number;
   average_commit_seniority_score: number;
   commit_comparison_insights: CommitComparisonInsight[];
+  // New business points metrics and series for the detailed view
+  total_business_points?: number;
+  efficiency_points_per_hour?: number;
+  daily_hours_series?: { date: string; hours: number }[];
+  daily_points_series?: { date: string; points: number }[];
 }
 
 // For API request parameters
@@ -45,4 +50,9 @@ export interface UserWidgetSummary {
   name?: string | null;
   avatar_url?: string | null;
   total_ai_estimated_commit_hours: number;
+  // New fields to support dual-metric tiles and sparklines
+  total_business_points: number;
+  efficiency_points_per_hour: number;
+  daily_hours_series: { date: string; hours: number }[];
+  daily_points_series: { date: string; points: number }[];
 } 

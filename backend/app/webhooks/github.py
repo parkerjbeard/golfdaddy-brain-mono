@@ -91,8 +91,34 @@ class GitHubWebhookHandler(WebhookHandler):
         """
         logger.info(f"Processing GitHub {event_type} event")
 
-        if event_type != "push":
-            logger.info(f"Ignoring non-push event: {event_type}")
+        if event_type == "push":
+            try:
+                return await self._process_push_event(event_data)
+            except Exception as e:
+                logger.error(f"Error processing push event: {e}", exc_info=True)
+                raise ExternalServiceError(
+                    service_name="GitHub Webhook", original_message=f"Failed to process push event: {str(e)}"
+                )
+        elif event_type == "pull_request":
+            try:
+                return await self._process_pull_request_event(event_data)
+            except Exception as e:
+                logger.error(f"Error processing pull_request event: {e}", exc_info=True)
+                return {"status": "error", "reason": str(e)}
+        elif event_type == "check_run":
+            try:
+                return await self._process_check_run_event(event_data)
+            except Exception as e:
+                logger.error(f"Error processing check_run event: {e}", exc_info=True)
+                return {"status": "error", "reason": str(e)}
+        elif event_type == "check_suite":
+            try:
+                return await self._process_check_suite_event(event_data)
+            except Exception as e:
+                logger.error(f"Error processing check_suite event: {e}", exc_info=True)
+                return {"status": "error", "reason": str(e)}
+        else:
+            logger.info(f"Ignoring unsupported event: {event_type}")
             return {"status": "ignored", "reason": f"Event type {event_type} not processed"}
 
         try:
@@ -217,3 +243,25 @@ class GitHubWebhookHandler(WebhookHandler):
             repository=repository,  # Full name in owner/repo format
             diff_data=None,  # Will be fetched by commit analysis service if needed
         )
+
+    async def _process_pull_request_event(self, pr_data: Dict[str, Any]) -> Dict[str, Any]:
+        action = pr_data.get("action")
+        pr = pr_data.get("pull_request", {})
+        number = pr.get("number") or pr_data.get("number")
+        repo = pr_data.get("repository", {}).get("full_name")
+        logger.info(f"PR event: {repo}#{number} action={action}")
+        # Mirror to logs for now; in future, sync to dashboard cache
+        return {"status": "ok", "pr": number, "action": action}
+
+    async def _process_check_run_event(self, cr_data: Dict[str, Any]) -> Dict[str, Any]:
+        # Listen to requested_action from GitHub UI
+        action = cr_data.get("action")
+        check_run = cr_data.get("check_run", {})
+        requested_action = check_run.get("requested_action")
+        logger.info(f"check_run event action={action} requested_action={requested_action}")
+        return {"status": "ok"}
+
+    async def _process_check_suite_event(self, cs_data: Dict[str, Any]) -> Dict[str, Any]:
+        action = cs_data.get("action")
+        logger.info(f"check_suite event action={action}")
+        return {"status": "ok"}

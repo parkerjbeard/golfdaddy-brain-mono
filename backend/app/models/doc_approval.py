@@ -49,7 +49,7 @@ class DocApproval(Base):
 
     # Additional data
     # Align with DB column named 'metadata' while exposing Python attribute 'approval_metadata'
-    approval_metadata = Column('metadata', JSON, default=dict)
+    approval_metadata = Column("metadata", JSON, default=dict)
     # Timestamps and expiration
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

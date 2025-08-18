@@ -36,7 +36,6 @@ from app.services.semantic_search_service import SemanticSearchService
 from app.services.slack_message_templates import SlackMessageTemplates
 from app.services.slack_service import SlackService
 
-
 # Test database URL - use in-memory SQLite for speed
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -57,7 +56,9 @@ class TestDocAgentComprehensive:
 
         async with engine.begin() as conn:
             # Create tables without foreign key constraints for testing
-            await conn.execute(text("""
+            await conn.execute(
+                text(
+                    """
                 CREATE TABLE IF NOT EXISTS doc_approvals (
                     id TEXT PRIMARY KEY,
                     commit_hash TEXT NOT NULL,
@@ -83,9 +84,13 @@ class TestDocAgentComprehensive:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP
                 )
-            """))
-            
-            await conn.execute(text("""
+            """
+                )
+            )
+
+            await conn.execute(
+                text(
+                    """
                 CREATE TABLE IF NOT EXISTS doc_embeddings (
                     id TEXT PRIMARY KEY,
                     document_id TEXT,
@@ -101,7 +106,9 @@ class TestDocAgentComprehensive:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """))
+            """
+                )
+            )
 
         yield engine
 
@@ -529,7 +536,7 @@ def get_user_profile(user_id: str) -> dict:
         with patch("app.doc_agent.client.AsyncOpenAI") as mock_openai_class:
             mock_openai = AsyncMock()
             mock_openai_class.return_value = mock_openai
-            
+
             client = AutoDocClient(
                 openai_api_key=os.getenv("OPENAI_API_KEY"),
                 github_token=os.getenv("GITHUB_TOKEN"),
@@ -548,14 +555,14 @@ def get_user_profile(user_id: str) -> dict:
                 pr_url = client.apply_patch("test patch", "test_commit")
                 assert pr_url is None
 
-            # Test 3: Handle database failure  
+            # Test 3: Handle database failure
             with patch.object(db_session, "commit", AsyncMock(side_effect=Exception("Database error"))):
                 # Mock SlackService to avoid real API calls
                 with patch("app.doc_agent.client.SlackService") as mock_slack_class:
                     mock_slack = AsyncMock()
                     mock_slack_class.return_value = mock_slack
                     mock_slack.send_message.return_value = {"ts": "123.456"}
-                    
+
                     approval_id = await client.propose_via_slack(
                         diff="test diff", patch="test patch", commit_hash="test_hash", db=db_session
                     )
@@ -567,7 +574,7 @@ def get_user_profile(user_id: str) -> dict:
                 mock_slack = AsyncMock()
                 mock_slack_class.return_value = mock_slack
                 mock_slack.send_message.side_effect = Exception("Slack API error")
-                
+
                 approval_id = await client.propose_via_slack(
                     diff="test diff", patch="test patch", commit_hash="test_hash", db=db_session
                 )

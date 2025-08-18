@@ -1,6 +1,7 @@
 import logging  # For logging
 from datetime import date, datetime, timedelta, timezone  # Ensure timezone is imported for utcnow()
 from typing import Any, Dict, List, Optional
+import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -137,6 +138,93 @@ async def get_user_kpi_summary(
     except Exception as e:
         logger.error(f"Unexpected error fetching KPI summary for user {user_id}: {e}", exc_info=True)
         raise DatabaseError(message=f"An unexpected error occurred while fetching KPI summary.")
+
+
+@router.post("/backfill/github-analysis")
+async def backfill_github_analysis(
+    file_path: str = Query(..., description="Absolute path to a github_analysis_*.json file on server"),
+    kpi_service: KpiService = Depends(get_kpi_service),
+):
+    """
+    Load a GitHub analysis export JSON (from seeding script) and persist its per-commit analyses into commits table.
+    Enables easy backfill for dashboard metrics.
+    """
+    try:
+        if not file_path or not os.path.isfile(file_path):
+            raise HTTPException(status_code=400, detail="File not found")
+
+        import json
+        from datetime import datetime as _dt
+        from app.repositories.commit_repository import CommitRepository
+        from app.models.commit import Commit
+        from app.config.supabase_client import get_supabase_client_safe
+
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        daily_summaries = (data or {}).get("summary", {}).get("daily_summaries", []) or []
+        if not daily_summaries:
+            return {"status": "ok", "message": "No daily summaries found in JSON.", "inserted": 0}
+
+        repo = CommitRepository(get_supabase_client_safe())
+        inserted = 0
+        for day in daily_summaries:
+            analyses = day.get("analyses", []) or []
+            for a in analyses:
+                try:
+                    commit_hash = a.get("commit_hash") or ""
+                    if not commit_hash:
+                        continue
+
+                    notes = {k: a.get(k) for k in [
+                        "estimated_hours",
+                        "complexity_score",
+                        "seniority_score",
+                        "risk_level",
+                        "key_changes",
+                        "impact_score",
+                        "impact_business_value",
+                        "impact_technical_complexity",
+                        "impact_code_quality",
+                        "impact_risk_factor",
+                        "model_used",
+                        "analyzed_at",
+                    ]}
+
+                    commit_ts = a.get("timestamp")
+                    ts = _dt.fromisoformat(commit_ts.replace("Z", "+00:00")) if isinstance(commit_ts, str) else _dt.utcnow()
+
+                    commit = Commit(
+                        commit_hash=commit_hash,
+                        commit_message=a.get("message"),
+                        commit_url=a.get("commit_url"),
+                        commit_timestamp=ts,
+                        author_github_username=day.get("github_username"),
+                        author_email=day.get("author_email"),
+                        repository_name=(data or {}).get("repository"),
+                        repository_url=None,
+                        branch=None,
+                        diff_url=None,
+                        lines_added=a.get("additions"),
+                        lines_deleted=a.get("deletions"),
+                        changed_files=a.get("files_changed"),
+                        ai_estimated_hours=a.get("estimated_hours") or 0.0,
+                        complexity_score=a.get("complexity_score"),
+                        risk_level=a.get("risk_level"),
+                        ai_analysis_notes=json.dumps(notes),
+                    )
+                    await repo.save_commit(commit)
+                    inserted += 1
+                except Exception as ie:
+                    logger.warning(f"Skipping analysis due to error: {ie}")
+                    continue
+
+        return {"status": "ok", "inserted": inserted}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Backfill failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Backfill failed")
 
 
 # TODO: Consider adding a main router in backend/app/api/v1/api.py to include this kpi_router

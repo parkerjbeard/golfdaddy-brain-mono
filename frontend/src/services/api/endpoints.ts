@@ -124,6 +124,18 @@ const kpi = {
   getDashboard: () => apiClient.get('/api/kpi/dashboard'),
   getTeamMetrics: (teamId: string) => apiClient.get(`/api/kpi/team/${teamId}`),
   getUserMetrics: (userId: string) => apiClient.get(`/api/kpi/user/${userId}`),
+  // New dual-metric manager widgets
+  getWidgetSummaries: (params: { startDate: string; endDate: string }) => {
+    const qs = `?${new URLSearchParams(params as any).toString()}`;
+    return apiClient.get(`/api/v1/kpi/performance/widget-summaries${qs}`);
+  },
+  getUserSummary: (userId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
+    const qs = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return apiClient.get(`/api/v1/kpi/user-summary/${userId}${qs}`);
+  },
+  // Simple backfill loader
+  backfillFromGithubAnalysisFile: (filePath: string) =>
+    apiClient.post(`/api/v1/kpi/backfill/github-analysis?file_path=${encodeURIComponent(filePath)}`),
 };
 
 // Developer insights endpoints

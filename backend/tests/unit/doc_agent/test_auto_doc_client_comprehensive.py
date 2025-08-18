@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, call, mock_open, patch
 
 import pytest
-from app.doc_agent.client import AutoDocClient, _async_retry, _retry
 
+from app.doc_agent.client import AutoDocClient, _async_retry, _retry
 from app.models.doc_approval import DocApproval
 from app.services.context_analyzer import ContextAnalyzer
 from app.services.embedding_service import EmbeddingService
@@ -33,7 +33,7 @@ class TestAutoDocClientComprehensive:
     @pytest.fixture
     def client(self):
         """Create a test client instance with semantic search enabled."""
-        with patch("doc_agent.client.settings") as mock_settings:
+        with patch("app.doc_agent.client.settings") as mock_settings:
             mock_settings.SLACK_BOT_TOKEN = TEST_CONFIG["slack_bot_token"]
             mock_settings.SLACK_DEFAULT_CHANNEL = "#test-channel"
             mock_settings.DOC_AGENT_OPENAI_MODEL = "gpt-4"
@@ -152,7 +152,7 @@ class TestAutoDocClientComprehensive:
             mock_context = {"repository": "repo", "affected_files": ["file.py"], "related_docs": []}
             with patch.object(client, "_gather_context", return_value=mock_context):
                 # Mock logger to avoid error logs
-                with patch("doc_agent.client.logger"):
+                with patch("app.doc_agent.client.logger"):
                     result = await client.analyze_diff_with_context(diff, "/repo", "abc123", None)
 
                     assert result == "fallback result"
@@ -445,7 +445,7 @@ class TestAutoDocClientComprehensive:
     @pytest.mark.asyncio
     async def test_openai_client_not_available(self):
         """Test behavior when OpenAI client is not available."""
-        with patch("doc_agent.client.AsyncOpenAI", None):
+        with patch("app.doc_agent.client.AsyncOpenAI", None):
             client = AutoDocClient(openai_api_key="test-key", github_token="test-token", docs_repo="test-repo")
 
             assert client.openai_client is None

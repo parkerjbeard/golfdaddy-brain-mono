@@ -201,6 +201,7 @@ class GitHubApp:
         details_url: Optional[str] = None,
         external_id: Optional[str] = None,
         output: Optional[Dict[str, Any]] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Create a check run on a commit.
@@ -231,6 +232,8 @@ class GitHubApp:
 
         if output:
             data["output"] = output
+        if actions:
+            data["actions"] = actions
 
         response = requests.post(url, json=data, headers=headers)
         response.raise_for_status()
@@ -289,6 +292,95 @@ class GitHubApp:
         check_run = response.json()
         logger.info(f"Updated check run {check_run_id}: status={status}, conclusion={conclusion}")
         return check_run
+
+    def add_labels_to_pr(self, owner: str, repo: str, pr_number: int, labels: List[str]) -> Dict[str, Any]:
+        """Add labels to a PR (uses Issues API)."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/issues/{pr_number}/labels"
+        headers = self.get_headers()
+        response = requests.post(url, json={"labels": labels}, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def request_reviewers(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        reviewers: Optional[List[str]] = None,
+        team_reviewers: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Request reviewers for a PR."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers"
+        headers = self.get_headers()
+        data: Dict[str, Any] = {}
+        if reviewers:
+            data["reviewers"] = reviewers
+        if team_reviewers:
+            data["team_reviewers"] = team_reviewers
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def create_issue_comment(self, owner: str, repo: str, pr_number: int, body: str) -> Dict[str, Any]:
+        """Create a comment on a PR (Issues API)."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/issues/{pr_number}/comments"
+        headers = self.get_headers()
+        response = requests.post(url, json={"body": body}, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def get_pull_request(self, owner: str, repo: str, pr_number: int) -> Dict[str, Any]:
+        """Fetch a pull request by number."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}"
+        headers = self.get_headers()
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def get_branch_sha(self, owner: str, repo: str, branch: str) -> str:
+        """Get the commit SHA of a branch ref."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/git/ref/heads/{branch}"
+        headers = self.get_headers()
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json().get("object", {}).get("sha", "")
+
+    def list_pulls_by_head(self, owner: str, repo: str, head: str, state: str = "open") -> List[Dict[str, Any]]:
+        """List PRs filtered by head reference (format: owner:branch)."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
+        headers = self.get_headers()
+        params = {"head": head, "state": state}
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def update_pull_request(
+        self, owner: str, repo: str, pr_number: int, title: Optional[str] = None, body: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Update PR fields like title/body."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}"
+        headers = self.get_headers()
+        patch_data: Dict[str, Any] = {}
+        if title is not None:
+            patch_data["title"] = title
+        if body is not None:
+            patch_data["body"] = body
+        response = requests.patch(url, json=patch_data, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def merge_pull_request(
+        self, owner: str, repo: str, pr_number: int, commit_title: Optional[str] = None, merge_method: str = "squash"
+    ) -> Dict[str, Any]:
+        """Merge a PR."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/merge"
+        headers = self.get_headers()
+        data: Dict[str, Any] = {"merge_method": merge_method}
+        if commit_title:
+            data["commit_title"] = commit_title
+        response = requests.put(url, json=data, headers=headers)
+        response.raise_for_status()
+        return response.json()
 
     def get_file_contents(self, owner: str, repo: str, path: str, ref: Optional[str] = None) -> Dict[str, Any]:
         """

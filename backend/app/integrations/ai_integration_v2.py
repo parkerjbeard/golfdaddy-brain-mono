@@ -457,7 +457,11 @@ Provide a JSON response with:
             {
                 "role": "user",
                 "content": (
-                    "Original patch (unified diff):\n\n" + patch_diff[:12000] + "\n\nFeedback:\n\n" + feedback + "\n\nReturn only the updated unified diff."
+                    "Original patch (unified diff):\n\n"
+                    + patch_diff[:12000]
+                    + "\n\nFeedback:\n\n"
+                    + feedback
+                    + "\n\nReturn only the updated unified diff."
                 ),
             },
         ]

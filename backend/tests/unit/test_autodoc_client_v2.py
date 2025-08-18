@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from app.doc_agent.client_v2 import AutoDocClientV2
 
+from app.doc_agent.client_v2 import AutoDocClientV2
 from app.integrations.github_app import CheckRunConclusion, CheckRunStatus
 
 
@@ -16,7 +16,7 @@ class TestAutoDocClientV2:
     @pytest.fixture
     def mock_settings(self):
         """Mock settings for testing."""
-        with patch("doc_agent.client_v2.settings") as mock:
+        with patch("app.doc_agent.client_v2.settings") as mock:
             mock.GITHUB_APP_ID = "app_123"
             mock.GITHUB_APP_PRIVATE_KEY = "private_key"
             mock.GITHUB_APP_INSTALLATION_ID = "install_456"
@@ -29,7 +29,7 @@ class TestAutoDocClientV2:
     @pytest.fixture
     def mock_github_app(self):
         """Mock GitHub App for testing."""
-        with patch("doc_agent.client_v2.GitHubApp") as mock:
+        with patch("app.doc_agent.client_v2.GitHubApp") as mock:
             instance = Mock()
             mock.return_value = instance
             yield instance
@@ -37,7 +37,7 @@ class TestAutoDocClientV2:
     @pytest.fixture
     def mock_openai(self):
         """Mock OpenAI client for testing."""
-        with patch("doc_agent.client_v2.AsyncOpenAI") as mock:
+        with patch("app.doc_agent.client_v2.AsyncOpenAI") as mock:
             instance = AsyncMock()
             mock.return_value = instance
             yield instance
@@ -58,7 +58,7 @@ class TestAutoDocClientV2:
 
     def test_init_with_pat(self, mock_settings):
         """Test initialization with GitHub PAT."""
-        with patch("doc_agent.client_v2.Github") as mock_github:
+        with patch("app.doc_agent.client_v2.Github") as mock_github:
             client = AutoDocClientV2(
                 openai_api_key="test_key", github_token="github_pat", docs_repo="owner/repo", use_github_app=False
             )
@@ -214,12 +214,12 @@ diff --git a/file2.md b/file2.md
     @pytest.mark.asyncio
     async def test_propose_via_slack(self, client, mock_github_app):
         """Test proposing changes via Slack."""
-        with patch("doc_agent.client_v2.SlackService") as mock_slack_class:
+        with patch("app.doc_agent.client_v2.SlackService") as mock_slack_class:
             mock_slack = AsyncMock()
             mock_slack_class.return_value = mock_slack
             mock_slack.send_message.return_value = {"ts": "1234567890.123456"}
 
-            with patch("doc_agent.client_v2.get_db") as mock_get_db:
+            with patch("app.doc_agent.client_v2.get_db") as mock_get_db:
                 mock_db = AsyncMock()
                 mock_get_db.return_value.__aenter__.return_value = mock_db
 

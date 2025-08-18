@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import numpy as np
 import pytest
-from app.doc_agent.client import AutoDocClient
 
+from app.doc_agent.client import AutoDocClient
 from app.models.doc_embeddings import CodeContext, DocEmbedding
 from app.services.context_analyzer import ContextAnalyzer
 from app.services.embedding_service import EmbeddingService

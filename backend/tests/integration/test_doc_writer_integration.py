@@ -369,7 +369,7 @@ class TestDocWriterIntegration:
             mock_context = Mock(spec=ChangeContext)
             mock_context.changed_symbols = []
             mock_context.related_docs = []
-            
+
             input_data = WriterInput(
                 task=task,
                 context=mock_context,
@@ -420,7 +420,7 @@ class TestDocWriterIntegration:
         mock_context = Mock(spec=ChangeContext)
         mock_context.changed_symbols = []
         mock_context.related_docs = []
-        
+
         input_data = WriterInput(task=task, context=mock_context, target_files=[])
 
         # Should handle invalid response gracefully

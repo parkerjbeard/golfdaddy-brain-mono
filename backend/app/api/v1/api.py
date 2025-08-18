@@ -1,19 +1,17 @@
-from fastapi import APIRouter
+from typing import Dict, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Body, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints import kpi, users  # Add other endpoint modules here as they are created
-from fastapi import APIRouter
-from app.core.database import get_db
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends, HTTPException, Body
-from app.repositories.doc_approval_repository import DocApprovalRepository
-from app.models.doc_approval import DocApproval
-from uuid import UUID
-from typing import Optional
-from app.integrations.github_app import GitHubApp, CheckRunStatus, CheckRunConclusion
-from app.doc_agent.client_v2 import AutoDocClientV2
 from app.config.settings import settings
+from app.core.database import get_db
+from app.doc_agent.client_v2 import AutoDocClientV2
 from app.integrations.ai_integration_v2 import AIIntegrationV2
-from typing import Dict
+from app.integrations.github_app import CheckRunConclusion, CheckRunStatus, GitHubApp
+from app.models.doc_approval import DocApproval
+from app.repositories.doc_approval_repository import DocApprovalRepository
 
 # Example: from .endpoints import items, other_resources
 
@@ -92,7 +90,9 @@ async def approve_doc_approval(approval_id: UUID, db: AsyncSession = Depends(get
     # Update Check Run if exists; mark approved in DB with PR info
     if pr_result:
         try:
-            await repo_layer.update_check_run(approval_id, str(pr_result.get("check_run_id")), head_sha=pr_result.get("head_sha"))
+            await repo_layer.update_check_run(
+                approval_id, str(pr_result.get("check_run_id")), head_sha=pr_result.get("head_sha")
+            )
         except Exception:
             pass
         approval = await repo_layer.approve_request(
@@ -105,11 +105,18 @@ async def approve_doc_approval(approval_id: UUID, db: AsyncSession = Depends(get
         # Fallback: just mark approved (no PR)
         approval = await repo_layer.approve_request(approval_id, approved_by="dashboard")
 
-    return {"id": str(approval.id), "status": approval.status, "pr_url": approval.pr_url, "pr_number": approval.pr_number}
+    return {
+        "id": str(approval.id),
+        "status": approval.status,
+        "pr_url": approval.pr_url,
+        "pr_number": approval.pr_number,
+    }
 
 
 @api_v1_router.post("/doc-approvals/{approval_id}/reject")
-async def reject_doc_approval(approval_id: UUID, payload: Dict[str, str] = Body(default={}), db: AsyncSession = Depends(get_db)):
+async def reject_doc_approval(
+    approval_id: UUID, payload: Dict[str, str] = Body(default={}), db: AsyncSession = Depends(get_db)
+):
     repo_layer = DocApprovalRepository(db)
     approval = await repo_layer.get_approval_by_id(approval_id)
     if not approval:
@@ -121,10 +128,14 @@ async def reject_doc_approval(approval_id: UUID, payload: Dict[str, str] = Body(
         try:
             owner, repo = approval.repository.split("/")
             gh = GitHubApp()
-            gh.update_check_run(owner, repo, int(approval.check_run_id), status=CheckRunStatus.COMPLETED, conclusion=CheckRunConclusion.FAILURE, output={
-                "title": "Documentation Rejected",
-                "summary": reason or "Rejected from dashboard"
-            })
+            gh.update_check_run(
+                owner,
+                repo,
+                int(approval.check_run_id),
+                status=CheckRunStatus.COMPLETED,
+                conclusion=CheckRunConclusion.FAILURE,
+                output={"title": "Documentation Rejected", "summary": reason or "Rejected from dashboard"},
+            )
         except Exception:
             pass
 
@@ -148,7 +159,9 @@ async def edit_doc_approval(approval_id: UUID, payload: Dict[str, str] = Body(..
 
 
 @api_v1_router.post("/doc-approvals/{approval_id}/refine")
-async def refine_doc_approval(approval_id: UUID, payload: Dict[str, str] = Body(...), db: AsyncSession = Depends(get_db)):
+async def refine_doc_approval(
+    approval_id: UUID, payload: Dict[str, str] = Body(...), db: AsyncSession = Depends(get_db)
+):
     repo_layer = DocApprovalRepository(db)
     approval = await repo_layer.get_approval_by_id(approval_id)
     if not approval:

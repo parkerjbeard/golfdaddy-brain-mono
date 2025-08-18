@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Pre-commit hook for documentation automation."""
 import os
+import sys
 import subprocess
 import logging
 import asyncio
-from doc_agent.client import AutoDocClient
+
+# Add backend to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend'))
+from app.doc_agent.client import AutoDocClient
 
 logging.basicConfig(level=logging.INFO)
 

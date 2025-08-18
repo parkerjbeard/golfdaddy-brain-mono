@@ -16,11 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
 from app.core.database import get_db
+from app.doc_agent.client_v2 import AutoDocClientV2
+from app.integrations.github_app import CheckRunConclusion, CheckRunStatus
 from app.models.doc_approval import DocApproval
 from app.services.slack_service import SlackService
-
-from app.integrations.github_app import CheckRunConclusion, CheckRunStatus
-from app.doc_agent.client_v2 import AutoDocClientV2
 
 logger = logging.getLogger(__name__)
 
@@ -489,7 +488,10 @@ async def handle_refine_doc_request(approval_id: str, payload: Dict[str, Any], d
                         "type": "plain_text_input",
                         "action_id": "feedback_input",
                         "multiline": True,
-                        "placeholder": {"type": "plain_text", "text": "e.g., Add an Examples section, simplify intro, fix API names..."},
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "e.g., Add an Examples section, simplify intro, fix API names...",
+                        },
                     },
                 }
             ],

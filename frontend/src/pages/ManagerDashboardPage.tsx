@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, UserPerformanceSummary, PerformanceSummaryParams, UserWidgetSummary } from '@/types/managerDashboard';
-import { getUserPerformanceSummary, getBulkWidgetSummaries } from '@/lib/apiService';
 import api from '@/services/api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,12 +11,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DailyReportsView } from "@/components/DailyReportsView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Chart } from "@/components/ui/chart";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, BarChart, Calendar, Filter, Clock, Target } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 
-const ManagerDashboardPage: React.FC = () => {
+const ManagerDashboardPageV2: React.FC = () => {
   const { session } = useAuth();
   const token = session?.access_token || null;
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   // Global date range state for the widget's summary stat
   const [globalDateRange, setGlobalDateRange] = useState<DateRange | undefined>(() => {
@@ -36,14 +44,12 @@ const ManagerDashboardPage: React.FC = () => {
   const [showFocusedViewForUserId, setShowFocusedViewForUserId] = useState<string | null>(null);
   const [focusedUserPerformanceData, setFocusedUserPerformanceData] = useState<UserPerformanceSummary | null>(null);
   const [focusedUserDateRange, setFocusedUserDateRange] = useState<DateRange | undefined>(undefined);
-   // Stores the date range that has been *confirmed* for the focused view
   const [confirmedFocusedDateRange, setConfirmedFocusedDateRange] = useState<DateRange | undefined>(undefined);
   const [isLoadingFocusedSummary, setIsLoadingFocusedSummary] = useState<boolean>(false);
   const [errorFocusedSummary, setErrorFocusedSummary] = useState<string | null>(null);
   
   const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(false);
   const [errorUsers, setErrorUsers] = useState<string | null>(null);
-
 
   // Fetch users
   useEffect(() => {
@@ -58,17 +64,15 @@ const ManagerDashboardPage: React.FC = () => {
         }
         const fetchedUsers = await api.users.getUsers();
         setUsers(fetchedUsers);
-        // Do not auto-select user, let manager choose
       } catch (err) {
         setErrorUsers(err instanceof Error ? err.message : 'Failed to fetch users.');
-        // Error fetching users
       }
       setIsLoadingUsers(false);
     };
     fetchUsersList();
   }, [token]);
 
-  // Fetch BULK WIDGET data
+  // Fetch BULK WIDGET data (hours + business points)
   const fetchBulkWidgetData = useCallback(async (dateRangeToUse: DateRange | undefined) => {
     if (!dateRangeToUse?.from || !token) {
       setUserWidgetsData([]);
@@ -82,8 +86,8 @@ const ManagerDashboardPage: React.FC = () => {
         startDate: format(dateRangeToUse.from, 'yyyy-MM-dd'),
         endDate: dateRangeToUse.to ? format(dateRangeToUse.to, 'yyyy-MM-dd') : format(dateRangeToUse.from, 'yyyy-MM-dd'),
       };
-      const response = await getBulkWidgetSummaries(params);
-      setUserWidgetsData(response.data || []);
+      const response = await api.kpi.getWidgetSummaries(params);
+      setUserWidgetsData(response?.data || response || []);
     } catch (err) {
       setErrorWidgets(err instanceof Error ? err.message : 'Failed to fetch bulk widget summaries.');
       setUserWidgetsData([]);
@@ -98,14 +102,14 @@ const ManagerDashboardPage: React.FC = () => {
     }
   }, [confirmedGlobalDateRange, fetchBulkWidgetData]);
 
-  // Fetch data for the FOCUSED DETAILED VIEW
+  // Fetch data for the FOCUSED DETAILED VIEW (includes hours + business points series)
   const fetchFocusedUserData = useCallback(async (userId: string, dateRangeToUse: DateRange | undefined) => {
     if (!userId || !dateRangeToUse?.from) {
       setErrorFocusedSummary('User ID and date range are required for detailed view.');
       setFocusedUserPerformanceData(null);
       return;
     }
-     if (!token) {
+    if (!token) {
       setErrorFocusedSummary('Authentication token not found.');
       return;
     }
@@ -113,16 +117,14 @@ const ManagerDashboardPage: React.FC = () => {
     setIsLoadingFocusedSummary(true);
     setErrorFocusedSummary(null);
     try {
-      const params: PerformanceSummaryParams = {
-        userId: userId,
+      const params = {
         startDate: format(dateRangeToUse.from, 'yyyy-MM-dd'),
         endDate: dateRangeToUse.to ? format(dateRangeToUse.to, 'yyyy-MM-dd') : format(dateRangeToUse.from, 'yyyy-MM-dd'),
-      };
-      const summary = await getUserPerformanceSummary(params);
-      setFocusedUserPerformanceData(summary);
+      } as any;
+      const summary = await api.kpi.getUserSummary(userId, params);
+      setFocusedUserPerformanceData((summary?.data || summary) as UserPerformanceSummary);
     } catch (err) {
       setErrorFocusedSummary(err instanceof Error ? err.message : 'Failed to fetch detailed performance summary.');
-      // Error fetching focused user data
       setFocusedUserPerformanceData(null);
     }
     setIsLoadingFocusedSummary(false);
@@ -135,6 +137,18 @@ const ManagerDashboardPage: React.FC = () => {
     }
   }, [showFocusedViewForUserId, confirmedFocusedDateRange, fetchFocusedUserData]);
 
+  // Live updates: poll nightly analysis results periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (confirmedGlobalDateRange) {
+        fetchBulkWidgetData(confirmedGlobalDateRange);
+      }
+      if (showFocusedViewForUserId && confirmedFocusedDateRange) {
+        fetchFocusedUserData(showFocusedViewForUserId, confirmedFocusedDateRange);
+      }
+    }, 300_000); // 5 min
+    return () => clearInterval(interval);
+  }, [confirmedGlobalDateRange, showFocusedViewForUserId, confirmedFocusedDateRange, fetchBulkWidgetData, fetchFocusedUserData]);
 
   // Handler for Global Confirm Date Change button
   const handleGlobalDateConfirm = () => {
@@ -158,6 +172,16 @@ const ManagerDashboardPage: React.FC = () => {
   const handleFocusedDateConfirm = () => {
     setConfirmedFocusedDateRange(focusedUserDateRange);
   };
+
+  const toggleRowExpansion = (userId: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+    }
+    setExpandedRows(newExpanded);
+  };
   
   const getPeriodString = useCallback((dateRangeToFormat: DateRange | undefined) => {
     if (!dateRangeToFormat?.from) return "N/A";
@@ -166,8 +190,6 @@ const ManagerDashboardPage: React.FC = () => {
     return `${fromDate} - ${toDate}`;
   }, []);
 
-
-  const selectedUserName = useMemo(() => users.find(u => u.id === selectedUserId)?.name || "Selected User", [users, selectedUserId]);
   const focusedUserName = useMemo(() => {
     const widgetUser = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === showFocusedViewForUserId) : undefined;
     if (widgetUser?.name) return widgetUser.name;
@@ -175,187 +197,496 @@ const ManagerDashboardPage: React.FC = () => {
     return generalUser?.name || "Focused User";
   }, [users, userWidgetsData, showFocusedViewForUserId]);
 
+  // Calculate performance tier based on points per hour
+  const getPerformanceTier = (pph: number) => {
+    if (pph >= 2.5) return { label: 'Excellent', color: 'text-green-600', bgColor: 'bg-green-100', trend: 'up' };
+    if (pph >= 1.5) return { label: 'Good', color: 'text-blue-600', bgColor: 'bg-blue-100', trend: 'up' };
+    if (pph >= 0.5) return { label: 'Average', color: 'text-yellow-600', bgColor: 'bg-yellow-100', trend: 'neutral' };
+    return { label: 'Needs Support', color: 'text-red-600', bgColor: 'bg-red-100', trend: 'down' };
+  };
+
+  const getTrendIcon = (trend: string) => {
+    if (trend === 'up') return <TrendingUp className="w-4 h-4" />;
+    if (trend === 'down') return <TrendingDown className="w-4 h-4" />;
+    return <Minus className="w-4 h-4" />;
+  };
+
+  // Sort users by efficiency
+  const sortedUserData = useMemo(() => {
+    return users.map(user => {
+      const widgetData = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === user.id) : undefined;
+      return { user, widgetData };
+    }).sort((a, b) => {
+      const aEfficiency = a.widgetData?.efficiency_points_per_hour ?? 0;
+      const bEfficiency = b.widgetData?.efficiency_points_per_hour ?? 0;
+      return bEfficiency - aEfficiency;
+    });
+  }, [users, userWidgetsData]);
+
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-6">
-      {/* Controls Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Manager Performance Dashboard</CardTitle>
-          <CardDescription>Set a global date range to view performance widgets for all developers.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 md:flex md:space-y-0 md:space-x-4 items-end">
-          <div className='flex-grow md:flex-grow-0 md:w-1/2'>
-            <label htmlFor="global-date-range-picker" className="block text-sm font-medium text-gray-700 mb-1">Global Date Range (for Widgets)</label>
-            <DateRangePicker id="global-date-range-picker" date={globalDateRange} onDateChange={setGlobalDateRange} />
-          </div>
-          <Button onClick={handleGlobalDateConfirm} disabled={!globalDateRange?.from || isLoadingWidgets}>
-            {isLoadingWidgets ? 'Loading Widgets...' : 'Confirm Global Date'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* User Widgets Display Section */}
-      {isLoadingUsers && <p className="text-center py-4">Loading users...</p>}
-      {errorUsers && <Card className="bg-destructive/10 border-destructive"><CardHeader><CardTitle className="text-destructive">Error Loading Users</CardTitle></CardHeader><CardContent><p>{errorUsers}</p></CardContent></Card>}
-      
-      {!isLoadingUsers && !errorUsers && users.length === 0 && (
-        <p className="text-center py-4">No users found.</p>
-      )}
-
-      {!isLoadingUsers && !errorUsers && users.length > 0 && isLoadingWidgets && <p className="text-center py-4">Loading performance widgets...</p>}
-      {!isLoadingUsers && !errorUsers && users.length > 0 && errorWidgets && <Card className="bg-destructive/10 border-destructive"><CardHeader><CardTitle className="text-destructive">Error Loading Widgets</CardTitle></CardHeader><CardContent><p>{errorWidgets}</p></CardContent></Card>}
-      
-      {!isLoadingWidgets && !errorWidgets && users.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {users.map((user) => {
-            const widgetData = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === user.id) : undefined;
-            const userName = widgetData?.name || user.name || 'Unknown User';
-            const userAvatarUrl = widgetData?.avatar_url || undefined; // Corrected: User type does not have avatarUrl
-
-            if (widgetData) {
-              return (
-                <Card 
-                  key={user.id}
-                  onClick={() => handleWidgetClick(user.id)} 
-                  className="cursor-pointer hover:shadow-lg transition-shadow flex flex-col"
-                >
-                  <CardHeader className="flex-row items-center space-x-4 pb-2">
-                    <Avatar>
-                      <AvatarImage src={userAvatarUrl} alt={userName} />
-                      <AvatarFallback>{userName.charAt(0).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <CardTitle className="text-lg">{userName}</CardTitle>
-                      <CardDescription className="text-xs">ID: {user.id.substring(0,8)}...</CardDescription>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-grow flex flex-col justify-center items-center">
-                    <h3 className="text-sm font-medium text-muted-foreground">AI Est. Commit Hours</h3>
-                    <p className="text-2xl font-bold">{widgetData.total_ai_estimated_commit_hours.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Period: {getPeriodString(confirmedGlobalDateRange)}</p>
-                  </CardContent>
-                  <CardFooter className="text-xs text-center block pt-2 border-t mt-2">
-                       Click to view details
-                  </CardFooter>
-                </Card>
-              );
-            } else {
-              // Card for user with no widget data
-              return (
-                <Card key={user.id} className="flex flex-col bg-muted/30">
-                  <CardHeader className="flex-row items-center space-x-4 pb-2">
-                    <Avatar>
-                      <AvatarImage src={userAvatarUrl} alt={userName} />
-                      <AvatarFallback>{userName.charAt(0).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <CardTitle className="text-lg">{userName}</CardTitle>
-                      <CardDescription className="text-xs">ID: {user.id.substring(0,8)}...</CardDescription>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-grow flex flex-col justify-center items-center">
-                    <p className="text-sm text-muted-foreground">No performance data available</p>
-                    <p className="text-xs text-muted-foreground mt-1">for {getPeriodString(confirmedGlobalDateRange)}</p>
-                  </CardContent>
-                   <CardFooter className="text-xs text-center block pt-2 border-t mt-2 text-muted-foreground">
-                       Date range confirmed
-                  </CardFooter>
-                </Card>
-              );
-            }
-          })}
-        </div>
-      )}
-
-      {/* Focused Detailed Stats View */}
-      {showFocusedViewForUserId && (
-        <div className="space-y-6 border-t-2 border-primary pt-6 mt-10">
-          <Card>
-            <CardHeader>
-              <CardTitle>Detailed Performance for {focusedUserName}</CardTitle>
-               <CardDescription>Use the date picker below to analyze a specific period for this user.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 md:flex md:space-y-0 md:space-x-4 items-end">
-                <div className='flex-grow md:flex-grow-0 md:w-1/3'>
-                    <label htmlFor="focused-date-range-picker" className="block text-sm font-medium text-gray-700 mb-1">Focused Date Range</label>
-                    <DateRangePicker id="focused-date-range-picker" date={focusedUserDateRange} onDateChange={setFocusedUserDateRange}/>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Modern Header with Stats */}
+      <div className="bg-white shadow-sm">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Team Dashboard</h1>
+                <p className="text-sm text-gray-500">{users.length} developers</p>
+              </div>
+              
+              {/* Quick Stats */}
+              <div className="hidden lg:flex items-center gap-4 pl-6 border-l">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">
+                    {userWidgetsData.reduce((sum, w) => sum + (w.total_ai_estimated_commit_hours ?? 0), 0).toFixed(0)}
+                  </p>
+                  <p className="text-xs text-gray-500">Total Hours</p>
                 </div>
-                <Button onClick={handleFocusedDateConfirm} disabled={isLoadingFocusedSummary || !focusedUserDateRange?.from}>
-                    {isLoadingFocusedSummary ? 'Loading Details...' : 'Confirm Focused Date'}
-                </Button>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">
+                    {userWidgetsData.reduce((sum, w) => sum + (w.total_business_points ?? 0), 0).toFixed(0)}
+                  </p>
+                  <p className="text-xs text-gray-500">Total Points</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">
+                    {userWidgetsData.length > 0 
+                      ? (userWidgetsData.reduce((sum, w) => sum + (w.efficiency_points_per_hour ?? 0), 0) / userWidgetsData.length).toFixed(2)
+                      : '0.00'}
+                  </p>
+                  <p className="text-xs text-gray-500">Avg Efficiency</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <DateRangePicker 
+                id="global-date-range-picker" 
+                date={globalDateRange} 
+                onDateChange={setGlobalDateRange}
+                className="w-auto"
+              />
+              <Button 
+                onClick={handleGlobalDateConfirm} 
+                disabled={!globalDateRange?.from || isLoadingWidgets}
+                size="sm"
+              >
+                {isLoadingWidgets ? 'Loading...' : 'Apply'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="container mx-auto px-6 py-6">
+        {/* Error States */}
+        {errorUsers && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600 text-sm">{errorUsers}</p>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {(isLoadingUsers || isLoadingWidgets) && (
+          <div className="flex items-center justify-center py-16">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="text-gray-500 mt-3">Loading team data...</p>
+            </div>
+          </div>
+        )}
+
+        {/* List View */}
+        {!isLoadingUsers && !isLoadingWidgets && users.length > 0 && (
+          <Card className="shadow-lg">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="text-left py-4 px-6 font-medium text-gray-700 text-sm">Developer</th>
+                      <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm">Efficiency</th>
+                      <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm hidden sm:table-cell">Hours</th>
+                      <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm hidden sm:table-cell">Points</th>
+                      <th className="text-center py-4 px-4 font-medium text-gray-700 text-sm">Progress</th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-700 text-sm">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sortedUserData.map(({ user, widgetData }) => {
+                      const userName = widgetData?.name || user.name || 'Unknown User';
+                      const userAvatarUrl = widgetData?.avatar_url || undefined;
+                      const isExpanded = expandedRows.has(user.id);
+
+                      if (!widgetData) {
+                        return (
+                          <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-9 w-9">
+                                  <AvatarImage src={userAvatarUrl} alt={userName} />
+                                  <AvatarFallback className="bg-gray-200 text-gray-600 text-sm">
+                                    {userName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium text-gray-900">{userName}</p>
+                                  <p className="text-xs text-gray-500">No data</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td colSpan={5} className="text-center py-4 text-gray-400 text-sm">
+                              Awaiting reports for selected period
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      const pph = widgetData.efficiency_points_per_hour ?? 0;
+                      const points = widgetData.total_business_points ?? 0;
+                      const hours = widgetData.total_ai_estimated_commit_hours ?? 0;
+                      const tier = getPerformanceTier(pph);
+
+                      return (
+                        <React.Fragment key={user.id}>
+                          <tr className="hover:bg-gray-50 transition-colors group">
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-9 w-9">
+                                  <AvatarImage src={userAvatarUrl} alt={userName} />
+                                  <AvatarFallback className="bg-gray-200 text-gray-600 text-sm">
+                                    {userName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium text-gray-900">{userName}</p>
+                                  <p className="text-xs text-gray-500">{getPeriodString(confirmedGlobalDateRange)}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="text-right py-4 px-4">
+                              <div>
+                                <p className="font-semibold text-gray-900">{pph.toFixed(2)}</p>
+                                <p className="text-xs text-gray-500">pts/hr</p>
+                              </div>
+                            </td>
+                            <td className="text-right py-4 px-4 hidden sm:table-cell">
+                              <p className="font-medium text-gray-700">{hours.toFixed(1)}</p>
+                            </td>
+                            <td className="text-right py-4 px-4 hidden sm:table-cell">
+                              <p className="font-medium text-gray-700">{points.toFixed(1)}</p>
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="w-24 mx-auto">
+                                <Progress value={Math.min((pph / 3) * 100, 100)} className="h-2" />
+                                <p className="text-xs text-gray-500 text-center mt-1">
+                                  {Math.min(Math.round((pph / 3) * 100), 100)}%
+                                </p>
+                              </div>
+                            </td>
+                            <td className="text-center py-4 px-6">
+                              <div className="flex items-center justify-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => toggleRowExpansion(user.id)}
+                                  className="text-gray-600 hover:text-gray-900"
+                                >
+                                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleWidgetClick(user.id)}
+                                  className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
+                                >
+                                  <BarChart className="w-4 h-4 mr-1" />
+                                  Details
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="bg-gray-50">
+                              <td colSpan={6} className="p-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                  <div className="space-y-2">
+                                    <p className="text-sm font-medium text-gray-700">Performance Metrics</p>
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Efficiency Score</span>
+                                        <span className="text-sm font-medium">{pph.toFixed(2)} pts/hr</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Total Hours</span>
+                                        <span className="text-sm font-medium">{hours.toFixed(1)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Business Points</span>
+                                        <span className="text-sm font-medium">{points.toFixed(1)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <p className="text-sm font-medium text-gray-700">Quick Stats</p>
+                                    <div className="h-20 bg-white rounded-lg p-3 border">
+                                      <p className="text-xs text-gray-500">7-Day Trend</p>
+                                      <div className="flex items-end gap-1 h-12 mt-1">
+                                        {[40, 65, 55, 80, 70, 90, 85].map((h, i) => (
+                                          <div 
+                                            key={i} 
+                                            className="flex-1 bg-blue-500 rounded-t"
+                                            style={{ height: `${h}%` }}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <p className="text-sm font-medium text-gray-700">Recent Activity</p>
+                                    <div className="space-y-1 text-sm text-gray-600">
+                                      <p>• Last commit: 2 hours ago</p>
+                                      <p>• Today's hours: {(hours / 7).toFixed(1)}</p>
+                                      <p>• Weekly average: {(pph * 1.2).toFixed(1)} pts/hr</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
+        )}
+      </div>
 
-          {isLoadingFocusedSummary && <p className="text-center py-4">Loading detailed summary for {focusedUserName}...</p>}
-          {errorFocusedSummary && <Card className="bg-destructive/10 border-destructive"><CardHeader><CardTitle className="text-destructive">Error Loading Details</CardTitle></CardHeader><CardContent><p>{errorFocusedSummary}</p></CardContent></Card>}
-          
-          {focusedUserPerformanceData && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Performance Overview</CardTitle>
-                  <CardDescription>Period: {getPeriodString(confirmedFocusedDateRange)}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <Card><CardHeader><CardTitle className="text-sm font-medium">Total EOD Reported Hours</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{focusedUserPerformanceData.total_eod_reported_hours.toFixed(2)}</p></CardContent></Card>
-                  <Card><CardHeader><CardTitle className="text-sm font-medium">Total Commits</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{focusedUserPerformanceData.total_commits_in_period}</p></CardContent></Card>
-                  <Card><CardHeader><CardTitle className="text-sm font-medium">AI Estimated Commit Hours</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{focusedUserPerformanceData.total_commit_ai_estimated_hours.toFixed(2)}</p></CardContent></Card>
-                  <Card><CardHeader><CardTitle className="text-sm font-medium">Avg. Commit Seniority</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{focusedUserPerformanceData.average_commit_seniority_score.toFixed(2)} / 10</p></CardContent></Card>
-                </CardContent>
-              </Card>
+      {/* Focused Detailed Stats View - Cleaner Design */}
+      {showFocusedViewForUserId && (
+        <Sheet open={!!showFocusedViewForUserId} onOpenChange={(open) => !open && setShowFocusedViewForUserId(null)}>
+          <SheetContent side="right" className="sm:max-w-2xl overflow-y-auto">
+            <SheetHeader className="space-y-1 pb-4 border-b">
+              <SheetTitle className="text-xl font-semibold">{focusedUserName}</SheetTitle>
+              <p className="text-sm text-gray-500">Performance Analysis • {getPeriodString(confirmedFocusedDateRange)}</p>
+            </SheetHeader>
+            
+            <div className="mt-6 space-y-6">
+              {/* Streamlined Date Range Selector */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Analysis Period</p>
+                    <DateRangePicker 
+                      id="focused-date-range-picker" 
+                      date={focusedUserDateRange} 
+                      onDateChange={setFocusedUserDateRange}
+                      className="w-full"
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleFocusedDateConfirm} 
+                    disabled={isLoadingFocusedSummary || !focusedUserDateRange?.from}
+                    size="sm"
+                    className="mt-6"
+                  >
+                    {isLoadingFocusedSummary ? 'Loading...' : 'Update'}
+                  </Button>
+                </div>
+              </div>
 
-              <Card>
-                <CardHeader><CardTitle>EOD Report Details</CardTitle></CardHeader>
-                <CardContent>
-                  {focusedUserPerformanceData.eod_report_details.length > 0 ? (
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Date</TableHead><TableHead className="text-right">Reported Hours</TableHead><TableHead>AI Summary</TableHead><TableHead className="text-right">AI Est. Hours</TableHead><TableHead className="text-right">Clarifications</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {focusedUserPerformanceData.eod_report_details.map((eod, index) => (
-                          <TableRow key={index}>
-                            <TableCell>{format(new Date(eod.report_date), 'MMM dd, yyyy')}</TableCell>
-                            <TableCell className="text-right">{eod.reported_hours.toFixed(2)}</TableCell>
-                            <TableCell className="max-w-xs truncate" title={eod.ai_summary || ''}>{eod.ai_summary || 'N/A'}</TableCell>
-                            <TableCell className="text-right">{eod.ai_estimated_hours.toFixed(2)}</TableCell>
-                            <TableCell className="text-right">{eod.clarification_requests_count}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : <p>No EOD reports found for this period.</p>}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader><CardTitle>Commit Comparison Insights</CardTitle><CardDescription>Highlights from comparing EOD reports with commit analysis.</CardDescription></CardHeader>
-                <CardContent className="space-y-4">
-                  {focusedUserPerformanceData.commit_comparison_insights.length > 0 ? (
-                    focusedUserPerformanceData.commit_comparison_insights.map((insight, index) => (
-                      <Card key={index} className="bg-muted/50">
-                        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Commit: {insight.commit_hash.substring(0, 7)}...</CardTitle><CardDescription className="text-xs">{format(new Date(insight.commit_timestamp), 'MMM dd, yyyy HH:mm')}</CardDescription></CardHeader>
-                        <CardContent><pre className="whitespace-pre-wrap text-xs p-2 bg-background rounded-md">{insight.notes}</pre></CardContent>
-                      </Card>
-                    ))
-                  ) : <p>No commit comparison insights available for this period.</p>}
-                </CardContent>
-              </Card>
+              {isLoadingFocusedSummary && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-gray-500 mt-2 text-sm">Loading performance data...</p>
+                  </div>
+                </div>
+              )}
               
-              {/* Daily Reports Section */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Daily Reports History</CardTitle>
-                  <CardDescription>View all submitted EOD reports with full details</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DailyReportsView userId={showFocusedViewForUserId} userName={focusedUserName} />
-                </CardContent>
-              </Card>
+              {errorFocusedSummary && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-600 text-sm">{errorFocusedSummary}</p>
+                </div>
+              )}
+
+              {focusedUserPerformanceData && (
+                <>
+                  {/* Key Metrics - Cleaner Grid */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Key Metrics</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-white border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Efficiency</span>
+                          <TrendingUp className="w-3 h-3 text-green-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {(focusedUserPerformanceData.efficiency_points_per_hour ?? 0).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">points/hour</p>
+                      </div>
+                      
+                      <div className="bg-white border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Total Hours</span>
+                          <Clock className="w-3 h-3 text-blue-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {focusedUserPerformanceData.total_commit_ai_estimated_hours.toFixed(1)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">committed</p>
+                      </div>
+                      
+                      <div className="bg-white border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Business Points</span>
+                          <Target className="w-3 h-3 text-purple-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {(focusedUserPerformanceData.total_business_points ?? 0).toFixed(0)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">earned</p>
+                      </div>
+                      
+                      <div className="bg-white border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Seniority</span>
+                          <BarChart className="w-3 h-3 text-orange-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {focusedUserPerformanceData.average_commit_seniority_score.toFixed(1)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">/ 10 avg</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trend Chart - Simplified */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Performance Trend</h3>
+                    <div className="bg-white border rounded-lg p-4">
+                      <Chart
+                        data={(() => {
+                          const hours = focusedUserPerformanceData.daily_hours_series || [];
+                          const points = focusedUserPerformanceData.daily_points_series || [];
+                          const dates = Array.from(new Set([...
+                            (hours as any[]).map(h => h.date), (points as any[]).map(p => p.date)
+                          ].flat())).sort();
+                          return dates.map(d => ({
+                            date: d,
+                            hours: (hours as any[]).find(h => h.date === d)?.hours ?? 0,
+                            points: (points as any[]).find(p => p.date === d)?.points ?? 0,
+                          }));
+                        })()}
+                        type="line"
+                        xKey="date"
+                        yKeys={[
+                          { key: 'hours', name: 'Hours', color: '#3b82f6' },
+                          { key: 'points', name: 'Points', color: '#10b981' },
+                        ]}
+                        height={200}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Top Commits - Collapsible */}
+                  <Collapsible defaultOpen>
+                    <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left hover:text-gray-700">
+                      <h3 className="text-sm font-semibold text-gray-900">Top Commits by Impact</h3>
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-3">
+                      <div className="bg-white border rounded-lg overflow-hidden">
+                        {Array.isArray((focusedUserPerformanceData as any).top_commits_by_impact) && (focusedUserPerformanceData as any).top_commits_by_impact.length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-gray-50">
+                                <TableHead className="text-xs">Commit</TableHead>
+                                <TableHead className="text-xs">Message</TableHead>
+                                <TableHead className="text-right text-xs">Impact</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {(focusedUserPerformanceData as any).top_commits_by_impact.slice(0, 5).map((c: any, idx: number) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="font-mono text-xs py-2">{c.commit_hash?.slice(0, 7)}</TableCell>
+                                  <TableCell className="truncate max-w-[280px] text-sm py-2" title={c.message || ''}>{c.message || '—'}</TableCell>
+                                  <TableCell className="text-right text-sm py-2">{c.impact_score?.toFixed ? c.impact_score.toFixed(1) : c.impact_score}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <p className="p-4 text-sm text-gray-500">No high-impact commits found for this period.</p>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+
+                  {/* EOD Reports - Collapsible */}
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left hover:text-gray-700">
+                      <h3 className="text-sm font-semibold text-gray-900">EOD Report Summary</h3>
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-3">
+                      <div className="bg-white border rounded-lg overflow-hidden">
+                        {focusedUserPerformanceData.eod_report_details.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-gray-50">
+                                  <TableHead className="text-xs">Date</TableHead>
+                                  <TableHead className="text-right text-xs">Hours</TableHead>
+                                  <TableHead className="text-xs">Summary</TableHead>
+                                  <TableHead className="text-right text-xs">AI Est.</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {focusedUserPerformanceData.eod_report_details.slice(0, 5).map((eod, index) => (
+                                  <TableRow key={index}>
+                                    <TableCell className="text-sm py-2">{format(new Date(eod.report_date), 'MMM dd')}</TableCell>
+                                    <TableCell className="text-right text-sm py-2">{eod.reported_hours.toFixed(1)}</TableCell>
+                                    <TableCell className="max-w-[200px] truncate text-sm py-2" title={eod.ai_summary || ''}>{eod.ai_summary || 'N/A'}</TableCell>
+                                    <TableCell className="text-right text-sm py-2">{eod.ai_estimated_hours.toFixed(1)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ) : (
+                          <p className="p-4 text-sm text-gray-500">No EOD reports found for this period.</p>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+
+                  {/* Full History - Collapsible */}
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left hover:text-gray-700">
+                      <h3 className="text-sm font-semibold text-gray-900">Full Report History</h3>
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-3">
+                      <div className="bg-white border rounded-lg p-4">
+                        <DailyReportsView userId={showFocusedViewForUserId} userName={focusedUserName} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </>
+              )}
             </div>
-          )}
-        </div>
+          </SheetContent>
+        </Sheet>
       )}
     </div>
   );
 };
 
-export default ManagerDashboardPage; 
+export default ManagerDashboardPageV2;

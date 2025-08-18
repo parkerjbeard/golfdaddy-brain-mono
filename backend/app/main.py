@@ -20,8 +20,8 @@ from app.api.daily_commit_analysis_endpoints import router as daily_analysis_rou
 from app.api.daily_report_endpoints import router as daily_reports_router
 from app.api.dev_endpoints import router as dev_router
 from app.api.docs_generation import router as docs_router
-from app.api.github_events import router as github_router
 from app.api.docs_viewer import router as docs_viewer_router
+from app.api.github_events import router as github_router
 from app.api.health import router as health_router
 from app.api.raci_matrix import router as raci_matrix_router
 from app.api.semantic_search import router as semantic_search_router

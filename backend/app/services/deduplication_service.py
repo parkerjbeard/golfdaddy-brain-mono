@@ -256,7 +256,9 @@ class DeduplicationService:
             """
 
             # Use similarity API to compare items
-            response = await self.ai_integration.analyze_semantic_similarity(commit_item.description, report_item.description)
+            response = await self.ai_integration.analyze_semantic_similarity(
+                commit_item.description, report_item.description
+            )
 
             # Parse response
             if response and response.get("similarity_score", 0) is not None:

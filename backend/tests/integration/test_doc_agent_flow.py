@@ -6,11 +6,11 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from app.doc_agent.client_v2 import AutoDocClientV2
 
+from app.doc_agent.client_v2 import AutoDocClientV2
 from app.integrations.ai_integration_v2 import AIIntegrationV2
 from app.integrations.github_app import CheckRunConclusion, CheckRunStatus, GitHubApp
-from scripts.pre_commit_auto_docs import analyze_and_propose
+# Remove cross-module import - define test helper locally if needed
 
 
 class TestDocAgentIntegration:

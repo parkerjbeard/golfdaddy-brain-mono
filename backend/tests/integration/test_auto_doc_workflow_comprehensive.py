@@ -11,9 +11,9 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from app.doc_agent.client import AutoDocClient
 
 from app.core.database import get_db
+from app.doc_agent.client import AutoDocClient
 from app.models.doc_approval import DocApproval
 from app.services.context_analyzer import ContextAnalyzer
 from app.services.doc_generation_service import DocGenerationService

@@ -12,6 +12,8 @@ import { UserCog, UserCheck, UserX, Mail, Users, Github, Slack, Edit, Trash2, Us
 import { useAuth } from '@/contexts/AuthContext';
 import { UserResponse, UserRole, UserUpdateByAdminPayload } from '@/types/user';
 import api from '@/services/api/endpoints';
+import { Button as UIButton } from "@/components/ui/button";
+import { Input as UIInput } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export const EmployeeManagement = () => {

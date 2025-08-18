@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Entry point for CI documentation automation."""
 import os
+import sys
 import subprocess
 import logging
 import asyncio
-from doc_agent.client_v2 import AutoDocClientV2
+
+# Add backend to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend'))
+from app.doc_agent.client_v2 import AutoDocClientV2
 
 logging.basicConfig(level=logging.INFO)
 

@@ -3,8 +3,8 @@ from typing import Any, Dict
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from app.doc_agent.client import AutoDocClient
 
+from app.doc_agent.client import AutoDocClient
 from app.services.doc_generation_service import DocGenerationService
 from app.services.documentation_update_service import DocumentationUpdateService
 
