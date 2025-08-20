@@ -3,6 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 import { secureStorage } from '../services/secureStorage';
 import { TokenCleanupService } from '../services/tokenCleanupService';
+import logger from '../utils/logger';
 
 interface UserProfile {
   id: string;
@@ -94,6 +95,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isViteProxy = window.location.port === '8080'; // Vite dev server port
       const apiUrl = isViteProxy ? '/auth/me' : `${baseUrl}/auth/me`;
       
+      // Production logging
+      logger.logAuthEvent('Fetching user profile', { url: apiUrl, baseUrl });
       
       const response = await fetch(apiUrl, {
         headers: {
@@ -104,6 +107,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (!response.ok) {
+        logger.logAuthError('Profile fetch failed', {
+          status: response.status,
+          statusText: response.statusText,
+          url: apiUrl
+        });
         throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
       }
 

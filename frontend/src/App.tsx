@@ -7,6 +7,8 @@ import { AuthenticatedLayout } from './components/layout/AuthenticatedLayout'
 import { LoginPage } from './pages/LoginPage'
 import { Toaster } from './components/ui/toaster'
 import { migrateStorageIfNeeded } from './services/storageMigration'
+import ErrorBoundary from './components/logging/ErrorBoundary'
+import logger from './utils/logger'
 
 // Lazy load pages that might have circular dependencies
 const CompanyDashboard = lazy(() => import('./pages/CompanyDashboard'))
@@ -33,12 +35,29 @@ function App() {
   // Run storage migration on app start
   useEffect(() => {
     migrateStorageIfNeeded().catch(console.error);
+    
+    // Log app initialization
+    logger.info('App initialized', 'app', {
+      environment: import.meta.env.MODE,
+      apiUrl: import.meta.env.VITE_API_BASE_URL
+    });
+    
+    // Log navigation changes
+    const handleNavigation = () => {
+      logger.logNavigation(window.location.pathname, window.location.pathname);
+    };
+    window.addEventListener('popstate', handleNavigation);
+    
+    return () => {
+      window.removeEventListener('popstate', handleNavigation);
+    };
   }, []);
   
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Suspense fallback={<PageLoader />}>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <Suspense fallback={<PageLoader />}>
           <Routes>
               {/* Public routes */}
               <Route path="/login" element={<LoginPage />} />
@@ -130,6 +149,7 @@ function App() {
           <Toaster />
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   )
 }
 

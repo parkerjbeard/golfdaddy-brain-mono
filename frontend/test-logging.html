@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Production Logging</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f3f4f6;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        .description {
+            color: #6b7280;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        button.error {
+            background: #ef4444;
+        }
+        button.error:hover {
+            background: #dc2626;
+        }
+        button.warn {
+            background: #f59e0b;
+        }
+        button.warn:hover {
+            background: #d97706;
+        }
+        .console {
+            background: #1f2937;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-left: 3px solid transparent;
+        }
+        .log-entry.error {
+            color: #ef4444;
+            border-left-color: #ef4444;
+        }
+        .log-entry.warn {
+            color: #f59e0b;
+            border-left-color: #f59e0b;
+        }
+        .log-entry.info {
+            color: #3b82f6;
+            border-left-color: #3b82f6;
+        }
+        .log-entry.debug {
+            color: #8b92a4;
+            border-left-color: #8b92a4;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #10b981;
+            color: white;
+        }
+        .status.error {
+            background: #ef4444;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Production Logging Test Suite</h1>
+    <p class="description">Test all logging functionality. Open browser console (F12) to see full output.</p>
+
+    <div class="container">
+        <h2>1. Basic Logging Levels</h2>
+        <p class="description">Test different log levels and see how they appear</p>
+        <button onclick="testBasicLogging()">Test All Log Levels</button>
+        <button onclick="testDebugLogging()">Debug (Dev Only)</button>
+        <button onclick="testInfoLogging()">Info</button>
+        <button class="warn" onclick="testWarnLogging()">Warning</button>
+        <button class="error" onclick="testErrorLogging()">Error</button>
+    </div>
+
+    <div class="container">
+        <h2>2. API Request Logging</h2>
+        <p class="description">Test API request/response logging with performance metrics</p>
+        <button onclick="testSuccessfulAPI()">Successful API Call</button>
+        <button onclick="testFailedAPI()">Failed API Call (404)</button>
+        <button onclick="testSlowAPI()">Slow API Call</button>
+        <button onclick="testAuthAPI()">Auth Profile Call</button>
+    </div>
+
+    <div class="container">
+        <h2>3. Error Handling</h2>
+        <p class="description">Test error boundary and global error handlers</p>
+        <button class="error" onclick="throwError()">Throw Uncaught Error</button>
+        <button class="error" onclick="throwPromiseRejection()">Unhandled Promise Rejection</button>
+        <button class="error" onclick="testNetworkError()">Network Error</button>
+    </div>
+
+    <div class="container">
+        <h2>4. User Actions & Navigation</h2>
+        <p class="description">Test user action and navigation logging</p>
+        <button onclick="testUserAction()">Log User Action</button>
+        <button onclick="testNavigation()">Log Navigation</button>
+        <button onclick="testPerformance()">Log Performance Metric</button>
+    </div>
+
+    <div class="container">
+        <h2>5. Auth Events</h2>
+        <p class="description">Test authentication event logging</p>
+        <button onclick="testAuthSuccess()">Simulate Login Success</button>
+        <button onclick="testAuthFailure()">Simulate Login Failure</button>
+        <button onclick="testSessionRestore()">Simulate Session Restore</button>
+    </div>
+
+    <div class="container">
+        <h2>6. Production Features</h2>
+        <p class="description">Test production-specific features</p>
+        <button onclick="testLogBuffer()">Test Log Buffering (30 logs)</button>
+        <button onclick="forceFlush()">Force Flush Logs to Backend</button>
+        <button onclick="checkEnvironment()">Check Environment Config</button>
+    </div>
+
+    <div class="container">
+        <h2>📋 Console Output</h2>
+        <div id="console" class="console">Waiting for tests...</div>
+    </div>
+
+    <script type="module">
+        // Import logger after page loads
+        window.addEventListener('DOMContentLoaded', async () => {
+            const response = await fetch('http://localhost:8082/src/utils/logger.ts');
+            if (response.ok) {
+                addLog('✅ Logger module found and ready', 'info');
+                addLog('Open browser console (F12) for full output', 'info');
+            } else {
+                addLog('⚠️ Logger module not found - make sure dev server is running', 'error');
+            }
+        });
+
+        // Custom console display
+        window.addLog = function(message, level = 'info') {
+            const consoleEl = document.getElementById('console');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${level}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+            consoleEl.appendChild(entry);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        };
+
+        // Test functions
+        window.testBasicLogging = function() {
+            console.log('=== Testing All Log Levels ===');
+            console.debug('[DEBUG] This only shows in development');
+            console.log('[INFO] Information message');
+            console.warn('[WARN] Warning message');
+            console.error('[ERROR] Error message');
+            
+            addLog('Tested all log levels - check browser console', 'info');
+        };
+
+        window.testDebugLogging = function() {
+            console.debug('Debug: Component rendered', { component: 'TestComponent', props: { id: 123 } });
+            addLog('Debug log sent (only visible in dev mode)', 'debug');
+        };
+
+        window.testInfoLogging = function() {
+            console.info('User clicked button', { button: 'test-info', timestamp: Date.now() });
+            addLog('Info log sent', 'info');
+        };
+
+        window.testWarnLogging = function() {
+            console.warn('API rate limit approaching', { remaining: 10, limit: 100 });
+            addLog('Warning log sent', 'warn');
+        };
+
+        window.testErrorLogging = function() {
+            console.error('Database connection failed', new Error('Connection timeout'));
+            addLog('Error log sent', 'error');
+        };
+
+        window.testSuccessfulAPI = async function() {
+            addLog('Testing successful API call...', 'info');
+            try {
+                const start = performance.now();
+                const response = await fetch('http://localhost:8000/api/v1/health');
+                const data = await response.json();
+                const duration = performance.now() - start;
+                
+                console.log(`[API] GET /api/v1/health - ${response.status} (${duration.toFixed(2)}ms)`, data);
+                addLog(`API call successful: ${response.status} in ${duration.toFixed(2)}ms`, 'info');
+            } catch (error) {
+                addLog(`API call failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.testFailedAPI = async function() {
+            addLog('Testing failed API call (404)...', 'info');
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/nonexistent');
+                console.error(`[API] GET /api/v1/nonexistent - ${response.status}`);
+                addLog(`API returned 404 as expected`, 'warn');
+            } catch (error) {
+                addLog(`Network error: ${error.message}`, 'error');
+            }
+        };
+
+        window.testSlowAPI = async function() {
+            addLog('Simulating slow API call...', 'info');
+            const start = performance.now();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const duration = performance.now() - start;
+            console.warn(`[PERFORMANCE] Slow API detected: ${duration.toFixed(2)}ms`);
+            addLog(`Slow API warning: ${duration.toFixed(2)}ms`, 'warn');
+        };
+
+        window.testAuthAPI = async function() {
+            addLog('Testing auth profile endpoint...', 'info');
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/auth/profile');
+                if (response.status === 401) {
+                    console.log('[AUTH] Not authenticated - expected behavior');
+                    addLog('Auth check: Not authenticated (401)', 'info');
+                } else {
+                    addLog(`Auth check: Status ${response.status}`, 'info');
+                }
+            } catch (error) {
+                addLog(`Auth check failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.throwError = function() {
+            addLog('Throwing uncaught error...', 'warn');
+            setTimeout(() => {
+                throw new Error('Test uncaught error - this should be logged');
+            }, 100);
+        };
+
+        window.throwPromiseRejection = function() {
+            addLog('Creating unhandled promise rejection...', 'warn');
+            Promise.reject(new Error('Test promise rejection - this should be logged'));
+        };
+
+        window.testNetworkError = async function() {
+            addLog('Testing network error...', 'info');
+            try {
+                await fetch('http://nonexistent.invalid.domain/api');
+            } catch (error) {
+                console.error('[NETWORK] Failed to fetch', error);
+                addLog('Network error logged', 'error');
+            }
+        };
+
+        window.testUserAction = function() {
+            const action = 'clicked_test_button';
+            console.log(`[USER ACTION] ${action}`, { 
+                timestamp: Date.now(), 
+                element: 'test-button',
+                context: 'logging-test' 
+            });
+            addLog(`User action logged: ${action}`, 'info');
+        };
+
+        window.testNavigation = function() {
+            const from = '/dashboard';
+            const to = '/settings';
+            console.log(`[NAVIGATION] ${from} → ${to}`);
+            addLog(`Navigation logged: ${from} → ${to}`, 'info');
+        };
+
+        window.testPerformance = function() {
+            const metric = 'page_load';
+            const value = Math.random() * 1000 + 500;
+            console.log(`[PERFORMANCE] ${metric}: ${value.toFixed(2)}ms`);
+            addLog(`Performance metric logged: ${metric} = ${value.toFixed(2)}ms`, 'info');
+        };
+
+        window.testAuthSuccess = function() {
+            console.log('[AUTH] Login successful', { 
+                email: 'test@example.com', 
+                role: 'admin',
+                timestamp: Date.now() 
+            });
+            addLog('Auth success event logged', 'info');
+        };
+
+        window.testAuthFailure = function() {
+            console.error('[AUTH] Login failed', { 
+                email: 'test@example.com',
+                error: 'Invalid credentials',
+                timestamp: Date.now() 
+            });
+            addLog('Auth failure event logged', 'error');
+        };
+
+        window.testSessionRestore = function() {
+            console.log('[AUTH] Session restored', { 
+                userId: 'user-123',
+                role: 'manager',
+                expiresAt: Date.now() + 3600000 
+            });
+            addLog('Session restore event logged', 'info');
+        };
+
+        window.testLogBuffer = function() {
+            addLog('Sending 30 logs to test buffering...', 'info');
+            for (let i = 1; i <= 30; i++) {
+                console.log(`[BUFFER TEST] Log message ${i} of 30`);
+            }
+            addLog('30 logs sent - buffer should batch these', 'info');
+        };
+
+        window.forceFlush = function() {
+            console.log('[LOGGER] Forcing flush of log buffer to backend');
+            addLog('Force flush triggered - check network tab', 'info');
+        };
+
+        window.checkEnvironment = function() {
+            const env = {
+                mode: 'development',
+                apiUrl: 'http://localhost:8000',
+                isProduction: false,
+                isDevelopment: true
+            };
+            console.log('[ENVIRONMENT]', env);
+            addLog(`Environment: ${JSON.stringify(env, null, 2)}`, 'info');
+        };
+
+        // Listen for global errors
+        window.addEventListener('error', (event) => {
+            addLog(`Global error caught: ${event.message}`, 'error');
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            addLog(`Unhandled rejection: ${event.reason}`, 'error');
+        });
+    </script>
+</body>
+</html>

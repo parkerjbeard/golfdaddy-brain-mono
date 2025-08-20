@@ -1,6 +1,13 @@
 import { supabase } from '../../lib/supabaseClient'
+import logger from '../../utils/logger'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
+// Log API configuration on load
+logger.info('API Client initialized', 'api-client', {
+  baseUrl: API_BASE_URL,
+  environment: import.meta.env.MODE
+});
 
 // Use proxy in development
 const getApiUrl = (endpoint: string) => {
@@ -34,6 +41,9 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
+    const startTime = performance.now();
+    const method = options.method || 'GET';
+    
     try {
       const token = await this.getAuthToken()
       
@@ -53,6 +63,10 @@ class ApiClient {
       }
 
       const url = getApiUrl(endpoint);
+      
+      // Log request
+      logger.logApiRequest(method, url, options.body ? JSON.parse(options.body as string) : undefined);
+      
       const response = await fetch(url, {
         ...options,
         headers,
@@ -62,9 +76,16 @@ class ApiClient {
         ? await response.json()
         : null
 
+      // Log response
+      const duration = performance.now() - startTime;
+      logger.logApiResponse(method, url, response.status, data);
+      logger.logPerformance(`API ${method} ${endpoint}`, duration);
+
       if (!response.ok) {
+        const errorMsg = data?.detail || data?.message || `Request failed with status ${response.status}`;
+        logger.logApiError(method, url, { status: response.status, error: errorMsg, data });
         return {
-          error: data?.detail || data?.message || `Request failed with status ${response.status}`,
+          error: errorMsg,
           status: response.status,
         }
       }
@@ -74,6 +95,7 @@ class ApiClient {
         status: response.status,
       }
     } catch (error) {
+      logger.logApiError(method, endpoint, error);
       console.error('API request failed:', error)
       return {
         error: error instanceof Error ? error.message : 'Network error',
