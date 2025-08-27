@@ -133,6 +133,25 @@ async def health_check():
     }
 
 
+# Debug endpoint to check frontend files
+@app.get("/debug/frontend", tags=["debug"])
+async def debug_frontend():
+    frontend_dist_path = "/app/frontend/dist"
+    debug_info = {
+        "frontend_dist_exists": os.path.exists(frontend_dist_path),
+        "frontend_dist_path": frontend_dist_path,
+        "files": [],
+    }
+    
+    if os.path.exists(frontend_dist_path):
+        try:
+            debug_info["files"] = os.listdir(frontend_dist_path)
+        except Exception as e:
+            debug_info["error"] = str(e)
+    
+    return debug_info
+
+
 # Initialize services on startup
 @app.on_event("startup")
 def startup_services():
