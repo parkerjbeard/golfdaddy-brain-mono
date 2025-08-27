@@ -4,7 +4,7 @@ WORKDIR /app/frontend
 
 # Copy package files and install deps deterministically
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 # Copy source and build
 COPY frontend/ .
