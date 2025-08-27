@@ -1,21 +1,8 @@
 services:
   - type: web
-    name: brain-api
+    name: brain
     env: docker
-    dockerfilePath: ./Dockerfile.backend-only
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
       - fromGroup: brain-secrets
-
-  - type: web
-    name: brain-frontend
-    env: static
-    buildCommand: |
-      cd frontend && \
-      rm -rf node_modules && \
-      npm install && \
-      npm install @rollup/rollup-linux-x64-gnu @swc/core-linux-x64-gnu && \
-      npm run build
-    staticPublishPath: ./frontend/dist
-    envVars:
-      - fromGroup: brain-frontend-env

@@ -1,71 +1,48 @@
-# Render.com Deployment Guide
+# Render.com Deployment Guide (Unified Service)
 
-## Quick Fix for Authentication Issues
+## New: Single-service deployment (no CORS issues)
 
-The most common issue is frontend-backend connection. Ensure:
-
-1. **Frontend** (`brain-frontend`) has:
-   ```
-   VITE_API_BASE_URL=https://brain-api.onrender.com
-   VITE_API_URL=https://brain-api.onrender.com
-   ```
-
-2. **Backend** (`brain-api`) has:
-   ```
-   CORS_ALLOWED_ORIGINS=https://brain-frontend-wc3t.onrender.com
-   ```
+We now deploy frontend and backend together as one Docker web service named `brain`. The backend serves the built frontend from `frontend/dist`, so API and static assets share the same origin and CORS is no longer needed in production.
 
 ## Service Structure
 
 ```
 Render Services:
-├── brain-api (Backend - FastAPI)
-│   └── URL: https://brain-api.onrender.com
-├── brain-frontend (Frontend - React)
-│   └── URL: https://brain-frontend-wc3t.onrender.com
-└── PostgreSQL Database
-    └── Internal URL: Used in DATABASE_URL
+└── brain (Docker Web Service: FastAPI + React SPA)
+    └── URL: https://<your-domain>.onrender.com
 ```
 
-## Environment Variables Setup
+## How it works
 
-### Backend Service (brain-api)
+- `Dockerfile` builds the React app, installs backend deps, copies `frontend/dist` into the image, and starts FastAPI via gunicorn bound to `$PORT`.
+- `backend/app/main.py` already mounts `frontend/dist` and serves the SPA with a catch-all route.
 
-1. Go to your backend service on Render
-2. Click "Environment" in the sidebar
-3. Add variables from `backend/.env.render.example`
-4. Critical variables:
-   - `DATABASE_URL` - From your Render PostgreSQL
-   - `SUPABASE_URL` - From Supabase project
-   - `SUPABASE_SERVICE_KEY` - Service role key (keep secret!)
-   - `CORS_ALLOWED_ORIGINS` - Must include your frontend URL
-   - `OPENAI_API_KEY` - For AI features
+## Deploy or Migrate
 
-### Frontend Service (brain-frontend)
+1. In Render, delete/disable the previous `brain-api` and `brain-frontend` services.
+2. Use the updated `render.yaml` (single service `brain`). Create a new Web Service from this repo, or click "Blueprints" and apply.
+3. Ensure your env group `brain-secrets` contains at least:
+   - `DATABASE_URL` (Render PostgreSQL external URL)
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_KEY`
+   - `OPENAI_API_KEY` (if applicable)
+   - Any other keys referenced in `backend/app/config/settings.py`
 
-1. Go to your frontend service on Render
-2. Click "Environment" in the sidebar
-3. Add variables from `frontend/.env.render.example`
-4. Critical variables:
-   - `VITE_API_BASE_URL` - Your backend URL (NOT localhost!)
-   - `VITE_SUPABASE_URL` - From Supabase project
-   - `VITE_SUPABASE_ANON_KEY` - Anon key (safe for frontend)
+Notes:
+- `VITE_API_BASE_URL` is optional. The frontend defaults to relative paths (`/api` or `/api/v1`) which work with same-origin deployment.
+- Keep `/health` exposed; Render uses it for health checks.
 
-## Build & Start Commands
+## Build & Start (handled by Dockerfile)
 
-### Backend
-- **Build Command**: `cd backend && pip install -r requirements.txt`
-- **Start Command**: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-
-### Frontend
-- **Build Command**: `cd frontend && npm install && npm run build`
-- **Start Command**: `cd frontend && npm run preview -- --host 0.0.0.0 --port $PORT`
-- **Publish Directory**: `frontend/dist`
+- The container binds to `$PORT` automatically:
+  ```
+  gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+  ```
 
 ## Database Setup
 
-1. Create PostgreSQL database on Render
-2. Copy the external database URL
+1. Create PostgreSQL on Render (if not present)
+2. Set `DATABASE_URL` in the service env (use the external URL)
 3. Add to backend as `DATABASE_URL`
 4. Run migrations:
    ```bash
