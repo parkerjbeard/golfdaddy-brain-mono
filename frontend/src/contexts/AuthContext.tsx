@@ -153,6 +153,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // Check if Supabase client is available
+    if (!supabase) {
+      setError('Authentication system unavailable - missing configuration');
+      setLoading(false);
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
@@ -195,6 +202,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string, rememberMe: boolean = false) => {
     try {
+      if (!supabase) {
+        throw new Error('Authentication system unavailable - missing configuration');
+      }
       
       // Add timeout to the request
       const controller = new AbortController();
@@ -244,6 +254,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
+      if (!supabase) {
+        console.warn('Authentication system unavailable during signOut');
+        return;
+      }
       await supabase.auth.signOut();
       setUserProfile(null);
       
