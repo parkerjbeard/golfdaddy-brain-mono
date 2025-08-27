@@ -1,21 +1,32 @@
 FROM node:20-slim AS frontend-build
 
+WORKDIR /app
+
+# Copy any environment files from project root (Render's secret files)
+COPY .env* ./
+
+# Setup frontend directory
 WORKDIR /app/frontend
 
 # Copy package files and install deps deterministically
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-# Copy source and build
+# Copy source
 COPY frontend/ .
 
 # Set build-time environment variables for Vite
-# These will be baked into the frontend build
+# These will be available during the build process
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_API_BASE_URL
 
-# Build with environment variables available
+# Build with environment variables passed from Render
+# The ARG values will be available as environment variables during build
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 RUN npm run build
 
 FROM python:3.11-slim AS backend-base

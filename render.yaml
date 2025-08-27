@@ -4,9 +4,12 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
-    dockerBuildArgs:
-      - VITE_SUPABASE_URL
-      - VITE_SUPABASE_ANON_KEY
-      - VITE_API_BASE_URL
     envVars:
       - fromGroup: brain-secrets
+    dockerBuildArgs:
+      - key: VITE_SUPABASE_URL
+        fromGroup: brain-secrets
+      - key: VITE_SUPABASE_ANON_KEY
+        fromGroup: brain-secrets  
+      - key: VITE_API_BASE_URL
+        fromGroup: brain-secrets
