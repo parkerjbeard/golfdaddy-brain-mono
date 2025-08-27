@@ -8,6 +8,14 @@ RUN npm ci --no-audit --no-fund
 
 # Copy source and build
 COPY frontend/ .
+
+# Set build-time environment variables for Vite
+# These will be baked into the frontend build
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_API_BASE_URL
+
+# Build with environment variables available
 RUN npm run build
 
 FROM python:3.11-slim AS backend-base
