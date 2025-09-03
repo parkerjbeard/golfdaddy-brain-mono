@@ -24,6 +24,16 @@ class ResourceNotFoundError(AppExceptionBase):
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND, code="RESOURCE_NOT_FOUND")
 
 
+class DuplicateResourceError(AppExceptionBase):
+    """Raised when attempting to create a duplicate resource."""
+
+    def __init__(self, resource_name: str, identifier: str | None = None):
+        message = f"A {resource_name} with the same identifier already exists"
+        if identifier:
+            message += f": {identifier}"
+        super().__init__(message=message, status_code=status.HTTP_409_CONFLICT, code="DUPLICATE_RESOURCE")
+
+
 class PermissionDeniedError(AppExceptionBase):
     """Raised when an action is attempted without sufficient permissions."""
 

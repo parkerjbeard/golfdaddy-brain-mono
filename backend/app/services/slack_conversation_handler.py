@@ -8,6 +8,7 @@ for daily report submission and clarification.
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -26,6 +27,22 @@ from app.services.user_service import UserService
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class ConversationState:
+    """Tracks the state of an active Slack conversation."""
+    
+    report_id: Optional[UUID]
+    user_id: UUID
+    thread_ts: str
+    channel_id: str
+    state: str
+    created_at: datetime = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now(timezone.utc)
+
+
 class SlackConversationHandler:
     """Handles Slack conversation flows for daily reports."""
 
@@ -35,6 +52,7 @@ class SlackConversationHandler:
         self.user_service = UserService()
         self.unified_analysis_service = UnifiedDailyAnalysisService()
         self.templates = SlackMessageTemplates()
+        self.active_conversations: Dict[str, ConversationState] = {}
 
     async def _safe_send_message(
         self, channel: str, text: str, blocks: Optional[List[Dict[str, Any]]] = None, thread_ts: Optional[str] = None

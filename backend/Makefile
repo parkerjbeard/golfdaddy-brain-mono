@@ -76,23 +76,22 @@ docker-build: ## Build Docker image
 	docker build -t golfdaddy-backend:latest .
 	docker build -f Dockerfile.prod -t golfdaddy-backend:prod .
 
-docker-run: ## Run application with Docker Compose
-	docker-compose up -d
+docker-run: ## Run application with Docker Compose (root compose)
+	docker-compose -f ../docker-compose.yml up -d
 
 docker-stop: ## Stop Docker Compose services
-	docker-compose down
+	docker-compose -f ../docker-compose.yml down
 
 docker-logs: ## View Docker logs
-	docker-compose logs -f backend
+	docker-compose -f ../docker-compose.yml logs -f backend
 
 docker-shell: ## Open shell in backend container
-	docker-compose exec backend /bin/bash
+	docker-compose -f ../docker-compose.yml exec backend /bin/bash
 
 db-shell: ## Open PostgreSQL shell
-	docker-compose exec db psql -U postgres -d golfdaddy_brain
+	docker-compose -f ../docker-compose.yml exec db psql -U postgres -d golfdaddy
 
-redis-cli: ## Open Redis CLI
-	docker-compose exec redis redis-cli
+
 
 coverage-report: ## Generate and open coverage report
 	pytest tests/ --cov=app --cov-report=html

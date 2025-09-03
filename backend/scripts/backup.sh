@@ -17,8 +17,8 @@ if [ -f "$DATA_DIR/golfdaddy.db" ]; then
 fi
 
 # Backup PostgreSQL (if using PostgreSQL)
-if docker-compose -f docker-compose.simple.yml ps | grep -q "db"; then
-    docker-compose -f docker-compose.simple.yml exec -T db pg_dump -U postgres golfdaddy > "$BACKUP_DIR/golfdaddy_${TIMESTAMP}.sql"
+if docker-compose -f ../../docker-compose.yml ps | grep -q "db"; then
+    docker-compose -f ../../docker-compose.yml exec -T db pg_dump -U postgres golfdaddy > "$BACKUP_DIR/golfdaddy_${TIMESTAMP}.sql"
     echo "✅ PostgreSQL database backed up"
 fi
 

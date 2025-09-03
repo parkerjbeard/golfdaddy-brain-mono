@@ -39,6 +39,35 @@ class DeduplicationMatch:
     explanation: str
 
 
+@dataclass
+class DeduplicationResult:
+    """Result of deduplication analysis."""
+    
+    matched_items: List[DeduplicationMatch]
+    unmatched_items: List[WorkItem]
+    total_confidence: float
+    unique_hours: float
+    duplicate_hours: float
+
+
+@dataclass
+class DeduplicationRule:
+    """Rule for deduplication matching."""
+    
+    name: str
+    pattern: str
+    confidence_boost: float
+    enabled: bool = True
+
+
+class WorkType:
+    """Enum-like class for work item types."""
+    
+    COMMIT = "commit"
+    REPORT = "report"
+    BOTH = "both"
+
+
 class DeduplicationService:
     """Service for intelligent work deduplication between commits and daily reports."""
 

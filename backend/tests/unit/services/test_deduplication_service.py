@@ -41,7 +41,7 @@ def deduplication_service(mock_commit_repo, mock_daily_report_repo, mock_ai_inte
 
 @pytest.fixture
 def sample_user():
-    return User(id=uuid4(), email="developer@test.com", name="Test Developer", role=UserRole.DEVELOPER, is_active=True)
+    return User(id=uuid4(), email="developer@test.com", name="Test Developer", role=UserRole.EMPLOYEE, is_active=True)
 
 
 @pytest.fixture

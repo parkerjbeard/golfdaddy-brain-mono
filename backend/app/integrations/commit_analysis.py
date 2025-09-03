@@ -21,8 +21,8 @@ class CommitAnalyzer:
         self.client = AsyncOpenAI(api_key=self.api_key)
         self.commit_analysis_model = settings.commit_analysis_model  # Specific model for commit analysis
 
-        # Models that don't support temperature parameter (typically reasoning/embedding models)
-        self.reasoning_models = ["o3-mini-", "o4-mini-", "o3-", "gpt-5", "text-embedding-", "-e-", "text-search-"]
+        # Models that don't support temperature parameter (typically reasoning-focused models)
+        self.reasoning_models = ["o3-mini-", "o4-mini-", "o3-", "gpt-5"]
 
         # Impact scoring calibration examples
         self.CALIBRATION_EXAMPLES = {

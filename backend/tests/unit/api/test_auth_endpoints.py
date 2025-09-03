@@ -23,7 +23,7 @@ class TestAuthEndpoints:
             id="test-user-123",
             email="test@example.com",
             name="Test User",
-            role=UserRole.DEVELOPER,
+            role=UserRole.EMPLOYEE,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
             is_active=True,

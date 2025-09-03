@@ -130,7 +130,7 @@ def mock_supabase_client():
     # Create patch for the get_supabase_client function
     with patch("app.config.supabase_client.get_supabase_client", return_value=mock_client):
         # Also patch any direct imports of the function
-        with patch("app.repositories.user_repository.get_supabase_client", return_value=mock_client):
+        with patch("app.repositories.user_repository.get_supabase_client_safe", return_value=mock_client):
             with patch("app.repositories.task_repository.get_supabase_client", return_value=mock_client):
                 yield mock_client
 

@@ -50,7 +50,7 @@ def sample_user():
         id=uuid4(),
         email="developer@test.com",
         name="Test Developer",
-        role=UserRole.DEVELOPER,
+        role=UserRole.EMPLOYEE,
         is_active=True,
         slack_id="U123456",
     )

@@ -94,7 +94,6 @@ class GolfDaddyDemo:
             
             # Main demo sections
             self.demo_github_analysis()
-            self.demo_semantic_search()
             self.demo_analytics_dashboard()
             
             self.show_summary()
@@ -116,8 +115,7 @@ Welcome to the comprehensive demonstration of GolfDaddy Brain!
 
 This demo will showcase:
 1. **GitHub Analysis** - Automatic commit tracking with dual scoring methods
-2. **Semantic Search** - Find and analyze documentation
-3. **Analytics Dashboard** - Team productivity insights
+2. **Analytics Dashboard** - Team productivity insights
 
 The demo will create temporary repositories and data for demonstration purposes.
         """
@@ -695,85 +693,7 @@ focusing on business value delivered rather than time spent coding.
     # Removed auto documentation demo - not showing actual functionality
     
     
-    def demo_semantic_search(self):
-        """Demonstrate semantic search capabilities"""
-        self.console.print("\n[bold blue]=== Semantic Search Demo ===[/bold blue]\n")
-        
-        demo_text = """
-This section demonstrates AI-powered semantic search for documentation.
-
-We'll:
-1. Search for concepts (not just keywords)
-2. Find related documentation
-3. Identify documentation gaps
-4. View documentation quality metrics
-        """
-        self.console.print(Panel(Markdown(demo_text), border_style="blue"))
-        
-        if not Confirm.ask("Continue with semantic search demo?", default=True):
-            return
-        
-        # Perform searches
-        search_queries = [
-            "How do we handle payment processing?",
-            "Authentication and security",
-            "Error handling patterns"
-        ]
-        
-        for query in search_queries:
-            self.console.print(f"\n[bold]Searching for: '{query}'[/bold]")
-            
-            response = self.session.post(
-                f"{self.config['api_base_url']}/api/v1/documentation/search",
-                json={"query": query, "limit": 3}
-            )
-            
-            if response.status_code == 200:
-                results = response.json()
-                if results:
-                    for i, result in enumerate(results, 1):
-                        self.console.print(f"\n{i}. {result.get('title', 'Untitled')}")
-                        self.console.print(f"   Relevance: {result.get('relevance_score', 0):.2%}")
-                        self.console.print(f"   Path: {result.get('file_path', 'N/A')}")
-                else:
-                    self.console.print("[yellow]No results found[/yellow]")
-            
-            time.sleep(1)
-        
-        # Show documentation coverage
-        self.show_documentation_coverage()
-        
-        self.pause_for_explanation(
-            "Semantic search understands the meaning behind queries, not just keywords. "
-            "It can identify related concepts and help discover documentation gaps in your codebase."
-        )
-    
-    def show_documentation_coverage(self):
-        """Display documentation coverage statistics"""
-        self.console.print("\n[bold]Documentation Coverage Analysis:[/bold]")
-        
-        response = self.session.get(
-            f"{self.config['api_base_url']}/api/v1/documentation/coverage"
-        )
-        
-        if response.status_code == 200:
-            coverage = response.json()
-            
-            table = Table(title="Coverage Statistics")
-            table.add_column("Metric", style="cyan")
-            table.add_column("Value", style="green")
-            
-            table.add_row("Total Files", str(coverage.get('total_files', 0)))
-            table.add_row("Documented Files", str(coverage.get('documented_files', 0)))
-            table.add_row("Coverage Percentage", f"{coverage.get('coverage_percentage', 0):.1f}%")
-            table.add_row("Average Quality Score", f"{coverage.get('avg_quality_score', 0):.1f}/10")
-            
-            self.console.print(table)
-            
-            if coverage.get('gaps'):
-                self.console.print("\n[bold]Top Documentation Gaps:[/bold]")
-                for gap in coverage['gaps'][:5]:
-                    self.console.print(f"  • {gap['file']}: {gap['reason']}")
+    # Removed semantic search and documentation coverage demo
     
     def demo_analytics_dashboard(self):
         """Demonstrate analytics and reporting features"""
@@ -864,8 +784,7 @@ Features:
 You've seen how GolfDaddy Brain can:
 
 1. **Automatically track engineering work** - Every commit is analyzed with both traditional hours and impact scoring
-2. **Enable semantic search** - Find information by meaning, not just keywords
-3. **Provide actionable insights** - Dashboard shows productivity trends and metrics
+2. **Provide actionable insights** - Dashboard shows productivity trends and metrics
 
 ## Next Steps
 

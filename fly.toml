@@ -3,7 +3,7 @@ primary_region = "iad"
 swap_size_mb = 512
 
 [build]
-  dockerfile = "Dockerfile.backend-only"
+  dockerfile = "Dockerfile"
 
 [env]
   UVICORN_WORKERS = "2"

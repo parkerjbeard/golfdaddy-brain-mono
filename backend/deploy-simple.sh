@@ -20,8 +20,8 @@ fi
 
 # Build and start containers
 echo "🐳 Building and starting Docker containers..."
-docker-compose -f docker-compose.simple.yml build
-docker-compose -f docker-compose.simple.yml up -d
+docker-compose -f ../docker-compose.yml build
+docker-compose -f ../docker-compose.yml up -d
 
 # Wait for health check
 echo "⏳ Waiting for application to be healthy..."
@@ -33,20 +33,20 @@ if curl -f http://localhost:8000/health > /dev/null 2>&1; then
     echo "📚 API docs available at http://localhost:8000/docs"
 else
     echo "❌ Application failed to start. Check logs with:"
-    echo "   docker-compose -f docker-compose.simple.yml logs"
+    echo "   docker-compose -f ../docker-compose.yml logs"
     exit 1
 fi
 
 # Show logs
 echo ""
 echo "📋 Recent logs:"
-docker-compose -f docker-compose.simple.yml logs --tail=20
+docker-compose -f ../docker-compose.yml logs --tail=20
 
 echo ""
 echo "🎉 Deployment complete!"
 echo ""
 echo "Useful commands:"
-echo "  View logs:    docker-compose -f docker-compose.simple.yml logs -f"
-echo "  Restart:      docker-compose -f docker-compose.simple.yml restart"
-echo "  Stop:         docker-compose -f docker-compose.simple.yml down"
+echo "  View logs:    docker-compose -f ../docker-compose.yml logs -f"
+echo "  Restart:      docker-compose -f ../docker-compose.yml restart"
+echo "  Stop:         docker-compose -f ../docker-compose.yml down"
 echo "  Backup data:  cp -r data/ data-backup-$(date +%Y%m%d)/"

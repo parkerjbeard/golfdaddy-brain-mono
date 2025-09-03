@@ -33,10 +33,7 @@ class AIIntegrationV2:
         self.model = settings.OPENAI_MODEL or "gpt-4-turbo-preview"
         self.code_quality_model = settings.CODE_QUALITY_MODEL or self.model
         self.eod_analysis_model = settings.OPENAI_MODEL or self.model
-        # Use a sane default embedding model; docs agent removed, no settings dependency
-        self.embedding_model = "text-embedding-3-large"
-
-        logger.info(f"AIIntegrationV2 initialized. Model: {self.model}, " f"Embedding: {self.embedding_model}")
+        logger.info(f"AIIntegrationV2 initialized. Model: {self.model}")
 
     async def _make_completion_request(
         self,
@@ -89,35 +86,7 @@ class AIIntegrationV2:
             logger.error(f"OpenAI API error: {e}", exc_info=True)
             return None
 
-    async def generate_embeddings(self, text: str, model: Optional[str] = None) -> Optional[List[float]]:
-        """
-        Generate embeddings using text-embedding-3-large.
-
-        Args:
-            text: Text to embed
-            model: Embedding model (defaults to text-embedding-3-large)
-
-        Returns:
-            Embedding vector
-        """
-        if not self.client:
-            logger.error("OpenAI client not initialized")
-            return None
-
-        model = model or self.embedding_model
-
-        try:
-            response = await self.client.embeddings.create(model=model, input=text, encoding_format="float")
-
-            if response.data:
-                return response.data[0].embedding
-
-            logger.error("No embedding data in response")
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to generate embeddings: {e}", exc_info=True)
-            return None
+    
 
     async def analyze_commit_diff(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -38,9 +38,6 @@ class PatchedCommitAnalyzer(CommitAnalyzer):
             "o4-mini-",
             "o3-",
             "gpt-5",
-            "text-embedding-",
-            "-e-",
-            "text-search-"
         ]
         result = any(prefix in model_name for prefix in reasoning_models)
         print(f"🔧 Checking model '{model_name}' against prefixes: {reasoning_models}")

@@ -26,7 +26,7 @@ def test_create_user(mock_supabase_client):
     repo = UserRepository(client=mock_supabase_client)
 
     user_data_to_create = User(
-        id=uuid4(), slack_id="U123456", name="Test User", role=UserRole.DEVELOPER, team="Engineering"
+        id=uuid4(), slack_id="U123456", name="Test User", role=UserRole.EMPLOYEE, team="Engineering"
     )
 
     # Configure mock response for insert
@@ -117,7 +117,7 @@ def test_get_user_by_slack_id(mock_supabase_client):
 def test_list_users_by_role(mock_supabase_client):
     # Arrange
     repo = UserRepository(client=mock_supabase_client)
-    dev_role = UserRole.DEVELOPER
+    dev_role = UserRole.EMPLOYEE
     mock_dev_users_data = [
         {"id": str(uuid4()), "name": "Dev 1", "role": dev_role.value, "slack_id": "D1"},
         {"id": str(uuid4()), "name": "Dev 2", "role": dev_role.value, "slack_id": "D2"},
@@ -151,7 +151,7 @@ def test_update_user(mock_supabase_client):
     original_user_data = {
         "id": str(user_id_to_update),
         "name": "Old Name",
-        "role": UserRole.DEVELOPER.value,
+        "role": UserRole.EMPLOYEE.value,
         "slack_id": "UOld",
     }
     update_payload = {"name": "Updated Name", "role": UserRole.MANAGER.value}

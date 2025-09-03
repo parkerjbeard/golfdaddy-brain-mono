@@ -36,7 +36,7 @@ class AIIntegration:
         self.eod_analysis_model = settings.OPENAI_MODEL or self.model  # Model for EOD analysis
 
         # Models that might have different parameter support (e.g., for temperature)
-        self.reasoning_models = ["o3-mini-", "o4-mini-", "gpt-5", "text-embedding-", "-e-", "text-search-"]
+        self.reasoning_models = ["o3-mini-", "o4-mini-", "gpt-5"]
 
         # Initialize the commit analyzer (assuming it does not need the AI client itself for init)
         self.commit_analyzer = CommitAnalyzer()

@@ -19,7 +19,6 @@ class TestAIIntegrationV2:
             mock.OPENAI_API_KEY = "test_api_key"
             mock.OPENAI_MODEL = "gpt-4-turbo-preview"
             mock.CODE_QUALITY_MODEL = "gpt-4-turbo-preview"
-            mock.EMBEDDING_MODEL = "text-embedding-3-large"
             yield mock
 
     @pytest.fixture
@@ -42,7 +41,6 @@ class TestAIIntegrationV2:
         assert ai.api_key == "test_api_key"
         assert ai.client is not None
         assert ai.model == "gpt-4-turbo-preview"
-        assert ai.embedding_model == "text-embedding-3-large"
         mock_openai_client.assert_called_once()
 
     def test_init_without_api_key(self, mock_openai_client):
@@ -51,7 +49,6 @@ class TestAIIntegrationV2:
             mock_settings.OPENAI_API_KEY = None
             mock_settings.OPENAI_MODEL = "gpt-4"
             mock_settings.CODE_QUALITY_MODEL = "gpt-4"
-            mock_settings.EMBEDDING_MODEL = "text-embedding-3-large"
 
             ai = AIIntegrationV2()
 
@@ -105,29 +102,7 @@ class TestAIIntegrationV2:
 
         assert result is None
 
-    @pytest.mark.asyncio
-    async def test_generate_embeddings(self, ai_integration, mock_openai_client):
-        """Test generating embeddings."""
-        # Mock response
-        mock_response = AsyncMock()
-        mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3, 0.4])]
-        mock_openai_client.embeddings.create.return_value = mock_response
-
-        result = await ai_integration.generate_embeddings("Test text")
-
-        assert result == [0.1, 0.2, 0.3, 0.4]
-        mock_openai_client.embeddings.create.assert_called_once_with(
-            model="text-embedding-3-large", input="Test text", encoding_format="float"
-        )
-
-    @pytest.mark.asyncio
-    async def test_generate_embeddings_no_client(self, ai_integration):
-        """Test generating embeddings without client."""
-        ai_integration.client = None
-
-        result = await ai_integration.generate_embeddings("Test text")
-
-        assert result is None
+    
 
     @pytest.mark.asyncio
     async def test_analyze_commit_diff(self, ai_integration, mock_openai_client):

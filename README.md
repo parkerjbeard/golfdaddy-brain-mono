@@ -155,7 +155,7 @@ docker-compose -f docker-compose.yml up -d
 
 ## Automated Documentation
 
-This repository includes an automated documentation system. A thin Python client (`doc_agent`) analyzes each commit and proposes documentation updates using OpenAI. The workflow runs both as a pre-commit hook and in CI. Proposed patches are delivered over Slack (placeholder) for manual approval before a pull request is opened automatically.
+Note: The previous automated documentation agent and related UI have been removed to streamline the product to its core (repo scan, commit analysis, dashboard). If you need these features, refer to earlier tags or the BLOAT-REDUCTION-PLAN.md for guidance.
 
 
 ## License

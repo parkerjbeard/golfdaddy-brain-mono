@@ -9,12 +9,37 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from pydantic import BaseModel
 from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, Date, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+
+
+class DailyWorkAnalysisCreate(BaseModel):
+    """Pydantic model for creating a daily work analysis."""
+    
+    user_id: str
+    analysis_date: date
+    total_work_items: int = 0
+    total_commits: int = 0
+    total_tickets: int = 0
+    total_prs: int = 0
+    total_loc_added: int = 0
+    total_loc_removed: int = 0
+    total_files_changed: int = 0
+    estimated_hours: float = 0.0
+    actual_hours: Optional[float] = None
+    main_focus_areas: List[str] = []
+    technologies_used: List[str] = []
+    ai_summary: Optional[str] = None
+    ai_insights: Optional[Dict[str, Any]] = None
+    key_accomplishments: List[str] = []
+    blockers_encountered: List[str] = []
+    external_links: List[str] = []
+    raw_data: Optional[Dict[str, Any]] = None
 
 
 class DailyWorkAnalysis(Base):

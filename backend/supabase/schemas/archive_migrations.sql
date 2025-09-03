@@ -16,15 +16,6 @@ ALTER TABLE public.tasks
 ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS archive_status TEXT DEFAULT 'active';
 
--- Add archive columns to docs table
-ALTER TABLE public.docs
-ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS archive_status TEXT DEFAULT 'active';
-
--- Add archive columns to doc_metadata table
-ALTER TABLE public.doc_metadata
-ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS archive_status TEXT DEFAULT 'active';
 
 -- Create enum for archive status
 DO $$ BEGIN
@@ -51,11 +42,6 @@ CREATE INDEX IF NOT EXISTS idx_commits_archive_status ON public.commits(archive_
 CREATE INDEX IF NOT EXISTS idx_tasks_archived_at ON public.tasks(archived_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_archive_status ON public.tasks(archive_status);
 
-CREATE INDEX IF NOT EXISTS idx_docs_archived_at ON public.docs(archived_at);
-CREATE INDEX IF NOT EXISTS idx_docs_archive_status ON public.docs(archive_status);
-
-CREATE INDEX IF NOT EXISTS idx_doc_metadata_archived_at ON public.doc_metadata(archived_at);
-CREATE INDEX IF NOT EXISTS idx_doc_metadata_archive_status ON public.doc_metadata(archive_status);
 
 -- Create composite indexes for efficient active data queries
 CREATE INDEX IF NOT EXISTS idx_daily_reports_active_by_date ON public.daily_reports(report_date) 
@@ -140,25 +126,6 @@ CREATE POLICY "Admins can view all commits including archived"
     )
   );
 
--- Docs: Exclude archived docs from normal views
-DROP POLICY IF EXISTS "Authenticated users can view docs" ON public.docs;
-CREATE POLICY "Authenticated users can view active docs" 
-  ON public.docs 
-  FOR SELECT 
-  USING (
-    auth.role() = 'authenticated' AND (archive_status = 'active' OR archive_status IS NULL)
-  );
-
--- Allow admins to see archived docs
-CREATE POLICY "Admins can view all docs including archived" 
-  ON public.docs 
-  FOR SELECT 
-  USING (
-    auth.role() = 'authenticated' AND EXISTS (
-      SELECT 1 FROM public.users 
-      WHERE id = auth.uid() AND role = 'ADMIN'
-    )
-  );
 
 -- Create a function to automatically set archive status on insert
 CREATE OR REPLACE FUNCTION public.set_default_archive_status()
@@ -184,13 +151,6 @@ CREATE TRIGGER set_archive_status_tasks
     BEFORE INSERT ON public.tasks
     FOR EACH ROW EXECUTE FUNCTION public.set_default_archive_status();
 
-CREATE TRIGGER set_archive_status_docs
-    BEFORE INSERT ON public.docs
-    FOR EACH ROW EXECUTE FUNCTION public.set_default_archive_status();
-
-CREATE TRIGGER set_archive_status_doc_metadata
-    BEFORE INSERT ON public.doc_metadata
-    FOR EACH ROW EXECUTE FUNCTION public.set_default_archive_status();
 
 -- Comments on new columns
 COMMENT ON COLUMN public.daily_reports.archived_at IS 'Timestamp when the record was archived (soft deleted)';
@@ -201,9 +161,3 @@ COMMENT ON COLUMN public.commits.archive_status IS 'Status of the record: active
 
 COMMENT ON COLUMN public.tasks.archived_at IS 'Timestamp when the record was archived (soft deleted)';
 COMMENT ON COLUMN public.tasks.archive_status IS 'Status of the record: active, archived, or purged';
-
-COMMENT ON COLUMN public.docs.archived_at IS 'Timestamp when the record was archived (soft deleted)';
-COMMENT ON COLUMN public.docs.archive_status IS 'Status of the record: active, archived, or purged';
-
-COMMENT ON COLUMN public.doc_metadata.archived_at IS 'Timestamp when the record was archived (soft deleted)';
-COMMENT ON COLUMN public.doc_metadata.archive_status IS 'Status of the record: active, archived, or purged';

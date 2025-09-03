@@ -350,7 +350,6 @@ class DemoDataGenerator:
                 "created_at": fake.date_time_between(start_date="-30d", end_date="now").isoformat(),
                 "updated_at": fake.date_time_between(start_date="-7d", end_date="now").isoformat(),
                 "author": random.choice(self.developers)["name"],
-                "embeddings_generated": True,
                 "version": f"1.{random.randint(0, 5)}",
             }
             

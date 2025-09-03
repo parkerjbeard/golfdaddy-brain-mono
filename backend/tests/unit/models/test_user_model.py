@@ -16,7 +16,7 @@ def test_user_model_valid_role_coercion():
         "updated_at": datetime.utcnow(),
     }
     user = User(**data)
-    assert user.role == UserRole.DEVELOPER
+    assert user.role == UserRole.EMPLOYEE
 
 
 def test_user_model_invalid_email():

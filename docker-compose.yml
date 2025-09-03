@@ -8,12 +8,8 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - ENABLE_API_AUTH=false
-      - API_KEYS={"dev-api-key":{"role":"admin","name":"Development API Key"}}
+      # Keep non-secret toggles here or move to .env as needed
       - AUTH_EXCLUDE_PATHS=/docs,/redoc,/openapi.json,/health,/auth,/api/auth/
-      - USE_LOCAL_DB=false
-      - SUPABASE_URL=https://xfnxafbsmqowzvuwmhvi.supabase.co
-      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhmbnhhZmJzbXFvd3p2dXdtaHZpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDc1Mzg5NCwiZXhwIjoyMDYwMzI5ODk0fQ.9goqNxj7bm_OFD_ueVwwvEJeQkF9S6tK7iXYa_8HfAM
     depends_on:
       db:
         condition: service_healthy
@@ -41,12 +37,11 @@ services:
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
+    env_file:
+      - ./frontend/.env
     environment:
       - VITE_API_BASE_URL=/api/v1
       - CHOKIDAR_USEPOLLING=true
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-      - VITE_API_KEY=dev-api-key
       - DOCKER_ENV=true
     restart: unless-stopped
     networks:
