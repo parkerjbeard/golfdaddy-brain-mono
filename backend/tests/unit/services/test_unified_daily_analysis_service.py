@@ -13,8 +13,8 @@ import pytest
 
 from app.core.exceptions import AIIntegrationError, DatabaseError
 from app.models.commit import Commit
+from app.models.daily_commit_analysis import DailyCommitAnalysis, DailyCommitAnalysisCreate
 from app.models.daily_report import AiAnalysis, DailyReport
-from app.models.daily_work_analysis import DailyWorkAnalysis, DailyWorkAnalysisCreate, DeduplicationResult, WorkItem
 from app.services.unified_daily_analysis_service import UnifiedDailyAnalysisService
 
 
@@ -47,31 +47,37 @@ class TestUnifiedDailyAnalysisService:
         return [
             Commit(
                 id=uuid4(),
-                user_id=sample_user_id,
+                author_id=sample_user_id,
                 commit_hash="abc123",
-                repository="myapp",
+                repository_name="myapp",
                 commit_message="Fix user authentication bug",
-                author_name="John Doe",
+                author_github_username="john-doe",
                 author_email="john@example.com",
-                commit_date=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
-                additions=50,
-                deletions=20,
-                files_changed=["auth.py", "tests/test_auth.py"],
-                ai_analysis={"estimated_hours": 2.5, "complexity_score": 6},
+                commit_timestamp=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
+                lines_added=50,
+                lines_deleted=20,
+                changed_files=["auth.py", "tests/test_auth.py"],
+                ai_estimated_hours=Decimal("2.5"),
+                complexity_score=6,
+                created_at=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
             ),
             Commit(
                 id=uuid4(),
-                user_id=sample_user_id,
+                author_id=sample_user_id,
                 commit_hash="def456",
-                repository="myapp",
+                repository_name="myapp",
                 commit_message="Add user profile feature",
-                author_name="John Doe",
+                author_github_username="john-doe",
                 author_email="john@example.com",
-                commit_date=datetime(2024, 1, 15, 14, 45, tzinfo=timezone.utc),
-                additions=150,
-                deletions=10,
-                files_changed=["profile.py", "views.py", "templates/profile.html"],
-                ai_analysis={"estimated_hours": 3.5, "complexity_score": 7},
+                commit_timestamp=datetime(2024, 1, 15, 14, 45, tzinfo=timezone.utc),
+                lines_added=150,
+                lines_deleted=10,
+                changed_files=["profile.py", "views.py", "templates/profile.html"],
+                ai_estimated_hours=Decimal("3.5"),
+                complexity_score=7,
+                created_at=datetime(2024, 1, 15, 14, 45, tzinfo=timezone.utc),
+                updated_at=datetime(2024, 1, 15, 14, 45, tzinfo=timezone.utc),
             ),
         ]
 

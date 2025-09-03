@@ -29,7 +29,15 @@ def mock_daily_report_service():
 
 @pytest.fixture
 def current_test_user():
-    return User(id=uuid4(), email="testuser@example.com", name="Test User Endpoint")
+    from datetime import datetime, timezone
+
+    return User(
+        id=uuid4(),
+        email="testuser@example.com",
+        name="Test User Endpoint",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
 
 
 # Apply dependency overrides for the test session

@@ -20,7 +20,7 @@ from app.db.database import Base
 
 class DailyWorkAnalysisCreate(BaseModel):
     """Pydantic model for creating a daily work analysis."""
-    
+
     user_id: str
     analysis_date: date
     total_work_items: int = 0

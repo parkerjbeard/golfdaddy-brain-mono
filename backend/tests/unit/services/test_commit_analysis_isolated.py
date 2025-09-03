@@ -41,7 +41,7 @@ class TestCommitAnalysisServiceIsolated:
         with (
             patch("app.services.commit_analysis_service.CommitRepository") as mock_commit_repo_class,
             patch("app.services.commit_analysis_service.UserRepository") as mock_user_repo_class,
-            patch("app.services.commit_analysis_service.AIIntegration") as mock_ai_class,
+            patch("app.integrations.ai_integration_v2.AIIntegrationV2") as mock_ai_class,
             patch("app.services.commit_analysis_service.GitHubIntegration") as mock_github_class,
             patch("app.services.commit_analysis_service.DailyReportService") as mock_report_service_class,
         ):

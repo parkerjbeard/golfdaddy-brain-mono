@@ -1,7 +1,7 @@
 import logging  # For logging
+import os
 from datetime import date, datetime, timedelta, timezone  # Ensure timezone is imported for utcnow()
 from typing import Any, Dict, List, Optional
-import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -155,9 +155,10 @@ async def backfill_github_analysis(
 
         import json
         from datetime import datetime as _dt
-        from app.repositories.commit_repository import CommitRepository
-        from app.models.commit import Commit
+
         from app.config.supabase_client import get_supabase_client_safe
+        from app.models.commit import Commit
+        from app.repositories.commit_repository import CommitRepository
 
         with open(file_path, "r") as f:
             data = json.load(f)
@@ -176,23 +177,30 @@ async def backfill_github_analysis(
                     if not commit_hash:
                         continue
 
-                    notes = {k: a.get(k) for k in [
-                        "estimated_hours",
-                        "complexity_score",
-                        "seniority_score",
-                        "risk_level",
-                        "key_changes",
-                        "impact_score",
-                        "impact_business_value",
-                        "impact_technical_complexity",
-                        "impact_code_quality",
-                        "impact_risk_factor",
-                        "model_used",
-                        "analyzed_at",
-                    ]}
+                    notes = {
+                        k: a.get(k)
+                        for k in [
+                            "estimated_hours",
+                            "complexity_score",
+                            "seniority_score",
+                            "risk_level",
+                            "key_changes",
+                            "impact_score",
+                            "impact_business_value",
+                            "impact_technical_complexity",
+                            "impact_code_quality",
+                            "impact_risk_factor",
+                            "model_used",
+                            "analyzed_at",
+                        ]
+                    }
 
                     commit_ts = a.get("timestamp")
-                    ts = _dt.fromisoformat(commit_ts.replace("Z", "+00:00")) if isinstance(commit_ts, str) else _dt.utcnow()
+                    ts = (
+                        _dt.fromisoformat(commit_ts.replace("Z", "+00:00"))
+                        if isinstance(commit_ts, str)
+                        else _dt.utcnow()
+                    )
 
                     commit = Commit(
                         commit_hash=commit_hash,

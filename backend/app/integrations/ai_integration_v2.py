@@ -86,8 +86,6 @@ class AIIntegrationV2:
             logger.error(f"OpenAI API error: {e}", exc_info=True)
             return None
 
-    
-
     async def analyze_commit_diff(self, commit_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze a commit diff using standardized API calls.

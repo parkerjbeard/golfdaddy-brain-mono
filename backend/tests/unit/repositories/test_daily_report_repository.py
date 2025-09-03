@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Dict
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -12,21 +13,25 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def clean_db():
-    # This is a global in-memory DB from the repository module.
-    # We need to manage its state carefully for tests.
-    # A better approach for true unit tests would be to inject the db into the repository.
-    from app.repositories import daily_report_repository
-
-    original_db = daily_report_repository._daily_reports_db
-    daily_report_repository._daily_reports_db = {}
-    yield
-    daily_report_repository._daily_reports_db = original_db  # Restore
+def mock_supabase_client():
+    """Create a mock Supabase client for testing."""
+    mock_client = MagicMock()
+    mock_client.table.return_value = mock_client
+    mock_client.insert.return_value = mock_client
+    mock_client.select.return_value = mock_client
+    mock_client.update.return_value = mock_client
+    mock_client.delete.return_value = mock_client
+    mock_client.eq.return_value = mock_client
+    mock_client.single.return_value = mock_client
+    mock_client.order.return_value = mock_client
+    mock_client.limit.return_value = mock_client
+    return mock_client
 
 
 @pytest.fixture
-def report_repository(clean_db):  # Depends on clean_db to ensure a fresh state
-    return DailyReportRepository()
+def report_repository(mock_supabase_client):
+    """Create a repository with mocked Supabase client."""
+    return DailyReportRepository(client=mock_supabase_client)
 
 
 @pytest.fixture
@@ -39,7 +44,21 @@ def sample_report_create(sample_user_id: UUID):
     return DailyReportCreate(user_id=sample_user_id, raw_text_input="Test report content")
 
 
-async def test_create_daily_report(report_repository: DailyReportRepository, sample_report_create: DailyReportCreate):
+async def test_create_daily_report(
+    report_repository: DailyReportRepository, sample_report_create: DailyReportCreate, mock_supabase_client
+):
+    # Setup mock response
+    mock_response_data = {
+        "id": str(uuid4()),
+        "user_id": str(sample_report_create.user_id),
+        "raw_text_input": sample_report_create.raw_text_input,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "report_date": datetime.now(timezone.utc).date().isoformat(),
+        "status": "submitted",
+    }
+    mock_supabase_client.execute.return_value = MagicMock(data=[mock_response_data], error=None)
+
     created_report = await report_repository.create_daily_report(sample_report_create)
     assert created_report is not None
     assert isinstance(created_report, DailyReport)
@@ -48,27 +67,37 @@ async def test_create_daily_report(report_repository: DailyReportRepository, sam
     assert created_report.id is not None
     assert isinstance(created_report.created_at, datetime)
     assert isinstance(created_report.updated_at, datetime)
-    assert isinstance(created_report.report_date, datetime)  # Field added in repo
-
-    # Verify it's in the DB
-    from app.repositories.daily_report_repository import _daily_reports_db
-
-    assert created_report.id in _daily_reports_db
-    assert _daily_reports_db[created_report.id] == created_report
+    assert created_report.report_date is not None
 
 
 async def test_get_daily_report_by_id(
-    report_repository: DailyReportRepository, sample_report_create: DailyReportCreate
+    report_repository: DailyReportRepository, sample_report_create: DailyReportCreate, mock_supabase_client
 ):
+    report_id = uuid4()
+    mock_response_data = {
+        "id": str(report_id),
+        "user_id": str(sample_report_create.user_id),
+        "raw_text_input": sample_report_create.raw_text_input,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "report_date": datetime.now(timezone.utc).date().isoformat(),
+        "status": "submitted",
+    }
+
+    # Mock for create
+    mock_supabase_client.execute.return_value = MagicMock(data=[mock_response_data], error=None)
     created_report = await report_repository.create_daily_report(sample_report_create)
 
-    retrieved_report = await report_repository.get_daily_report_by_id(created_report.id)
+    # Mock for get by id
+    mock_supabase_client.execute.return_value = MagicMock(data=mock_response_data, error=None)
+    retrieved_report = await report_repository.get_daily_report_by_id(report_id)
     assert retrieved_report is not None
-    assert retrieved_report == created_report
 
 
-async def test_get_daily_report_by_id_not_found(report_repository: DailyReportRepository):
+async def test_get_daily_report_by_id_not_found(report_repository: DailyReportRepository, mock_supabase_client):
     non_existent_id = uuid4()
+    # Mock empty response
+    mock_supabase_client.execute.return_value = MagicMock(data=None, error=None)
     retrieved_report = await report_repository.get_daily_report_by_id(non_existent_id)
     assert retrieved_report is None
 

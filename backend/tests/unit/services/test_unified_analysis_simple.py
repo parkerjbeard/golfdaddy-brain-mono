@@ -61,7 +61,7 @@ class TestUnifiedAnalysisLogic:
     def test_build_analysis_prompt_with_deduplication(self):
         """Test that the prompt includes proper deduplication instructions."""
         # Import the service
-        with patch("app.services.unified_daily_analysis_service.AIIntegration"):
+        with patch("app.services.unified_daily_analysis_service.AIIntegrationV2"):
             with patch("app.services.unified_daily_analysis_service.CommitRepository"):
                 with patch("app.services.unified_daily_analysis_service.DailyReportRepository"):
                     with patch("app.services.unified_daily_analysis_service.DailyWorkAnalysisRepository"):
@@ -118,7 +118,7 @@ class TestUnifiedAnalysisLogic:
 
     def test_parse_ai_response_validation(self):
         """Test AI response parsing and validation."""
-        with patch("app.services.unified_daily_analysis_service.AIIntegration"):
+        with patch("app.services.unified_daily_analysis_service.AIIntegrationV2"):
             with patch("app.services.unified_daily_analysis_service.CommitRepository"):
                 with patch("app.services.unified_daily_analysis_service.DailyReportRepository"):
                     with patch("app.services.unified_daily_analysis_service.DailyWorkAnalysisRepository"):
@@ -269,7 +269,7 @@ class TestUnifiedAnalysisLogic:
 
     def test_prompt_includes_clarification(self):
         """Test that clarifications are included in the prompt when provided."""
-        with patch("app.services.unified_daily_analysis_service.AIIntegration"):
+        with patch("app.services.unified_daily_analysis_service.AIIntegrationV2"):
             with patch("app.services.unified_daily_analysis_service.CommitRepository"):
                 with patch("app.services.unified_daily_analysis_service.DailyReportRepository"):
                     with patch("app.services.unified_daily_analysis_service.DailyWorkAnalysisRepository"):

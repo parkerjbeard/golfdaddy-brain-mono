@@ -42,7 +42,7 @@ class DeduplicationMatch:
 @dataclass
 class DeduplicationResult:
     """Result of deduplication analysis."""
-    
+
     matched_items: List[DeduplicationMatch]
     unmatched_items: List[WorkItem]
     total_confidence: float
@@ -53,7 +53,7 @@ class DeduplicationResult:
 @dataclass
 class DeduplicationRule:
     """Rule for deduplication matching."""
-    
+
     name: str
     pattern: str
     confidence_boost: float
@@ -62,7 +62,7 @@ class DeduplicationRule:
 
 class WorkType:
     """Enum-like class for work item types."""
-    
+
     COMMIT = "commit"
     REPORT = "report"
     BOTH = "both"

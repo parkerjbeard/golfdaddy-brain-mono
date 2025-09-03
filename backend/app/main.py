@@ -128,13 +128,13 @@ async def debug_frontend():
         "frontend_dist_path": frontend_dist_path,
         "files": [],
     }
-    
+
     if os.path.exists(frontend_dist_path):
         try:
             debug_info["files"] = os.listdir(frontend_dist_path)
         except Exception as e:
             debug_info["error"] = str(e)
-    
+
     return debug_info
 
 

@@ -53,6 +53,8 @@ def sample_user():
         role=UserRole.EMPLOYEE,
         is_active=True,
         slack_id="U123456",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
 

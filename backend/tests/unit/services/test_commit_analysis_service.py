@@ -72,7 +72,7 @@ def commit_analysis_service(
     with (
         patch("app.services.commit_analysis_service.CommitRepository", return_value=mock_commit_repo),
         patch("app.services.commit_analysis_service.UserRepository", return_value=mock_user_repo),
-        patch("app.services.commit_analysis_service.AIIntegration", return_value=mock_ai_integration),
+        patch("app.integrations.ai_integration_v2.AIIntegrationV2", return_value=mock_ai_integration),
     ):
         service = CommitAnalysisService(supabase=mock_supabase)
         # Re-assign mocks directly to be sure if __init__ patching doesn't work as expected

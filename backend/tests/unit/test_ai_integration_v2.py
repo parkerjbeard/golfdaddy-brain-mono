@@ -24,10 +24,11 @@ class TestAIIntegrationV2:
     @pytest.fixture
     def mock_openai_client(self):
         """Mock OpenAI client."""
-        with patch("app.integrations.ai_integration_v2.AsyncOpenAI") as mock:
+        with patch("app.integrations.ai_integration_v2.AsyncOpenAI") as mock_constructor:
             client = AsyncMock()
-            mock.return_value = client
-            yield client
+            mock_constructor.return_value = client
+            # Return a tuple with both the constructor and client instance
+            yield (mock_constructor, client)
 
     @pytest.fixture
     def ai_integration(self, mock_settings, mock_openai_client):
@@ -36,15 +37,17 @@ class TestAIIntegrationV2:
 
     def test_init_with_api_key(self, mock_settings, mock_openai_client):
         """Test initialization with API key."""
+        mock_constructor, client = mock_openai_client
         ai = AIIntegrationV2()
 
         assert ai.api_key == "test_api_key"
         assert ai.client is not None
         assert ai.model == "gpt-4-turbo-preview"
-        mock_openai_client.assert_called_once()
+        mock_constructor.assert_called_once()
 
     def test_init_without_api_key(self, mock_openai_client):
         """Test initialization without API key."""
+        mock_constructor, client = mock_openai_client
         with patch("app.integrations.ai_integration_v2.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = None
             mock_settings.OPENAI_MODEL = "gpt-4"
@@ -53,25 +56,26 @@ class TestAIIntegrationV2:
             ai = AIIntegrationV2()
 
             assert ai.client is None
-            mock_openai_client.assert_not_called()
+            mock_constructor.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_make_completion_request(self, ai_integration, mock_openai_client):
         """Test making a standardized completion request."""
+        mock_constructor, client = mock_openai_client
         # Mock response
         mock_response = AsyncMock()
         mock_response.choices = [Mock(message=Mock(content="Test response"))]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         messages = [{"role": "system", "content": "You are a helpful assistant"}, {"role": "user", "content": "Hello"}]
 
         result = await ai_integration._make_completion_request(messages)
 
         assert result == "Test response"
-        mock_openai_client.chat.completions.create.assert_called_once()
+        client.chat.completions.create.assert_called_once()
 
         # Verify call parameters
-        call_args = mock_openai_client.chat.completions.create.call_args
+        call_args = client.chat.completions.create.call_args
         assert call_args[1]["model"] == "gpt-4-turbo-preview"
         assert call_args[1]["messages"] == messages
         assert call_args[1]["temperature"] == 0.7
@@ -79,9 +83,10 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_make_completion_request_with_json(self, ai_integration, mock_openai_client):
         """Test completion request with JSON response format."""
+        mock_constructor, client = mock_openai_client
         mock_response = AsyncMock()
         mock_response.choices = [Mock(message=Mock(content='{"key": "value"}'))]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration._make_completion_request(
             messages=[{"role": "user", "content": "Test"}], response_format={"type": "json_object"}
@@ -90,7 +95,7 @@ class TestAIIntegrationV2:
         assert result == '{"key": "value"}'
 
         # Verify response format was passed
-        call_args = mock_openai_client.chat.completions.create.call_args
+        call_args = client.chat.completions.create.call_args
         assert call_args[1]["response_format"] == {"type": "json_object"}
 
     @pytest.mark.asyncio
@@ -102,11 +107,10 @@ class TestAIIntegrationV2:
 
         assert result is None
 
-    
-
     @pytest.mark.asyncio
     async def test_analyze_commit_diff(self, ai_integration, mock_openai_client):
         """Test analyzing commit diff."""
+        mock_constructor, client = mock_openai_client
         commit_data = {"diff": "diff --git a/test.py\n+new code", "message": "Add new feature"}
 
         mock_response = AsyncMock()
@@ -126,7 +130,7 @@ class TestAIIntegrationV2:
                 )
             )
         ]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration.analyze_commit_diff(commit_data)
 
@@ -146,6 +150,7 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_generate_documentation(self, ai_integration, mock_openai_client):
         """Test generating documentation."""
+        mock_constructor, client = mock_openai_client
         context = {"doc_type": "API", "text": "Function documentation needed"}
 
         mock_response = AsyncMock()
@@ -163,7 +168,7 @@ class TestAIIntegrationV2:
                 )
             )
         ]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration.generate_documentation(context)
 
@@ -175,6 +180,7 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_analyze_eod_report(self, ai_integration, mock_openai_client):
         """Test analyzing EOD report."""
+        mock_constructor, client = mock_openai_client
         report_text = """
         - Completed feature implementation
         - Fixed bug in authentication
@@ -199,7 +205,7 @@ class TestAIIntegrationV2:
                 )
             )
         ]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration.analyze_eod_report(report_text)
 
@@ -212,6 +218,7 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_analyze_code_quality(self, ai_integration, mock_openai_client):
         """Test analyzing code quality."""
+        mock_constructor, client = mock_openai_client
         diff = "diff --git a/test.py\n+def new_function():\n+    return 42"
         message = "Add utility function"
 
@@ -237,7 +244,7 @@ class TestAIIntegrationV2:
                 )
             )
         ]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration.analyze_code_quality(diff, message)
 
@@ -249,6 +256,7 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_analyze_semantic_similarity(self, ai_integration, mock_openai_client):
         """Test analyzing semantic similarity."""
+        mock_constructor, client = mock_openai_client
         text1 = "Implemented user authentication"
         text2 = "Added login functionality"
 
@@ -269,7 +277,7 @@ class TestAIIntegrationV2:
                 )
             )
         ]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration.analyze_semantic_similarity(text1, text2)
 
@@ -280,6 +288,7 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_analyze_daily_work(self, ai_integration, mock_openai_client):
         """Test analyzing daily work."""
+        mock_constructor, client = mock_openai_client
         context = {
             "user_name": "John Doe",
             "analysis_date": "2024-01-15",
@@ -310,7 +319,7 @@ class TestAIIntegrationV2:
                 )
             )
         ]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration.analyze_daily_work(context)
 
@@ -323,9 +332,10 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_error_handling_json_decode(self, ai_integration, mock_openai_client):
         """Test error handling for JSON decode errors."""
+        mock_constructor, client = mock_openai_client
         mock_response = AsyncMock()
         mock_response.choices = [Mock(message=Mock(content="Not valid JSON"))]
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        client.chat.completions.create.return_value = mock_response
 
         result = await ai_integration.analyze_commit_diff({"diff": "test diff", "message": "test"})
 
@@ -334,7 +344,8 @@ class TestAIIntegrationV2:
     @pytest.mark.asyncio
     async def test_error_handling_api_error(self, ai_integration, mock_openai_client):
         """Test error handling for API errors."""
-        mock_openai_client.chat.completions.create.side_effect = Exception("API Error")
+        mock_constructor, client = mock_openai_client
+        client.chat.completions.create.side_effect = Exception("API Error")
 
         result = await ai_integration.analyze_commit_diff({"diff": "test diff", "message": "test"})
 

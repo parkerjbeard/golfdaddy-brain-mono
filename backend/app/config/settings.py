@@ -23,6 +23,7 @@ else:
     # Also try loading without a specific path (uses default search)
     load_dotenv()
 
+
 class Settings(BaseSettings):
     # Supabase Config
     SUPABASE_URL: HttpUrl = Field(..., env="SUPABASE_URL")

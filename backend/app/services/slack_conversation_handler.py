@@ -30,14 +30,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConversationState:
     """Tracks the state of an active Slack conversation."""
-    
+
     report_id: Optional[UUID]
     user_id: UUID
     thread_ts: str
     channel_id: str
     state: str
     created_at: datetime = None
-    
+
     def __post_init__(self):
         if self.created_at is None:
             self.created_at = datetime.now(timezone.utc)

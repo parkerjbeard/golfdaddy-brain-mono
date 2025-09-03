@@ -262,7 +262,6 @@ async def detailed_health(supabase: Client = Depends(get_supabase_client)):
 
     return {"status": overall_status, "timestamp": datetime.now().isoformat(), "checks": results}
 
-
     # Removed: Documentation-specific health endpoint
 
 

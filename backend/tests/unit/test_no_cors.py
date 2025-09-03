@@ -29,6 +29,7 @@ def test_cors_headers_not_present():
     with _minimal_env():
         # Import within context so settings load with minimal env
         from fastapi.testclient import TestClient
+
         from app.main import app
 
         with TestClient(app) as client:

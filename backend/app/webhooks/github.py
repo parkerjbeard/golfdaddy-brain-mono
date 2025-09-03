@@ -231,7 +231,7 @@ class GitHubWebhookHandler(WebhookHandler):
         return CommitPayload(
             commit_hash=commit.get("id"),
             commit_message=commit.get("message", ""),
-            commit_url=commit.get("url", ""),
+            commit_url=commit.get("url") or f"{repo_url}/commit/{commit.get('id', '')}",
             commit_timestamp=commit_timestamp,
             author_github_username=author.get("username", ""),
             author_email=author.get("email", ""),

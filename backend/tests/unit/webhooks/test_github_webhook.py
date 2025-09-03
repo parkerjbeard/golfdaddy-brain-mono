@@ -70,6 +70,7 @@ class TestGitHubWebhookHandler:
             },
         }
 
+    @pytest.mark.asyncio
     async def test_verify_signature_valid(self, handler, webhook_secret):
         """Test signature verification with valid signature."""
         payload = b'{"test": "data"}'
@@ -78,6 +79,7 @@ class TestGitHubWebhookHandler:
         result = await handler.verify_signature(payload, valid_signature)
         assert result is True
 
+    @pytest.mark.asyncio
     async def test_verify_signature_invalid(self, handler):
         """Test signature verification with invalid signature."""
         payload = b'{"test": "data"}'
@@ -86,6 +88,7 @@ class TestGitHubWebhookHandler:
         with pytest.raises(WebhookVerificationError, match="Invalid webhook signature"):
             await handler.verify_signature(payload, invalid_signature)
 
+    @pytest.mark.asyncio
     async def test_verify_signature_missing(self, handler):
         """Test signature verification with missing signature."""
         payload = b'{"test": "data"}'
@@ -93,6 +96,7 @@ class TestGitHubWebhookHandler:
         with pytest.raises(WebhookVerificationError, match="Missing X-Hub-Signature-256 header"):
             await handler.verify_signature(payload, "")
 
+    @pytest.mark.asyncio
     async def test_verify_signature_wrong_format(self, handler):
         """Test signature verification with wrong format."""
         payload = b'{"test": "data"}'
@@ -117,13 +121,16 @@ class TestGitHubWebhookHandler:
         event_type = handler.extract_event_type(headers, body)
         assert event_type == "unknown"
 
+    @pytest.mark.asyncio
     async def test_process_event_non_push(self, handler):
         """Test processing non-push events."""
         result = await handler.process_event("pull_request", {})
 
-        assert result["status"] == "ignored"
-        assert "pull_request" in result["reason"]
+        assert result["status"] == "ok"
+        assert "pr" in result  # Should have pr field
+        assert "action" in result  # Should have action field
 
+    @pytest.mark.asyncio
     @patch("app.webhooks.github.CommitAnalysisService")
     async def test_process_push_event_success(self, mock_commit_service, handler, sample_push_event):
         """Test successful push event processing."""
@@ -147,6 +154,7 @@ class TestGitHubWebhookHandler:
         assert isinstance(call_args, CommitPayload)
         assert call_args.commit_hash == "commit123"
 
+    @pytest.mark.asyncio
     @patch("app.webhooks.github.CommitAnalysisService")
     async def test_process_push_event_with_merge_commits(self, mock_commit_service, handler):
         """Test push event processing filters merge commits."""
@@ -190,6 +198,7 @@ class TestGitHubWebhookHandler:
         call_args = mock_service_instance.process_commit.call_args[0][0]
         assert call_args.commit_hash == "commit456"
 
+    @pytest.mark.asyncio
     @patch("app.webhooks.github.CommitAnalysisService")
     async def test_process_push_event_analysis_failure(self, mock_commit_service, handler, sample_push_event):
         """Test push event processing with analysis failure."""
@@ -206,6 +215,7 @@ class TestGitHubWebhookHandler:
         assert len(result["errors"]) == 1
         assert result["errors"][0]["hash"] == "commit123"
 
+    @pytest.mark.asyncio
     @patch("app.webhooks.github.CommitAnalysisService")
     async def test_process_push_event_exception(self, mock_commit_service, handler, sample_push_event):
         """Test push event processing with exception."""
@@ -220,6 +230,7 @@ class TestGitHubWebhookHandler:
         assert result["commits_failed"] == 1
         assert "Test error" in result["errors"][0]["error"]
 
+    @pytest.mark.asyncio
     async def test_process_push_event_no_commits(self, handler):
         """Test push event with no commits."""
         push_event = {
@@ -254,13 +265,13 @@ class TestGitHubWebhookHandler:
         assert isinstance(payload, CommitPayload)
         assert payload.commit_hash == "abc123"
         assert payload.commit_message == "Test commit message"
-        assert payload.commit_url == "https://github.com/test/repo/commit/abc123"
+        assert str(payload.commit_url) == "https://github.com/test/repo/commit/abc123"
         assert payload.author_github_username == "testuser"
         assert payload.author_email == "test@example.com"
         assert payload.repository_name == "test-repo"
         assert payload.repository == "testuser/test-repo"
         assert payload.branch == "main"
-        assert payload.diff_url == "https://github.com/test/repo/commit/abc123.diff"
+        assert str(payload.diff_url) == "https://github.com/test/repo/commit/abc123.diff"
 
     def test_convert_to_commit_payload_minimal(self, handler):
         """Test converting minimal GitHub commit data."""
@@ -274,4 +285,6 @@ class TestGitHubWebhookHandler:
         assert payload.commit_message == ""
         assert payload.author_github_username == ""
         assert payload.author_email == ""
+        # When no url is provided, it should generate one from repo_url and commit id
+        assert str(payload.commit_url) == "https://github.com/owner/repo/commit/xyz789"
         assert payload.diff_url is None

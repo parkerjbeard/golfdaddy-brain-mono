@@ -1,7 +1,7 @@
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
-import json
 from uuid import UUID
 
 # Added for the new UserWidgetSummary model
@@ -143,7 +143,9 @@ class KpiService:
                 )
             # Daily aggregation (UTC date)
             commit_date_key = commit.commit_timestamp.date().strftime("%Y-%m-%d")
-            daily_hours[commit_date_key] = daily_hours.get(commit_date_key, 0.0) + float(commit.ai_estimated_hours or 0.0)
+            daily_hours[commit_date_key] = daily_hours.get(commit_date_key, 0.0) + float(
+                commit.ai_estimated_hours or 0.0
+            )
 
             # Parse impact score from ai_analysis_notes JSON when available
             impact_score_val: float = 0.0
@@ -163,7 +165,11 @@ class KpiService:
             {"date": k, "points": round(v, 2)} for k, v in sorted(daily_points.items(), key=lambda x: x[0])
         ]
 
-        efficiency_pph = round(total_business_points / total_commit_ai_estimated_hours, 2) if total_commit_ai_estimated_hours > 0 else 0.0
+        efficiency_pph = (
+            round(total_business_points / total_commit_ai_estimated_hours, 2)
+            if total_commit_ai_estimated_hours > 0
+            else 0.0
+        )
 
         # Top commits by impact
         def _impact(c: Commit) -> float:

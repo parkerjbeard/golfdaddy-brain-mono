@@ -4,6 +4,7 @@ Unit tests for authentication endpoints.
 
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 import jwt
 import pytest
@@ -20,7 +21,7 @@ class TestAuthEndpoints:
     def mock_user(self):
         """Create a mock user for testing."""
         return User(
-            id="test-user-123",
+            id=uuid4(),
             email="test@example.com",
             name="Test User",
             role=UserRole.EMPLOYEE,
