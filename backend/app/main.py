@@ -10,7 +10,6 @@ import schedule
 import uvicorn
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -19,12 +18,9 @@ from app.api.auth_endpoints import router as auth_router
 from app.api.daily_commit_analysis_endpoints import router as daily_analysis_router
 from app.api.daily_report_endpoints import router as daily_reports_router
 from app.api.dev_endpoints import router as dev_router
-from app.api.docs_generation import router as docs_router
-from app.api.docs_viewer import router as docs_viewer_router
 from app.api.github_events import router as github_router
 from app.api.health import router as health_router
 from app.api.raci_matrix import router as raci_matrix_router
-from app.api.semantic_search import router as semantic_search_router
 from app.api.slack_daily_reports import router as slack_daily_reports_router
 from app.api.user_preferences import router as user_preferences_router
 from app.api.v1.api import api_v1_router
@@ -68,14 +64,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_allowed_origins,
-    allow_credentials=settings.cors_allow_credentials,
-    allow_methods=settings.cors_allow_methods,
-    allow_headers=settings.cors_allow_headers,
-)
+# CORS middleware removed: app is served same-origin; use dev proxy for local dev
 
 # Add custom middleware
 app.add_middleware(RequestMetricsMiddleware)
@@ -96,7 +85,6 @@ if settings.ENABLE_RATE_LIMITING:
 
 # Register routers
 app.include_router(auth_router)
-app.include_router(docs_router)
 app.include_router(github_router)
 app.include_router(daily_reports_router)
 app.include_router(archive_router, prefix="/api/v1")
@@ -109,9 +97,7 @@ app.include_router(daily_analysis_router)
 app.include_router(zapier_router, prefix="/api/v1")
 app.include_router(raci_matrix_router, prefix="/api/v1")
 app.include_router(zapier_webhooks_router)
-app.include_router(semantic_search_router)  # Zapier webhooks already have /api/zapier prefix
 app.include_router(user_preferences_router, prefix="/api/v1/users")
-app.include_router(docs_viewer_router)
 
 # Development endpoints (should be disabled in production)
 if os.getenv("ENVIRONMENT", "development") == "development":

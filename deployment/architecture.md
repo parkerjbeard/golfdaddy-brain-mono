@@ -49,7 +49,7 @@ This is the single, canonical deployment for GolfDaddy Brain using a PaaS plus m
 
 ## Security & Secrets
 - Store API keys/DB URL in platform secrets; never commit secrets
-- Enforce CORS to the frontend origin
+- Single-origin deployment; no CORS required
 - HTTPS everywhere using platform-managed certificates
 
 ## Sizing & Cost (typical monthly)

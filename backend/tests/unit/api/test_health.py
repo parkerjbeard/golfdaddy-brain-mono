@@ -223,56 +223,7 @@ class TestHealthChecker:
             assert result["status"] == "degraded"
             assert "github_api" in result["details"]
 
-    def test_check_documentation_config_healthy(self):
-        """Test documentation configuration check when fully configured."""
-        checker = HealthChecker()
-
-        with patch("app.api.health.settings") as mock_settings:
-            mock_settings.OPENAI_API_KEY = "test-key"
-            mock_settings.GITHUB_TOKEN = "test-token"
-            mock_settings.DOCUMENTATION_OPENAI_MODEL = "gpt-4"
-            mock_settings.DOC_AGENT_OPENAI_MODEL = "gpt-4"
-            mock_settings.DOCS_REPOSITORY = "owner/docs"
-            mock_settings.ENABLE_DOCS_UPDATES = True
-
-            result = checker.check_documentation_config()
-
-            assert result["status"] == "healthy"
-            assert "fully configured" in result["details"]
-
-    def test_check_documentation_config_degraded(self):
-        """Test documentation configuration check with missing optional config."""
-        checker = HealthChecker()
-
-        with patch("app.api.health.settings") as mock_settings:
-            mock_settings.OPENAI_API_KEY = "test-key"
-            mock_settings.GITHUB_TOKEN = "test-token"
-            mock_settings.DOCUMENTATION_OPENAI_MODEL = "gpt-4"
-            mock_settings.DOC_AGENT_OPENAI_MODEL = "gpt-4"
-            # Missing optional configs
-            mock_settings.DOCS_REPOSITORY = None
-            mock_settings.ENABLE_DOCS_UPDATES = None
-
-            result = checker.check_documentation_config()
-
-            assert result["status"] == "degraded"
-
-    def test_check_documentation_config_unhealthy(self):
-        """Test documentation configuration check with missing required config."""
-        checker = HealthChecker()
-
-        with patch("app.api.health.settings") as mock_settings:
-            # Missing required configs
-            mock_settings.OPENAI_API_KEY = None
-            mock_settings.GITHUB_TOKEN = None
-            mock_settings.DOCUMENTATION_OPENAI_MODEL = None
-            mock_settings.DOC_AGENT_OPENAI_MODEL = None
-            mock_settings.DOCS_REPOSITORY = None
-            mock_settings.ENABLE_DOCS_UPDATES = None
-
-            result = checker.check_documentation_config()
-
-            assert result["status"] == "unhealthy"
+    # Documentation configuration checks removed
 
 
 class TestHealthEndpoints:
@@ -307,7 +258,6 @@ class TestHealthEndpoints:
             patch.object(health_checker, "check_openai_api", new_callable=AsyncMock) as mock_openai,
             patch.object(health_checker, "check_circuit_breakers") as mock_cb,
             patch.object(health_checker, "check_rate_limiters") as mock_rl,
-            patch.object(health_checker, "check_documentation_config") as mock_config,
         ):
 
             # Mock all checks as healthy
@@ -316,7 +266,7 @@ class TestHealthEndpoints:
             mock_openai.return_value = {"status": "healthy"}
             mock_cb.return_value = {"status": "healthy"}
             mock_rl.return_value = {"status": "healthy"}
-            mock_config.return_value = {"status": "healthy"}
+            # documentation config removed
 
             response = client.get("/health/detailed")
 
@@ -324,7 +274,7 @@ class TestHealthEndpoints:
             data = response.json()
             assert data["status"] == "healthy"
             assert "checks" in data
-            assert len(data["checks"]) == 6
+            assert len(data["checks"]) == 5
 
     def test_detailed_health_degraded(self, client, mock_supabase):
         """Test detailed health check with degraded services."""
@@ -335,7 +285,6 @@ class TestHealthEndpoints:
             patch.object(health_checker, "check_openai_api", new_callable=AsyncMock) as mock_openai,
             patch.object(health_checker, "check_circuit_breakers") as mock_cb,
             patch.object(health_checker, "check_rate_limiters") as mock_rl,
-            patch.object(health_checker, "check_documentation_config") as mock_config,
         ):
 
             # Mock some checks as degraded
@@ -344,7 +293,7 @@ class TestHealthEndpoints:
             mock_openai.return_value = {"status": "healthy"}
             mock_cb.return_value = {"status": "healthy"}
             mock_rl.return_value = {"status": "healthy"}
-            mock_config.return_value = {"status": "healthy"}
+            # documentation config removed
 
             response = client.get("/health/detailed")
 
@@ -352,30 +301,7 @@ class TestHealthEndpoints:
             data = response.json()
             assert data["status"] == "degraded"  # Overall status should be degraded
 
-    def test_documentation_health(self, client):
-        """Test documentation-specific health check."""
-        with (
-            patch.object(health_checker, "check_github_api", new_callable=AsyncMock) as mock_github,
-            patch.object(health_checker, "check_openai_api", new_callable=AsyncMock) as mock_openai,
-            patch.object(health_checker, "check_circuit_breakers") as mock_cb,
-            patch.object(health_checker, "check_rate_limiters") as mock_rl,
-            patch.object(health_checker, "check_documentation_config") as mock_config,
-        ):
-
-            # Mock all checks as healthy
-            mock_github.return_value = {"status": "healthy"}
-            mock_openai.return_value = {"status": "healthy"}
-            mock_cb.return_value = {"status": "healthy"}
-            mock_rl.return_value = {"status": "healthy"}
-            mock_config.return_value = {"status": "healthy"}
-
-            response = client.get("/health/docs")
-
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "healthy"
-            assert data["service"] == "documentation_automation"
-            assert "checks" in data
+    # Documentation-specific health endpoint removed
 
     def test_metrics_endpoint(self, client):
         """Test performance metrics endpoint."""

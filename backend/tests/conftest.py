@@ -289,23 +289,7 @@ def sample_github_webhook():
     }
 
 
-@pytest.fixture
-def sample_doc_approval():
-    """Sample DocApproval object for testing."""
-    from app.models.doc_approval import DocApproval
-
-    return DocApproval(
-        id=uuid.uuid4(),
-        commit_hash="test123456",
-        repository="test-owner/test-repo",
-        diff_content="test diff content",
-        patch_content="test patch content",
-        status="pending",
-        slack_channel="#docs-approval",
-        slack_message_ts="1234567890.123456",
-        expires_at=datetime.utcnow() + timedelta(hours=24),
-        approval_metadata={"commit_message": "Test commit", "files_affected": 2, "additions": 10, "deletions": 5},
-    )
+## DocApproval fixture removed with documentation agent cleanup
 
 
 @pytest.fixture
@@ -355,4 +339,4 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "github: mark test as requiring GitHub API")
     config.addinivalue_line("markers", "slack: mark test as requiring Slack API")
     config.addinivalue_line("markers", "openai: mark test as requiring OpenAI API")
-    config.addinivalue_line("markers", "doc_agent: mark test as doc agent specific")
+    # doc_agent marker removed

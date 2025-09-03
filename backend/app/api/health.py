@@ -186,46 +186,7 @@ class HealthChecker:
             logger.error(f"Rate limiter health check failed: {e}")
             return {"status": "unhealthy", "details": f"Rate limiter check failed: {str(e)}"}
 
-    def check_documentation_config(self) -> Dict[str, Any]:
-        """Check documentation automation configuration."""
-        try:
-            config_issues = []
-
-            # Check required environment variables
-            required_vars = ["OPENAI_API_KEY", "GITHUB_TOKEN", "DOCUMENTATION_OPENAI_MODEL", "DOC_AGENT_OPENAI_MODEL"]
-
-            for var in required_vars:
-                if not hasattr(settings, var) or not getattr(settings, var):
-                    config_issues.append(f"Missing {var}")
-
-            # Check optional but recommended variables
-            optional_vars = ["DOCS_REPOSITORY", "ENABLE_DOCS_UPDATES"]
-
-            for var in optional_vars:
-                if not hasattr(settings, var) or not getattr(settings, var):
-                    config_issues.append(f"Optional {var} not set")
-
-            if config_issues:
-                status = "degraded" if len(config_issues) <= 2 else "unhealthy"
-                details = f"Configuration issues: {', '.join(config_issues)}"
-            else:
-                status = "healthy"
-                details = "Documentation automation fully configured"
-
-            return {
-                "status": status,
-                "details": details,
-                "configuration": {
-                    "docs_updates_enabled": getattr(settings, "ENABLE_DOCS_UPDATES", False),
-                    "docs_repository": getattr(settings, "DOCS_REPOSITORY", None),
-                    "openai_model": getattr(settings, "DOCUMENTATION_OPENAI_MODEL", None),
-                    "has_github_token": bool(getattr(settings, "GITHUB_TOKEN", None)),
-                    "has_openai_key": bool(getattr(settings, "OPENAI_API_KEY", None)),
-                },
-            }
-        except Exception as e:
-            logger.error(f"Documentation config check failed: {e}")
-            return {"status": "unhealthy", "details": f"Config check failed: {str(e)}"}
+    # Documentation config checks removed with documentation agent cleanup
 
 
 health_checker = HealthChecker()
@@ -263,7 +224,7 @@ async def detailed_health(supabase: Client = Depends(get_supabase_client)):
     # Get synchronous checks
     circuit_breaker_status = health_checker.check_circuit_breakers()
     rate_limiter_status = health_checker.check_rate_limiters()
-    doc_config_status = health_checker.check_documentation_config()
+    # Documentation agent checks removed
 
     # Compile results
     results = {
@@ -284,7 +245,7 @@ async def detailed_health(supabase: Client = Depends(get_supabase_client)):
         ),
         "circuit_breakers": circuit_breaker_status,
         "rate_limiters": rate_limiter_status,
-        "documentation_config": doc_config_status,
+        # Documentation config removed
     }
 
     # Determine overall status
@@ -302,64 +263,7 @@ async def detailed_health(supabase: Client = Depends(get_supabase_client)):
     return {"status": overall_status, "timestamp": datetime.now().isoformat(), "checks": results}
 
 
-@router.get("/docs")
-async def documentation_health():
-    """Health check specifically for documentation automation services."""
-    try:
-        # Check documentation-specific components
-        circuit_breaker_status = health_checker.check_circuit_breakers()
-        rate_limiter_status = health_checker.check_rate_limiters()
-        doc_config_status = health_checker.check_documentation_config()
-
-        # Run external service checks in parallel
-        external_checks = await asyncio.gather(
-            health_checker.check_github_api(), health_checker.check_openai_api(), return_exceptions=True
-        )
-
-        github_status = (
-            external_checks[0]
-            if not isinstance(external_checks[0], Exception)
-            else {"status": "error", "details": str(external_checks[0])}
-        )
-        openai_status = (
-            external_checks[1]
-            if not isinstance(external_checks[1], Exception)
-            else {"status": "error", "details": str(external_checks[1])}
-        )
-
-        # Documentation service specific metrics
-        results = {
-            "github_api": github_status,
-            "openai_api": openai_status,
-            "circuit_breakers": circuit_breaker_status,
-            "rate_limiters": rate_limiter_status,
-            "configuration": doc_config_status,
-        }
-
-        # Determine overall documentation service status
-        all_statuses = [check["status"] for check in results.values()]
-
-        if "unhealthy" in all_statuses:
-            overall_status = "unhealthy"
-        elif "degraded" in all_statuses:
-            overall_status = "degraded"
-        elif "error" in all_statuses:
-            overall_status = "error"
-        elif "disabled" in all_statuses:
-            overall_status = "disabled"
-        else:
-            overall_status = "healthy"
-
-        return {
-            "status": overall_status,
-            "timestamp": datetime.now().isoformat(),
-            "service": "documentation_automation",
-            "checks": results,
-        }
-
-    except Exception as e:
-        logger.error(f"Documentation health check failed: {e}")
-        return {"status": "error", "timestamp": datetime.now().isoformat(), "error": str(e)}
+    # Removed: Documentation-specific health endpoint
 
 
 @router.get("/metrics")

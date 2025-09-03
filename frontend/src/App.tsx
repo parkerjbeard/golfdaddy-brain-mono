@@ -17,7 +17,6 @@ const ManagerDashboardPage = lazy(() => import('./pages/ManagerDashboardPage'))
 const MyDashboard = lazy(() => import('./pages/MyDashboard'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const TeamManagementPage = lazy(() => import('./pages/TeamManagementPage'))
-const DocumentationPage = lazy(() => import('./pages/DocumentationPage'))
 const EmployeeDetail = lazy(() => import('./pages/EmployeeDetail'))
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
 const CreateRaciMatrixPage = lazy(() => import('./pages/CreateRaciMatrixPage'))
@@ -135,8 +134,7 @@ function App() {
                   }
                 />
                 
-                {/* Documentation routes */}
-                <Route path="docs" element={<DocumentationPage />} />
+                {/* Documentation routes removed with documentation agent */}
                 
                 {/* RACI matrices */}
                 <Route path="raci/create" element={<CreateRaciMatrixPage />} />

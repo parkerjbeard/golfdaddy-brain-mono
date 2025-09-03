@@ -1,3 +1,6 @@
-from app.api.docs_generation import router as docs_router
+"""API package initializer.
 
-__all__ = ["docs_router"]
+Documentation agent routers removed; no exports here.
+"""
+
+__all__: list[str] = []

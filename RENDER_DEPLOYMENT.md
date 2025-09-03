@@ -61,15 +61,7 @@ fetch('https://brain-api.onrender.com/api/v1/health')
   .then(console.log)
 ```
 
-### Check 2: CORS Headers
-```javascript
-// Should see Access-Control-Allow-Origin header
-fetch('https://brain-api.onrender.com/api/v1/health', {
-  headers: { 'Origin': 'https://brain-frontend-wc3t.onrender.com' }
-}).then(r => console.log(...r.headers))
-```
-
-### Check 3: User Role
+### Check 2: User Role
 ```javascript
 // After signing in, check your role
 const { data: { session } } = await supabase.auth.getSession()
@@ -85,8 +77,7 @@ fetch('https://brain-api.onrender.com/api/v1/auth/profile', {
 **Fix**: Update `VITE_API_BASE_URL` to backend URL
 
 ### Issue: "CORS error in console"
-**Cause**: Backend not allowing frontend origin
-**Fix**: Add frontend URL to `CORS_ALLOWED_ORIGINS`
+With unified single-service deployment, CORS should not apply. Ensure the frontend is served by the backend and that you are accessing a single origin.
 
 ### Issue: "Failed to fetch user profile"
 **Cause**: Backend can't verify Supabase token
@@ -101,7 +92,7 @@ fetch('https://brain-api.onrender.com/api/v1/auth/profile', {
 - [ ] Backend service created and deployed
 - [ ] Frontend service created and deployed
 - [ ] PostgreSQL database created
-- [ ] Backend env vars configured (especially CORS)
+- [ ] Backend env vars configured
 - [ ] Frontend env vars configured (especially API URL)
 - [ ] Database migrations run
 - [ ] Health check passes: `/api/v1/health`

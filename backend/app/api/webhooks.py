@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 # Import Slack interactions router
-from app.api.webhooks.slack_interactions import router as slack_interactions_router
 from app.config.database import get_db
 from app.config.settings import settings
 from app.core.exceptions import BadRequestError, ConfigurationError, DatabaseError, ExternalServiceError
@@ -22,8 +21,7 @@ from supabase import Client
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
 
-# Include Slack interactions sub-router
-router.include_router(slack_interactions_router, tags=["Slack Webhooks"])
+# Slack interactions removed with documentation agent cleanup
 
 
 def get_github_webhook_handler(db: Client = Depends(get_db)) -> GitHubWebhookHandler:

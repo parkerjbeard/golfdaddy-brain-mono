@@ -1,2 +1,1 @@
-# Make webhooks a package
-from .slack_interactions import router
+# Make webhooks a package (Slack interactions removed)

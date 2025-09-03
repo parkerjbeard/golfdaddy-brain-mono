@@ -41,12 +41,7 @@ class Settings(BaseSettings):
     )  # Controls whether to reprocess commits already in the database
     FRONTEND_URL: str = Field("http://localhost:8080", env="FRONTEND_URL")  # Frontend URL for links in notifications
 
-    # Documentation Config
-    DOCS_REPOSITORY: Optional[str] = Field(None, env="DOCS_REPOSITORY")  # Format: owner/repo
-    ENABLE_DOCS_UPDATES: bool = Field(False, env="ENABLE_DOCS_UPDATES")  # Whether to enable documentation scanning
-    DOCUMENTATION_OPENAI_MODEL: Optional[str] = Field(
-        "gpt-4-turbo-preview", env="DOCUMENTATION_OPENAI_MODEL"
-    )  # Model for doc analysis
+    # Documentation agent removed — related config deleted
 
     # Slack Config
     SLACK_BOT_TOKEN: Optional[str] = Field(None, env="SLACK_BOT_TOKEN")  # Bot user OAuth token
@@ -80,23 +75,20 @@ class Settings(BaseSettings):
     # OpenAI settings
     OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")
     OPENAI_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="OPENAI_MODEL")
-    DOC_AGENT_OPENAI_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="DOC_AGENT_OPENAI_MODEL")
+    # Doc agent model removed
     OPENAI_REASONING_EFFORT: str = Field("medium", env="OPENAI_REASONING_EFFORT")
 
     # Service-specific AI models
     COMMIT_ANALYSIS_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="COMMIT_ANALYSIS_MODEL")
     CODE_QUALITY_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="CODE_QUALITY_MODEL")
 
-    # Embedding settings for semantic search
-    EMBEDDING_MODEL: str = Field("text-embedding-3-large", env="EMBEDDING_MODEL")
-    EMBEDDING_DIMENSION: int = Field(3072, env="EMBEDDING_DIMENSION")  # Dimension for text-embedding-3-large
-    EMBEDDING_RATE_LIMIT: int = Field(3000, env="EMBEDDING_RATE_LIMIT")
+    # Embeddings/semantic search removed — related config deleted
 
     # Data Retention and Archiving Settings
     DAILY_REPORTS_RETENTION_MONTHS: int = Field(12, env="DAILY_REPORTS_RETENTION_MONTHS")
     COMMITS_RETENTION_MONTHS: int = Field(24, env="COMMITS_RETENTION_MONTHS")
     COMPLETED_TASKS_RETENTION_MONTHS: int = Field(6, env="COMPLETED_TASKS_RETENTION_MONTHS")
-    DOCS_RETENTION_MONTHS: int = Field(18, env="DOCS_RETENTION_MONTHS")
+    # Docs retention removed with doc agent
     ENABLE_AUTO_ARCHIVE: bool = Field(True, env="ENABLE_AUTO_ARCHIVE")
     ARCHIVE_SCHEDULE_HOUR: int = Field(2, env="ARCHIVE_SCHEDULE_HOUR")  # Run at 2 AM daily
 
@@ -125,13 +117,7 @@ class Settings(BaseSettings):
     API_KEYS: Optional[Dict[str, Dict[str, Any]]] = Field(None, env="API_KEYS")
     API_KEYS_FILE_PATH: Optional[str] = Field(None, env="API_KEYS_FILE_PATH")
 
-    # CORS Settings
-    CORS_ALLOWED_ORIGINS: str = Field(
-        "http://localhost:5173,http://localhost:8080,http://frontend:8080", env="CORS_ALLOWED_ORIGINS"
-    )
-    CORS_ALLOW_CREDENTIALS: bool = Field(True, env="CORS_ALLOW_CREDENTIALS")
-    CORS_ALLOW_METHODS: str = Field("*", env="CORS_ALLOW_METHODS")
-    CORS_ALLOW_HEADERS: str = Field("*", env="CORS_ALLOW_HEADERS")
+    # CORS Settings removed — unified same-origin deployment
 
     @field_validator("API_KEYS", mode="before")
     @classmethod
@@ -296,28 +282,10 @@ class Settings(BaseSettings):
         return self.API_KEYS_FILE_PATH
 
     @property
-    def cors_allowed_origins(self):
-        return self.CORS_ALLOWED_ORIGINS.split(",")
+    # CORS accessors removed
 
     @property
-    def cors_allow_credentials(self):
-        return self.CORS_ALLOW_CREDENTIALS
-
-    @property
-    def cors_allow_methods(self):
-        return self.CORS_ALLOW_METHODS.split(",") if "," in self.CORS_ALLOW_METHODS else [self.CORS_ALLOW_METHODS]
-
-    @property
-    def cors_allow_headers(self):
-        return self.CORS_ALLOW_HEADERS.split(",") if "," in self.CORS_ALLOW_HEADERS else [self.CORS_ALLOW_HEADERS]
-
-    @property
-    def docs_repository(self):
-        return self.DOCS_REPOSITORY
-
-    @property
-    def enable_docs_updates(self):
-        return self.ENABLE_DOCS_UPDATES
+    # Documentation agent accessors removed
 
     @property
     def testing_mode(self):  # Added property for convenient access
@@ -332,8 +300,7 @@ class Settings(BaseSettings):
         return self.REANALYZE_EXISTING_COMMITS
 
     @property
-    def doc_agent_openai_model(self):
-        return self.DOC_AGENT_OPENAI_MODEL
+    # Doc agent model accessor removed
 
     @property
     def daily_reports_retention_months(self):
@@ -348,8 +315,7 @@ class Settings(BaseSettings):
         return self.COMPLETED_TASKS_RETENTION_MONTHS
 
     @property
-    def docs_retention_months(self):
-        return self.DOCS_RETENTION_MONTHS
+    # Docs retention accessor removed
 
     @property
     def enable_auto_archive(self):
@@ -368,8 +334,7 @@ class Settings(BaseSettings):
         return self.SLACK_CIRCUIT_BREAKER_TIMEOUT
 
     @property
-    def documentation_openai_model(self):
-        return self.DOCUMENTATION_OPENAI_MODEL
+    # Documentation OpenAI model accessor removed
 
     @property
     def openai_reasoning_effort(self):

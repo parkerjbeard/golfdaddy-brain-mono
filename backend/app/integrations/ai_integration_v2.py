@@ -33,7 +33,8 @@ class AIIntegrationV2:
         self.model = settings.OPENAI_MODEL or "gpt-4-turbo-preview"
         self.code_quality_model = settings.CODE_QUALITY_MODEL or self.model
         self.eod_analysis_model = settings.OPENAI_MODEL or self.model
-        self.embedding_model = settings.EMBEDDING_MODEL  # text-embedding-3-large
+        # Use a sane default embedding model; docs agent removed, no settings dependency
+        self.embedding_model = "text-embedding-3-large"
 
         logger.info(f"AIIntegrationV2 initialized. Model: {self.model}, " f"Embedding: {self.embedding_model}")
 

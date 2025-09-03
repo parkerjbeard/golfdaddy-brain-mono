@@ -14,7 +14,6 @@ from app.models.daily_report import (
     DailyReportUpdate,
 )
 from app.models.daily_work_analysis import DailyWorkAnalysis, DeduplicationResult, WorkItem
-from app.models.doc_metadata import DocMetadata
 from app.models.raci_matrix import (
     CreateRaciMatrixPayload,
     RaciActivity,
@@ -33,7 +32,6 @@ __all__ = [
     "Task",
     "TaskStatus",
     "Commit",
-    "DocMetadata",
     "DailyReport",
     "DailyReportCreate",
     "DailyReportUpdate",
