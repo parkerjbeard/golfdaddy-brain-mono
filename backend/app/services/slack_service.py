@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
 from app.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
@@ -101,7 +100,7 @@ class SlackService:
             logger.error(f"Unexpected error finding user: {str(e)}")
             return None
 
-    async def find_user_by_github_username(self, github_username: str, db: AsyncSession) -> Optional[Dict[str, Any]]:
+    async def find_user_by_github_username(self, github_username: str) -> Optional[Dict[str, Any]]:
         """Find Slack user by GitHub username via database mapping."""
         # Check cache first
         cache_key = f"github:{github_username}"
@@ -111,8 +110,8 @@ class SlackService:
                 return cached["data"]
 
         try:
-            # Look up user in our database
-            user = await self.user_repository.get_by_github_username(db, github_username)
+            # Look up user in our database via Supabase repository
+            user = await self.user_repository.get_user_by_github_username(github_username)
             if not user or not user.email:
                 logger.warning(f"No user found with GitHub username: {github_username}")
                 return None

@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader
 
-from app.config.database import get_db
+from app.config.supabase_client import get_supabase_client_safe as get_db
 from app.config.settings import settings
 from app.core.exceptions import AIIntegrationError, AuthenticationError, DatabaseError, ExternalServiceError
 from app.integrations.github_integration import GitHubIntegration
@@ -14,33 +14,25 @@ from supabase import Client
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/integrations/github", tags=["Integrations - GitHub"])
 
-# Define API Key Security
 api_key_header = APIKeyHeader(name=settings.api_key_header, auto_error=False)
 
 
 async def get_api_key(request: Request, api_key_header: str = Security(api_key_header)):
     """Dependency to validate the incoming API key from Make.com."""
-    # Log authentication attempt without exposing sensitive data
     actual_header_name = settings.api_key_header
     received_value = request.headers.get(actual_header_name)
     logger.info(f"Attempting API key authentication for header '{actual_header_name}'")
 
-    # Check if API auth is enabled and a key was provided
-    # Note: The `api_key_header` variable here is the *parsed* value by FastAPI/Security,
-    # which might be None if the header is missing. `received_value` above gets the raw header.
-    if not settings.enable_api_auth or not received_value:  # Check raw received_value first
-        # If auth is disabled globally, allow access (or handle as needed)
+    if not settings.enable_api_auth or not received_value:
         if not settings.enable_api_auth:
             logger.warning("API Auth is disabled globally. Allowing request without key.")
-            return None  # Indicate no key was validated but processing can continue
-        else:
-            logger.error(f"API key header '{actual_header_name}' is missing")
-            raise AuthenticationError(message=f"API key header '{actual_header_name}' is missing")
+            return None
+        logger.error(f"API key header '{actual_header_name}' is missing")
+        raise AuthenticationError(message=f"API key header '{actual_header_name}' is missing")
 
-    # Validate API key without logging sensitive data
     if received_value == settings.make_integration_api_key:
         logger.info("API Key validation successful")
-        return received_value  # Return the validated key
+        return received_value
     else:
         logger.error("Invalid API key received")
         raise AuthenticationError(message="Invalid API Key")
@@ -51,8 +43,8 @@ async def handle_commit_event(
     payload: CommitPayload,
     request: Request,
     scan_docs: bool = None,
-    api_key: str = Depends(get_api_key),  # Apply API key security
-    db_session: Client = Depends(get_db),  # Get DB session as a dependency directly
+    api_key: str = Depends(get_api_key),
+    db_session: Client = Depends(get_db),
 ):
     """
     Receives commit information (likely forwarded by Make.com).
@@ -70,44 +62,32 @@ async def handle_commit_event(
     """
     logger.info(f"Received commit webhook for hash: {payload.commit_hash}")
 
-    # Check API key (already done by dependency, but ensures it was valid if required)
     if settings.enable_api_auth and api_key is None:
-        # This case should ideally be caught by the dependency, but double-check
         raise AuthenticationError(message="Unauthorized")
 
     try:
-        # Check if we got a valid session
         if db_session is None:
             logger.error("DB session is None from dependency.")
             raise DatabaseError(message="Database session unavailable")
 
-        # Initialize service with the obtained session
         commit_analysis_service = CommitAnalysisService(db_session)
 
-        # The 'payload' object is already a validated CommitPayload instance.
-        # We can pass it directly to the service.
-        # The service's process_commit method is designed to handle CommitPayload objects.
-
-        # Process the commit (which includes finding user, fetching diff if needed, calling AI, saving)
-        result_commit = await commit_analysis_service.process_commit(
-            payload, scan_docs=scan_docs
-        )  # Pass payload directly
+        result_commit = await commit_analysis_service.process_commit(payload, scan_docs=scan_docs)
 
         if result_commit:
             logger.info(f"Successfully processed commit {payload.commit_hash}. AI analysis scheduled/completed.")
             return {"message": "Commit received and processing started/completed", "commit_hash": payload.commit_hash}
         else:
-            # Logged within the service, return a more specific error
             logger.error(
                 f"process_commit returned falsy for commit {payload.commit_hash}. Indicates failure in service."
             )
             raise AIIntegrationError(message="Failed to process commit due to an issue in the analysis service.")
 
-    except HTTPException as http_exc:  # Re-raise HTTP exceptions from FastAPI/dependencies
+    except HTTPException as http_exc:
         raise http_exc
-    except AuthenticationError as auth_exc:  # Re-raise our custom auth errors
+    except AuthenticationError as auth_exc:
         raise auth_exc
-    except (DatabaseError, AIIntegrationError, ExternalServiceError) as app_exc:  # Re-raise other known app errors
+    except (DatabaseError, AIIntegrationError, ExternalServiceError) as app_exc:
         raise app_exc
     except Exception as e:
         logger.error(f"Unhandled exception processing commit {payload.commit_hash}: {e}", exc_info=True)

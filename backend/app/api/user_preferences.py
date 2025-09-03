@@ -2,10 +2,9 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
-from app.core.database import get_db
+from app.config.supabase_client import get_supabase_client_safe as get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.user_preferences import NotificationPreferences, UserPreferencesResponse, UserPreferencesUpdate
@@ -16,7 +15,7 @@ router = APIRouter()
 
 @router.get("/preferences", response_model=UserPreferencesResponse)
 def get_user_preferences(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user), db = Depends(get_db)
 ) -> UserPreferencesResponse:
     """Get the current user's notification preferences."""
     user_repo = UserRepository(db)
@@ -43,7 +42,7 @@ def get_user_preferences(
 def update_user_preferences(
     preferences_update: UserPreferencesUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ) -> UserPreferencesResponse:
     """Update the current user's notification preferences."""
     user_repo = UserRepository(db)

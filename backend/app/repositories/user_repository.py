@@ -1,34 +1,21 @@
 import asyncio
 import json
 import logging
-import os
-from datetime import datetime  # For potential datetime fields in User model
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from app.config.supabase_client import get_supabase_client_safe
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
-from app.models.user import User, UserRole  # Import Pydantic model
+from app.models.user import User, UserRole
 from supabase import Client, PostgrestAPIResponse
 
 logger = logging.getLogger(__name__)
 
-# Check if we should use local development database
-USE_LOCAL_DB = os.getenv("USE_LOCAL_DB", "false").lower() == "true"
-
-if USE_LOCAL_DB:
-    from app.repositories.user_repository_local import LocalUserRepository
-
 
 class UserRepository:
     def __init__(self, client: Client = None):
-        if USE_LOCAL_DB:
-            # Use local repository for development
-            self._local_repo = LocalUserRepository()
-            self._client = None
-        else:
-            self._client = client if client is not None else get_supabase_client_safe()
-            self._local_repo = None
+        self._client = client if client is not None else get_supabase_client_safe()
         self._table = "users"
 
     def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
@@ -38,14 +25,13 @@ class UserRepository:
                 f"{context_message}: Supabase error code {response.error.code if hasattr(response.error, 'code') else 'N/A'} - {response.error.message}"
             )
             raise DatabaseError(f"{context_message}: {response.error.message}")
-        # Add more specific checks if needed, e.g., for constraint violations like P0001, P0002, etc.
 
     def _process_user_dict_for_supabase(self, data_dict: Dict[str, Any]) -> Dict[str, Any]:
         processed_dict = {}
         for key, value in data_dict.items():
             if isinstance(value, UUID):
                 processed_dict[key] = str(value)
-            elif isinstance(value, UserRole):  # Assuming UserRole is an Enum
+            elif isinstance(value, UserRole):
                 processed_dict[key] = value.value
             elif isinstance(value, datetime):
                 processed_dict[key] = value.isoformat()
@@ -59,9 +45,6 @@ class UserRepository:
         Assumes the corresponding auth.users entry already exists.
         The user_data.id MUST match the auth.users.id.
         """
-        if USE_LOCAL_DB:
-            return await self._local_repo.create_user(user_data)
-
         try:
             user_dict_initial = user_data.model_dump(exclude_unset=True, by_alias=False)
             user_dict = self._process_user_dict_for_supabase(user_dict_initial)
@@ -70,13 +53,12 @@ class UserRepository:
                 logger.error("Cannot create user profile without a valid ID linked to auth.users.")
                 raise DatabaseError(
                     "User profile creation requires a valid ID."
-                )  # Or BadRequestError depending on context
+                )
 
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).insert(user_dict).execute
             )
 
-            # Check if response is None (connection/client issue)
             if response is None:
                 logger.error("Supabase client returned None response when creating user profile")
                 raise DatabaseError("Database connection issue when creating user profile")
@@ -86,8 +68,7 @@ class UserRepository:
                 logger.info(f"Successfully created user profile for ID: {response.data[0]['id']}")
                 return User(**response.data[0])
             else:
-                # This path should ideally be caught by _handle_supabase_error if error exists
-                logger.error(f"Failed to create user profile: No data returned and no Supabase error object.")
+                logger.error("Failed to create user profile: No data returned and no Supabase error object.")
                 raise DatabaseError("Failed to create user profile: No data returned.")
         except DatabaseError:  # Re-raise if already our custom type
             raise
@@ -97,22 +78,16 @@ class UserRepository:
 
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
         """Retrieves a user by their UUID."""
-        if USE_LOCAL_DB:
-            return await self._local_repo.get_user_by_id(user_id)
-
         try:
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("id", str(user_id)).maybe_single().execute
             )
-            # For maybe_single(), if no data and no error, it means not found.
-            # response.error might be None and response.data None/empty if not found.
-            # Supabase client typically returns status 406 if maybe_single finds no data.
             if response.data:
                 return User(**response.data)
-            elif response.status_code == 406 or (not response.data and not response.error):  # Explicit not found
+            elif response.status_code == 406 or (not response.data and not response.error):
                 logger.info(f"User with ID {user_id} not found.")
-                return None  # Services expect None for not found, they will raise ResourceNotFoundError if needed
-            else:  # Other errors
+                return None
+            else:
                 self._handle_supabase_error(response, f"Error fetching user by ID {user_id}")
                 # If _handle_supabase_error didn't raise (e.g. response.error was None but still no data and not 406)
                 raise DatabaseError(f"Failed to fetch user by ID {user_id} for unknown reason.")
@@ -179,7 +154,6 @@ class UserRepository:
                 .execute
             )
 
-            # Check if response is None (connection/client issue)
             if response is None:
                 logger.error(f"Supabase client returned None response for GitHub username {github_username}")
                 raise DatabaseError(
@@ -202,9 +176,6 @@ class UserRepository:
 
     async def list_users_by_role(self, role: UserRole) -> List[User]:
         """Lists all users with a specific role."""
-        if USE_LOCAL_DB:
-            return await self._local_repo.get_users_by_role(role)
-
         try:
             response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("role", role.value).execute
@@ -219,11 +190,6 @@ class UserRepository:
 
     async def list_all_users(self, skip: int = 0, limit: int = 100) -> Tuple[List[User], int]:
         """Lists all users in the profile table with pagination."""
-        if USE_LOCAL_DB:
-            users = await self._local_repo.get_all_users(limit, skip)
-            # For now, return the length as total count
-            return users, len(users)
-
         try:
             count_response: PostgrestAPIResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*", count="exact").limit(0).execute
@@ -245,22 +211,11 @@ class UserRepository:
 
     async def update_user(self, user_id: UUID, update_data: Dict[str, Any]) -> Optional[User]:
         """Updates a user's profile data."""
-        if USE_LOCAL_DB:
-            return await self._local_repo.update_user(user_id, update_data)
-
         try:
             if "id" in update_data:
                 del update_data["id"]
-            if not update_data:  # Check if update_data is empty
+            if not update_data:
                 logger.warning(f"Update_user called with empty data for user_id {user_id}")
-                # Optionally, fetch and return the user if no changes are to be made, or raise BadRequestError
-                # For now, let it proceed, Supabase might handle empty update gracefully or error.
-                # However, it is better to handle it here.
-                # Let's assume an empty update should not proceed to DB and is not an error, but a no-op.
-                # If it should be an error, raise BadRequestError("No update data provided.")
-                # To maintain original behavior of potentially returning existing user, we'd fetch it.
-                # For now, if we want to prevent empty updates, we'd raise or return None early.
-                # Let's return the existing user if update_data is empty (treat as no-op).
                 return await self.get_user_by_id(user_id)
 
             # If the email is being updated, reflect the change in auth.users
@@ -280,20 +235,15 @@ class UserRepository:
                 self._client.table(self._table).update(processed_update_data).eq("id", str(user_id)).execute
             )
 
-            # Check if user was found and updated. Response.data will contain updated record(s).
-            # If response.data is empty, it could mean user_id did not match or another issue.
             if response.data:
                 logger.info(f"Successfully updated user profile for ID: {user_id}")
                 return User(**response.data[0])
             else:
-                # If no data, check if it was a "not found" scenario or other error
-                # First, check if the user actually exists. If not, ResourceNotFoundError.
-                existing_user = await self.get_user_by_id(user_id)  # This returns None if not found
+                existing_user = await self.get_user_by_id(user_id)
                 if not existing_user:
                     logger.error(f"Failed to update user profile: User with ID {user_id} not found.")
                     raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
 
-                # If user exists but update failed for other reason (e.g. Supabase error not caught by `error` attribute)
                 self._handle_supabase_error(response, f"Failed to update user profile {user_id}")
                 logger.error(
                     f"Failed to update user profile {user_id}: No data returned and no specific Supabase error attribute. User may exist but update failed."

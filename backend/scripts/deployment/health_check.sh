@@ -63,20 +63,18 @@ check_endpoint "/metrics" 200
 # Check database connectivity
 echo "🗄️  Checking database connectivity..."
 kubectl exec -n $ENVIRONMENT deployment/backend -- python -c "
-from app.core.database import get_db
-import asyncio
+from app.config.supabase_client import get_supabase_client
 
-async def check_db():
-    try:
-        async for db in get_db():
-            await db.execute('SELECT 1')
-            print('✅ Database connection - OK')
-            return True
-    except Exception as e:
-        print(f'❌ Database connection - Failed: {e}')
-        return False
-
-asyncio.run(check_db())
+try:
+    client = get_supabase_client()
+    # Simple lightweight query against a known table
+    resp = client.table('commits').select('commit_hash').limit(1).execute()
+    if hasattr(resp, 'error') and resp.error:
+        print(f'❌ Database connection - Failed: {resp.error}')
+    else:
+        print('✅ Database connection - OK')
+except Exception as e:
+    print(f'❌ Database connection - Failed: {e}')
 "
 
 # Check Redis connectivity

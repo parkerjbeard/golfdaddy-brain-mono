@@ -14,7 +14,6 @@ openai
 PyJWT
 pytest-mock
 PyGithub>=2.1.0
-SQLAlchemy>=2.0.0
 psycopg2-binary
 asyncpg
 PyYAML
@@ -25,5 +24,3 @@ pytest-cov>=4.1.0
 aiohttp>=3.12.0
 rich>=14.0.0
 GitPython>=3.1.0
-
-# Removed doc-agent and semantic-search indexing deps

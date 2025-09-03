@@ -15,14 +15,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+# Removed SQLAlchemy-based test DB fixtures after consolidating to Supabase
 
 from app.config.settings import settings
 from app.config.supabase_client import get_supabase_client
-from app.core.database import Base
 from app.main import app
 
 # Add the project root to the path so that we can import from the package
@@ -142,50 +138,12 @@ def client(mock_supabase_client):
         yield test_client
 
 
-# ========== Database Fixtures for Integration Tests ==========
-
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-TEST_DATABASE_URL_SYNC = "sqlite:///:memory:"
-
-
 @pytest.fixture(scope="session")
 def event_loop():
-    """Create an instance of the default event loop for the test session."""
+    """Provide a session-scoped event loop for async tests."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
-
-
-@pytest_asyncio.fixture(scope="function")
-async def async_test_engine():
-    """Create an async SQLAlchemy engine for testing."""
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
-    )
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    yield engine
-
-    await engine.dispose()
-
-
-@pytest_asyncio.fixture(scope="function")
-async def db_session(async_test_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create an async database session for testing."""
-    async_session = async_sessionmaker(
-        async_test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-
-    async with async_session() as session:
-        yield session
-        await session.rollback()
 
 
 # ========== Doc Agent Specific Fixtures ==========

@@ -20,7 +20,7 @@ extend-exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 120
-known_third_party = ["fastapi", "pydantic", "sqlalchemy"]
+known_third_party = ["fastapi", "pydantic"]
 skip_glob = ["*/migrations/*", "*/venv/*"]
 
 [tool.mypy]

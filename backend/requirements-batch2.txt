@@ -4,8 +4,7 @@
 # Async PostgreSQL adapter
 asyncpg>=0.29.0
 
-# SQLAlchemy async support
-greenlet>=3.0.0
+# (Removed SQLAlchemy-specific dependencies)
 
 # Testing
 pytest-asyncio>=0.21.0
