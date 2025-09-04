@@ -2,11 +2,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   BarChart, 
-  FileText, 
   Home,
   ClipboardList,
   LogOut,
-  User as UserIcon
 } from 'lucide-react';
 import {
   Sidebar,
@@ -36,7 +34,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsible }: AppSidebarProps) {
-  const { session, signOut, userProfile } = useAuth();
+  const { session, signOut } = useAuth();
   const user = session?.user;
   const location = useLocation();
 
@@ -107,25 +105,16 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Resources</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={isActive('/docs')} 
-                  asChild 
-                  tooltip="Documentation"
-                >
-                  <Link to="/docs">
-                    <FileText className="h-5 w-5" />
-                    <span>Documentation</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {false && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Resources</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {/* Documentation removed */}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       {user && (
