@@ -15,12 +15,17 @@ ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_API_BASE_URL
 
-# Build with environment variables passed from platform
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+# Fallback args (some env groups may provide non-VITE names)
+ARG SUPABASE_URL
+ARG SUPABASE_ANON_KEY
 
-RUN npm run build
+# Build with environment variables passed from platform (with fallbacks)
+# Prefer VITE_* if set; otherwise fall back to non-VITE names
+RUN export VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-$SUPABASE_URL} \
+    && export VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-$SUPABASE_ANON_KEY} \
+    && export VITE_API_BASE_URL=${VITE_API_BASE_URL} \
+    && echo "Building with VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-$SUPABASE_URL} VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:+<set>}" \
+    && npm run build
 
 FROM python:3.11-slim AS backend-base
 

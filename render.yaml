@@ -17,3 +17,7 @@ services:
         fromGroup: brain-secrets
       - key: VITE_SUPABASE_ANON_KEY
         fromGroup: brain-secrets
+      - key: SUPABASE_URL
+        fromGroup: brain-secrets
+      - key: SUPABASE_ANON_KEY
+        fromGroup: brain-secrets
