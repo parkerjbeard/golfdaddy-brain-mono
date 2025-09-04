@@ -350,3 +350,130 @@ class TestAIIntegrationV2:
         result = await ai_integration.analyze_commit_diff({"diff": "test diff", "message": "test"})
 
         assert result["error"] == "Failed to analyze commit"
+
+    @pytest.mark.asyncio
+    async def test_analyze_eod_report_text(self, ai_integration, mock_openai_client):
+        """Test legacy-compatible EOD report analysis by raw text."""
+        mock_constructor, client = mock_openai_client
+        mock_response = AsyncMock()
+        mock_response.choices = [
+            Mock(
+                message=Mock(
+                    content=json.dumps(
+                        {
+                            "key_achievements": ["Did X", "Did Y"],
+                            "estimated_hours": 3.2,
+                            "estimated_difficulty": "Low",
+                            "sentiment": "Positive",
+                            "potential_blockers": [],
+                            "summary": "Summary text",
+                            "clarification_requests": [
+                                {"question": "What about Z?", "original_text": "- Worked on Z"}
+                            ],
+                        }
+                    )
+                )
+            )
+        ]
+        client.chat.completions.create.return_value = mock_response
+
+        res = await ai_integration.analyze_eod_report_text("- Did X\n- Did Y")
+        assert res["estimated_hours"] == 3.2
+        assert res["clarification_requests"][0]["status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_check_if_clarification_needed_prefilled(self, ai_integration):
+        """If analysis already has clarifications, surface first item."""
+        ai_analysis = {
+            "clarification_requests": [
+                {"question": "Q?", "original_text": "txt", "status": "pending", "requested_by_ai": True}
+            ]
+        }
+        res = await ai_integration.check_if_clarification_needed("report", ai_analysis)
+        assert res["needs_clarification"] is True
+        assert res["clarification_question"] == "Q?"
+
+    @pytest.mark.asyncio
+    async def test_check_if_clarification_needed_llm(self, ai_integration, mock_openai_client):
+        """Ask LLM to decide clarification when none present."""
+        mock_constructor, client = mock_openai_client
+        mock_response = AsyncMock()
+        mock_response.choices = [
+            Mock(message=Mock(content=json.dumps({
+                "needs_clarification": True,
+                "clarification_question": "Please clarify",
+                "original_text": "- item"
+            })))
+        ]
+        client.chat.completions.create.return_value = mock_response
+
+        res = await ai_integration.check_if_clarification_needed("- item", {})
+        assert res["needs_clarification"] is True
+        assert res["clarification_question"] == "Please clarify"
+
+    @pytest.mark.asyncio
+    async def test_process_eod_clarification(self, ai_integration, mock_openai_client):
+        """Test conversational clarification processing."""
+        mock_constructor, client = mock_openai_client
+        mock_response = AsyncMock()
+        mock_response.choices = [
+            Mock(message=Mock(content=json.dumps({
+                "response": "Thanks",
+                "needs_clarification": False,
+                "conversation_complete": True,
+                "updated_summary": "Updated",
+                "updated_hours": 2.0,
+                "key_insights": ["Insight"]
+            })))
+        ]
+        client.chat.completions.create.return_value = mock_response
+
+        res = await ai_integration.process_eod_clarification(
+            user_message="details", original_report="orig", conversation_history=[{"user": "u", "ai": "a"}]
+        )
+        assert res["conversation_complete"] is True
+
+    @pytest.mark.asyncio
+    async def test_analyze_commit_code_quality_legacy(self, ai_integration, mock_openai_client):
+        """Test legacy code quality method keeps working."""
+        mock_constructor, client = mock_openai_client
+        mock_response = AsyncMock()
+        mock_response.choices = [
+            Mock(message=Mock(content=json.dumps({
+                "readability_score": 0.5,
+                "complexity_score": 0.5,
+                "maintainability_score": 0.5,
+                "test_coverage_estimation": 0.5,
+                "security_concerns": [],
+                "performance_issues": [],
+                "best_practices_adherence": [],
+                "suggestions_for_improvement": [],
+                "positive_feedback": [],
+                "estimated_seniority_level": "Senior",
+                "overall_assessment_summary": "ok"
+            })))
+        ]
+        client.chat.completions.create.return_value = mock_response
+
+        res = await ai_integration.analyze_commit_code_quality("diff", "msg")
+        assert res["estimated_seniority_level"] == "Senior"
+
+    @pytest.mark.asyncio
+    async def test_generate_development_task_content(self, ai_integration, mock_openai_client):
+        """Test legacy dev task generation method."""
+        mock_constructor, client = mock_openai_client
+        mock_response = AsyncMock()
+        mock_response.choices = [
+            Mock(message=Mock(content=json.dumps({
+                "description": "Do X",
+                "learning_objectives": ["L1"],
+                "suggested_resources": ["R1"],
+                "success_metrics": ["M1"]
+            })))
+        ]
+        client.chat.completions.create.return_value = mock_response
+
+        res = await ai_integration.generate_development_task_content(
+            manager_name="Alex", development_area="Leadership", task_type="Practice"
+        )
+        assert res["description"] == "Do X"

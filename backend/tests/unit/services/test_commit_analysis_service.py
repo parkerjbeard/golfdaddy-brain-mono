@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from pydantic import HttpUrl
 
-from app.integrations.ai_integration import AIIntegration
+from app.integrations.ai_integration_v2 import AIIntegrationV2
 
 # Models and Schemas (adjust imports based on your actual project structure)
 from app.models.commit import Commit
@@ -56,7 +56,7 @@ def mock_commit_repo(mocker) -> MagicMock:
 @pytest.fixture
 def mock_ai_integration(mocker) -> MagicMock:
     """Provides a MagicMock for the AiIntegration (for its sync methods)."""
-    mock = mocker.MagicMock(spec=AIIntegration)
+    mock = mocker.MagicMock(spec=AIIntegrationV2)
     # Explicitly mock synchronous methods used if spec alone isn't enough or for clarity
     mock.analyze_commit_diff = mocker.MagicMock()
     # If other sync methods from AIIntegration are used, mock them here too.

@@ -290,3 +290,7 @@ Use the provided template files as starting points:
 The authoritative record for a user's **email** lives in `auth.users`. A copy is stored in `public.users` for convenience when joining profile data. Whenever an email is changed via Supabase Auth, a trigger updates the value in `public.users` so the two tables remain consistent.
 
 Updates to name or `avatar_url` are stored in `public.users` and may optionally be synced back into the auth metadata using the service key.
+## AI Integration
+
+- Use `app.integrations.ai_integration_v2.AIIntegrationV2` for all AI features (commit analysis, EOD analysis, documentation, similarity, code quality, daily analysis).
+- Legacy `app.integrations.ai_integration` has been removed; all prompts from v1 were preserved in `AIIntegrationV2` as compatible methods (e.g., `analyze_eod_report_text`, `analyze_commit_code_quality`, `generate_development_task_content`).

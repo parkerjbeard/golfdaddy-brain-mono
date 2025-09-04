@@ -165,7 +165,7 @@ class TestUnifiedAnalysisLogic:
     @pytest.mark.asyncio
     async def test_deduplication_in_ai_response(self):
         """Test that AI properly deduplicates work items."""
-        with patch("app.services.unified_daily_analysis_service.AIIntegration") as mock_ai:
+        with patch("app.services.unified_daily_analysis_service.AIIntegrationV2") as mock_ai:
             with patch("app.services.unified_daily_analysis_service.CommitRepository") as mock_commit_repo:
                 with patch("app.services.unified_daily_analysis_service.DailyReportRepository") as mock_report_repo:
                     with patch(

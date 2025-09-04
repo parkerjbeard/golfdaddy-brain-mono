@@ -1279,9 +1279,9 @@ Diff:
         # Use AI integration for daily analysis
         try:
             sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            from app.integrations.ai_integration import AIIntegration
+            from app.integrations.ai_integration_v2 import AIIntegrationV2
 
-            ai_integration = AIIntegration()
+            ai_integration = AIIntegrationV2()
             daily_result = await ai_integration.analyze_daily_work(context)
 
             print(f"    ✅ Daily analysis: {daily_result.get('total_estimated_hours', 0)}h estimated")

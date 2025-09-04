@@ -20,7 +20,7 @@ def mock_dependencies():
         CommitRepository=Mock,
         DailyReportRepository=Mock,
         UserRepository=Mock,
-        AIIntegration=Mock,
+        AIIntegrationV2=Mock,
     ) as mocks:
         yield mocks
 
@@ -345,7 +345,7 @@ def test_init_service():
         CommitRepository=Mock,
         DailyReportRepository=Mock,
         UserRepository=Mock,
-        AIIntegration=Mock,
+        AIIntegrationV2=Mock,
     ):
         service = DailyCommitAnalysisService()
 
