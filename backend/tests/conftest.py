@@ -201,25 +201,7 @@ def sample_doc_patch():
 +```"""
 
 
-@pytest.fixture
-def sample_slack_payload():
-    """Sample Slack interaction payload."""
-    return {
-        "type": "block_actions",
-        "user": {
-            "id": "U123456789",
-            "username": "test_user",
-            "name": "Test User",
-        },
-        "channel": {"id": "C123456", "name": "docs-approval"},
-        "message": {"ts": "1234567890.123456", "blocks": []},
-        "actions": [
-            {
-                "action_id": "approve_doc_update",
-                "value": str(uuid.uuid4()),
-            }
-        ],
-    }
+# Slack-related fixtures removed; Slack tests are no longer in scope.
 
 
 @pytest.fixture
@@ -276,14 +258,7 @@ def mock_github_client():
     return mock_client
 
 
-@pytest.fixture
-def mock_slack_service():
-    """Mock Slack service for testing."""
-    mock_service = MagicMock()
-    mock_service.send_message = AsyncMock(return_value={"ts": "1234567890.123456"})
-    mock_service.update_message = AsyncMock(return_value={"ok": True})
-
-    return mock_service
+# Slack service mock removed.
 
 
 # ========== Test Markers ==========
@@ -295,6 +270,5 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: mark test as unit test")
     config.addinivalue_line("markers", "slow: mark test as slow running")
     config.addinivalue_line("markers", "github: mark test as requiring GitHub API")
-    config.addinivalue_line("markers", "slack: mark test as requiring Slack API")
     config.addinivalue_line("markers", "openai: mark test as requiring OpenAI API")
     # doc_agent marker removed

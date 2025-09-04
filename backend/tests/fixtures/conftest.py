@@ -27,9 +27,4 @@ def sample_users(sample_data) -> Dict[str, Any]:
     return sample_data["users"]
 
 
-@pytest.fixture
-def sample_racis(sample_data) -> Dict[str, Any]:
-    """
-    Get sample RACI data.
-    """
-    return sample_data["racis"]
+# RACI fixtures removed; RACI tests are no longer included.
