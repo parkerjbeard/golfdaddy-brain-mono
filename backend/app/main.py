@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import uvicorn
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.auth_endpoints import router as auth_router
@@ -79,6 +79,30 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0",
     }
+
+
+# Public runtime config for frontend (Supabase URL + anon key)
+@app.get("/config.js", include_in_schema=False)
+def public_runtime_config():
+    try:
+        # Prefer explicitly provided VITE_* at runtime if present
+        supabase_url = os.environ.get("VITE_SUPABASE_URL") or str(settings.SUPABASE_URL)
+        supabase_anon = os.environ.get("VITE_SUPABASE_ANON_KEY") or (settings.SUPABASE_ANON_KEY or os.environ.get("SUPABASE_ANON_KEY", ""))
+
+        content = (
+            "window.__APP_CONFIG__ = "
+            + {
+                "VITE_SUPABASE_URL": supabase_url,
+                "VITE_SUPABASE_ANON_KEY": supabase_anon,
+            }.__repr__()
+            + ";"
+        )
+        return PlainTextResponse(content, media_type="application/javascript")
+    except Exception as e:
+        return PlainTextResponse(
+            "window.__APP_CONFIG__ = {}; console.error('Failed to load runtime config');",
+            media_type="application/javascript",
+        )
 
 
 # Debug endpoint to check frontend files
