@@ -184,16 +184,19 @@ class SlackService:
             return None
 
     async def send_response_url_message(self, response_url: str, message: Dict[str, Any]) -> bool:
-        """Send a message using a Slack response URL."""
-        import aiohttp
+        """Send a message using a Slack response URL without extra async HTTP deps."""
+        import asyncio
+        import requests
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(response_url, json=message) as resp:
-                    return resp.status == 200
-        except Exception as e:
-            logger.error(f"Failed to send response URL message: {e}")
-            return False
+        def _post():
+            try:
+                resp = requests.post(response_url, json=message, timeout=10)
+                return resp.status_code == 200
+            except Exception as e:  # pragma: no cover - network dependent
+                logger.error(f"Failed to send response URL message: {e}")
+                return False
+
+        return await asyncio.to_thread(_post)
 
     async def schedule_message(
         self, channel: str, post_at: int, text: str, blocks: Optional[List[Dict[str, Any]]] = None  # Unix timestamp

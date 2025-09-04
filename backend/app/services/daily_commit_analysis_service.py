@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class DailyCommitAnalysisService:
-    """Service for managing daily commit analyses"""
+    """Service for managing daily work analyses (commits + optional daily report)."""
 
     def __init__(self):
         self.repository = DailyCommitAnalysisRepository()
@@ -28,83 +28,33 @@ class DailyCommitAnalysisService:
         self.user_repo = UserRepository()
         self.ai_integration = AIIntegrationV2()
 
-    async def analyze_for_report(
-        self, user_id: UUID, report_date: date, daily_report: DailyReport
-    ) -> DailyCommitAnalysis:
-        """
-        Analyze commits for a user when they submit their daily report.
-        This is the primary entry point for analysis.
-        """
-        try:
-            logger.info(f"Starting daily commit analysis for user {user_id} on {report_date} with report")
+    async def analyze(
+        self, user_id: UUID, analysis_date: date, force_reanalysis: bool = False
+    ) -> Optional[DailyCommitAnalysis]:
+        """Unified analysis entry point including commits and daily report if present.
 
-            # Check if analysis already exists
-            existing = await self.repository.get_by_user_and_date(user_id, report_date)
-            if existing:
-                logger.info(f"Analysis already exists for user {user_id} on {report_date}, updating...")
-                # Update with new daily report reference
-                update_data = DailyCommitAnalysisUpdate(daily_report_id=daily_report.id)
-                return await self.repository.update(existing.id, update_data)
-
-            # Fetch all commits for the user on this date
-            commits = await self._get_user_commits_for_date(user_id, report_date)
-
-            if not commits:
-                logger.info(f"No commits found for user {user_id} on {report_date}")
-                # Still create an analysis entry with 0 hours
-                return await self._create_zero_hour_analysis(user_id, report_date, daily_report.id, "with_report")
-
-            # Prepare context for AI analysis
-            context = await self._prepare_analysis_context(commits, daily_report, user_id, report_date)
-
-            # Call AI for holistic analysis
-            ai_result = await self.ai_integration.analyze_daily_work(context)
-
-            # Create the analysis record
-            analysis_data = DailyCommitAnalysisCreate(
-                user_id=user_id,
-                analysis_date=report_date,
-                total_estimated_hours=Decimal(str(ai_result.get("total_estimated_hours", 0))),
-                commit_count=len(commits),
-                daily_report_id=daily_report.id,
-                analysis_type="with_report",
-                ai_analysis=ai_result,
-                complexity_score=ai_result.get("average_complexity_score"),
-                seniority_score=ai_result.get("average_seniority_score"),
-                repositories_analyzed=list(set(c.repository for c in commits if c.repository)),
-                total_lines_added=sum(c.additions or 0 for c in commits),
-                total_lines_deleted=sum(c.deletions or 0 for c in commits),
-            )
-
-            analysis = await self.repository.create(analysis_data)
-
-            # Update commits to link to this analysis
-            await self._link_commits_to_analysis(commits, analysis.id)
-
-            logger.info(f"✓ Daily analysis created: {analysis.id} with {analysis.total_estimated_hours} hours")
-            return analysis
-
-        except Exception as e:
-            logger.error(f"Error analyzing commits for report: {e}", exc_info=True)
-            raise ExternalServiceError(
-                service_name="Daily Commit Analysis", original_message=f"Failed to analyze commits: {str(e)}"
-            )
-
-    async def analyze_for_date(self, user_id: UUID, analysis_date: date) -> DailyCommitAnalysis:
-        """
-        Analyze commits for a user on a specific date (without daily report).
-        This is used by the midnight cron job.
+        - If a daily report exists for the date, include it and add explicit deduplication instruction.
+        - If no commits and no report exist, create a zero-hour analysis for consistency.
+        - If an analysis already exists and force_reanalysis=False, return it.
         """
         try:
-            logger.info(f"Starting automatic daily commit analysis for user {user_id} on {analysis_date}")
+            logger.info(
+                f"Starting unified daily analysis for user {user_id} on {analysis_date} (force={force_reanalysis})"
+            )
 
-            # Check if analysis already exists
-            existing = await self.repository.get_by_user_and_date(user_id, analysis_date)
-            if existing:
-                logger.info(f"Analysis already exists for user {user_id} on {analysis_date}")
-                return existing
+            # Check for existing analysis unless forcing reanalysis
+            if not force_reanalysis:
+                existing = await self.repository.get_by_user_and_date(user_id, analysis_date)
+                if existing:
+                    logger.info(
+                        f"Analysis already exists for user {user_id} on {analysis_date}: {existing.id}"
+                    )
+                    return existing
 
-            # Check if user has a daily report (they might have submitted late)
+            # Gather inputs
+            commits = await self._get_user_commits_for_date(user_id, analysis_date)
+
+            # Check if user has a daily report (in case Slack submitted earlier or later)
             try:
                 daily_report = await self.daily_report_repo.get_daily_reports_by_user_and_date(
                     user_id, datetime.combine(analysis_date, datetime.min.time())
@@ -113,31 +63,25 @@ class DailyCommitAnalysisService:
                 logger.warning(f"Could not fetch daily report for {user_id} on {analysis_date}: {e}")
                 daily_report = None
 
-            if daily_report:
-                # Use the report-based analysis instead
-                return await self.analyze_for_report(user_id, analysis_date, daily_report)
+            # If no work found at all, create a zero-hour entry for consistency
+            if not commits and not daily_report:
+                logger.info(f"No commits or report found for user {user_id} on {analysis_date}; creating zero-hour entry")
+                return await self._create_zero_hour_analysis(user_id, analysis_date, None, "automatic")
 
-            # Fetch all commits for the user on this date
-            commits = await self._get_user_commits_for_date(user_id, analysis_date)
+            # Build AI context (adds deduplication instruction if report present)
+            context = await self._prepare_analysis_context(commits, daily_report, user_id, analysis_date)
 
-            if not commits:
-                logger.info(f"No commits found for user {user_id} on {analysis_date}")
-                return None  # Don't create zero-hour analysis for automatic runs
-
-            # Prepare context for AI analysis (without daily report)
-            context = await self._prepare_analysis_context(commits, None, user_id, analysis_date)
-
-            # Call AI for holistic analysis
+            # Analyze via AI
             ai_result = await self.ai_integration.analyze_daily_work(context)
 
-            # Create the analysis record
+            # Create or update analysis record
             analysis_data = DailyCommitAnalysisCreate(
                 user_id=user_id,
                 analysis_date=analysis_date,
                 total_estimated_hours=Decimal(str(ai_result.get("total_estimated_hours", 0))),
                 commit_count=len(commits),
-                daily_report_id=None,
-                analysis_type="automatic",
+                daily_report_id=daily_report.id if daily_report else None,
+                analysis_type="with_report" if daily_report else "automatic",
                 ai_analysis=ai_result,
                 complexity_score=ai_result.get("average_complexity_score"),
                 seniority_score=ai_result.get("average_seniority_score"),
@@ -146,16 +90,46 @@ class DailyCommitAnalysisService:
                 total_lines_deleted=sum(c.deletions or 0 for c in commits),
             )
 
-            analysis = await self.repository.create(analysis_data)
+            existing = await self.repository.get_by_user_and_date(user_id, analysis_date)
+            if existing and force_reanalysis:
+                update_data = DailyCommitAnalysisUpdate(
+                    total_estimated_hours=analysis_data.total_estimated_hours,
+                    ai_analysis=analysis_data.ai_analysis,
+                    complexity_score=analysis_data.complexity_score,
+                    seniority_score=analysis_data.seniority_score,
+                    daily_report_id=analysis_data.daily_report_id,
+                )
+                analysis = await self.repository.update(existing.id, update_data)
+            else:
+                analysis = await self.repository.create(analysis_data)
 
-            # Update commits to link to this analysis
+            # Link commits to analysis (non-blocking if unimplemented)
             await self._link_commits_to_analysis(commits, analysis.id)
 
             logger.info(
-                f"✓ Automatic daily analysis created: {analysis.id} with {analysis.total_estimated_hours} hours"
+                f"✓ Unified daily analysis complete: {analysis.id} with {analysis.total_estimated_hours} hours (type={analysis.analysis_type})"
             )
             return analysis
 
+        except Exception as e:
+            logger.error(f"Error in unified daily analysis: {e}", exc_info=True)
+            raise ExternalServiceError(
+                service_name="Daily Work Analysis", original_message=f"Failed to analyze daily work: {str(e)}"
+            )
+
+    async def analyze_for_report(
+        self, user_id: UUID, report_date: date, daily_report: DailyReport
+    ) -> DailyCommitAnalysis:
+        """
+        Backward-compatible entry: when a report is submitted for a date, run unified analysis.
+        Always forces reanalysis to fold the fresh report into the day’s analysis.
+        """
+        return await self.analyze(user_id=user_id, analysis_date=report_date, force_reanalysis=True)
+
+    async def analyze_for_date(self, user_id: UUID, analysis_date: date) -> DailyCommitAnalysis:
+        """Analyze a given date, including report if present; used by midnight cron."""
+        try:
+            return await self.analyze(user_id=user_id, analysis_date=analysis_date, force_reanalysis=False)
         except Exception as e:
             logger.error(f"Error in automatic daily analysis: {e}", exc_info=True)
             raise ExternalServiceError(
@@ -235,7 +209,7 @@ class DailyCommitAnalysisService:
     async def _prepare_analysis_context(
         self, commits: List[Commit], daily_report: Optional[DailyReport], user_id: UUID, analysis_date: date
     ) -> Dict:
-        """Prepare context for AI analysis"""
+        """Prepare context for AI analysis, with deduplication guidance when a report is present."""
         # Get user info for context
         user = await self.user_repo.get_by_id(user_id)
         user_name = user.name if user else "Unknown"
@@ -273,6 +247,16 @@ class DailyCommitAnalysisService:
                 "raw_text": daily_report.raw_text_input,
                 "ai_analysis": daily_report.ai_analysis.model_dump() if daily_report.ai_analysis else None,
             }
+
+            # Explicit deduplication instruction to avoid double counting between commits and report
+            context["deduplication_instruction"] = (
+                "IMPORTANT: When analyzing, identify work that appears in BOTH commits and the daily report. "
+                "Do NOT double-count hours for the same work. If a task is mentioned in the daily report "
+                "and also has corresponding commits, count it only ONCE in your total hour estimation. "
+                "Look for overlaps such as: same feature names, same bug fixes, same documentation updates. "
+                "The daily report might include meetings/reviews/planning that should be added to commit-based work, "
+                "but implementation work should not be counted twice."
+            )
 
         return context
 

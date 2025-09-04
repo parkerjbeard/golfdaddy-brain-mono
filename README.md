@@ -25,7 +25,6 @@ The project is structured into two main parts:
 
 - Python 3.11+
 - Bun 1.x (frontend dev/build)
-- Docker and Docker Compose (optional, for containerized setup)
 
 ### Local Development Setup
 
@@ -72,52 +71,8 @@ The project is structured into two main parts:
 
 ### Viewing Logs
 
-- Native dev:
-  - Backend: logs print in the terminal running `make run`
-  - Frontend: logs print in the terminal running `bun run dev`
-
-- Docker (dev profile):
-  ```bash
-  # Tail backend logs
-  docker compose --profile dev logs -f backend
-
-  # Tail frontend logs
-  docker compose --profile dev logs -f frontend
-
-  # Show last N lines
-  docker compose --profile dev logs --tail=100 backend
-  ```
-
-- Docker (prod profile):
-  ```bash
-  docker compose --profile prod logs -f app
-  ```
-
-### Docker Setup (Supabase-only)
-
-This project uses Supabase for the database in all environments. No local Postgres container is used.
-
-- Dev (containers):
-  ```bash
-  docker compose --profile dev up --build
-  ```
-  - Frontend (Vite dev): http://localhost:8080
-  - Backend API: http://localhost:8001
-
-- Dev (native, recommended):
-  ```bash
-  # Backend (FastAPI)
-  cd backend && make run
-
-  # Frontend (Bun + Vite)
-  cd frontend && bun install && bun run dev
-  ```
-
-- Prod-like single container (serves built frontend + API):
-  ```bash
-  docker compose --profile prod up --build
-  ```
-  - App: http://localhost:8000
+- Backend: logs print in the terminal running `make run`
+- Frontend: logs print in the terminal running `bun run dev`
 
 Ensure your `.env` (root) and `backend/.env` are configured with your Supabase `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and `DATABASE_URL` before starting.
 
@@ -176,14 +131,7 @@ See [DAILY_REPORT_WORKFLOW.md](./DAILY_REPORT_WORKFLOW.md) for detailed informat
 
 ## Deployment
 
-The application can be deployed using Docker Compose or separately for the frontend and backend.
-
-### Docker Deployment
-
-Single-container (serves frontend + API):
-```bash
-docker compose --profile prod up -d --build
-```
+Render is the canonical deployment target for this project. See `RENDER_DEPLOYMENT.md` and `render.yaml` for service configuration and environment variable management. Other deployment configs (Fly.io, Vercel/Netlify, Docker Compose) have been removed to reduce confusion.
 
 ## Automated Documentation
 

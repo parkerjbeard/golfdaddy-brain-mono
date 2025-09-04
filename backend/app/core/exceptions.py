@@ -82,10 +82,22 @@ class AuthenticationError(AppExceptionBase):
 
 
 class RateLimitExceededError(AppExceptionBase):
-    """Raised when a rate limit is exceeded."""
+    """Raised when a rate limit is exceeded.
 
-    def __init__(self, message: str = "Rate limit exceeded. Please try again later."):
+    Optionally includes `retry_after` seconds and `service_name` for callers
+    to present more helpful messaging or headers.
+    """
+
+    def __init__(
+        self,
+        message: str = "Rate limit exceeded. Please try again later.",
+        *,
+        retry_after: float | None = None,
+        service_name: str | None = None,
+    ):
         super().__init__(message=message, status_code=status.HTTP_429_TOO_MANY_REQUESTS, code="RATE_LIMIT_EXCEEDED")
+        self.retry_after = retry_after
+        self.service_name = service_name
 
 
 class BadRequestError(AppExceptionBase):

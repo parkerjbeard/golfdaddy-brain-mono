@@ -2,10 +2,11 @@ import logging
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 
-from fastapi import HTTPException, Request, Response, status
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.exceptions import RateLimitExceededError
+from app.core.rate_limiter import RateLimitConfig, SlidingWindowRateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,9 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
     ):
         super().__init__(app)
         self.rate_limit_per_minute = rate_limit_per_minute
-        self.window_size = 60  # 1 minute in seconds
-        self.request_store: Dict[str, list] = {}  # Store of {identifier: [timestamps]}
+        self.window_size = 60  # seconds
+        # Per-identifier limiter instances using shared core implementation
+        self._limiters: Dict[str, SlidingWindowRateLimiter] = {}
         self.api_key_header = api_key_header
         self.api_keys = api_keys or {}  # Dict of {api_key: custom_rate_limit}
         self.exclude_paths = exclude_paths or []
@@ -47,9 +49,23 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         # Determine rate limit for this identifier
         rate_limit = self.api_keys.get(api_key, self.rate_limit_per_minute) if api_key else self.rate_limit_per_minute
 
-        # Apply rate limiting
+        # Apply rate limiting using shared core sliding window limiter
+        limiter = self._get_limiter(identifier, rate_limit)
         current_time = time.time()
-        is_allowed, request_count, retry_after = self._check_rate_limit(identifier, current_time, rate_limit)
+        retry_after: Optional[float] = None
+        try:
+            await limiter.acquire(1)
+            # If acquire succeeds, estimate current count for headers
+            # Count timestamps in window for header math
+            now = current_time
+            window_start = now - self.window_size
+            # Access internal state safely; this is a simple in-memory limiter
+            request_count = len([t for t in limiter.request_times if t > window_start])
+            is_allowed = True
+        except RateLimitExceededError as e:
+            is_allowed = False
+            request_count = limiter.config.requests_per_hour
+            retry_after = e.retry_after or self.window_size
 
         # Set rate limit headers
         headers = {
@@ -61,13 +77,8 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         # If rate limit exceeded, return 429 with headers
         if not is_allowed:
             logger.warning(f"Rate limit exceeded for {identifier} on {request.url.path}")
-            # Add rate limit headers to the exception context if needed by a specialized handler
-            # For now, the standard RateLimitExceededError will be raised.
-            # The headers will still be set on the *next* successful response if the client retries.
             raise RateLimitExceededError(
-                message="Rate limit exceeded. Please try again later."
-                # Optionally, could add headers here if the exception/handler supported it:
-                # headers=headers
+                message="Rate limit exceeded. Please try again later.", retry_after=retry_after, service_name="api"
             )
 
         # Rate limit not exceeded, proceed with request
@@ -79,40 +90,16 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def _check_rate_limit(
-        self, identifier: str, current_time: float, rate_limit: int
-    ) -> Tuple[bool, int, Optional[float]]:
-        """
-        Check if the request is within rate limits.
-
-        Args:
-            identifier: Client identifier (IP or API key)
-            current_time: Current timestamp
-            rate_limit: Maximum requests allowed per minute
-
-        Returns:
-            (is_allowed, current_count, retry_after_seconds)
-        """
-        # Initialize empty list if identifier not in store
-        if identifier not in self.request_store:
-            self.request_store[identifier] = []
-
-        # Remove timestamps older than the window
-        self.request_store[identifier] = [
-            ts for ts in self.request_store[identifier] if current_time - ts < self.window_size
-        ]
-
-        # Count requests in the current window
-        request_count = len(self.request_store[identifier])
-
-        # Check if adding this request exceeds the limit
-        if request_count >= rate_limit:
-            # Calculate when the oldest request will expire
-            oldest_timestamp = min(self.request_store[identifier]) if self.request_store[identifier] else current_time
-            retry_after = max(0, self.window_size - (current_time - oldest_timestamp))
-            return False, request_count, retry_after
-
-        # Add current request timestamp to the store
-        self.request_store[identifier].append(current_time)
-
-        return True, request_count + 1, None
+    def _get_limiter(self, identifier: str, per_minute_limit: int) -> SlidingWindowRateLimiter:
+        """Get or create a sliding window limiter for the identifier with a 60s window."""
+        limiter = self._limiters.get(identifier)
+        desired_limit = per_minute_limit  # treated as limit per 60s window
+        if limiter is None or limiter.config.requests_per_hour != desired_limit or limiter.config.window_seconds != self.window_size:
+            cfg = RateLimitConfig(
+                requests_per_hour=desired_limit,  # interpreted as requests per window
+                name=f"inbound:{identifier}",
+                window_seconds=self.window_size,
+            )
+            limiter = SlidingWindowRateLimiter(cfg)
+            self._limiters[identifier] = limiter
+        return limiter

@@ -5,8 +5,6 @@ from contextlib import contextmanager
 from functools import wraps
 from typing import Generator, Optional
 
-import httpx
-
 from app.config.settings import settings
 from supabase import Client, create_client
 
@@ -33,7 +31,7 @@ def retry_on_connection_error(max_retries=3, backoff_factor=1.0):
                         return await func(*args, **kwargs)
                     else:
                         return func(*args, **kwargs)
-                except (httpx.ConnectError, ConnectionError, OSError) as e:
+                except (ConnectionError, OSError) as e:
                     last_exception = e
                     if attempt == max_retries - 1:
                         logger.error(f"All {max_retries} attempts failed for {func.__name__}: {str(e)}")
@@ -55,7 +53,7 @@ def retry_on_connection_error(max_retries=3, backoff_factor=1.0):
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
-                except (httpx.ConnectError, ConnectionError, OSError) as e:
+                except (ConnectionError, OSError) as e:
                     last_exception = e
                     if attempt == max_retries - 1:
                         logger.error(f"All {max_retries} attempts failed for {func.__name__}: {str(e)}")
@@ -90,25 +88,8 @@ def get_supabase_client() -> Client:
         if not settings.supabase_url or not settings.supabase_service_key:
             raise ValueError("Supabase URL and service role key must be set")
 
-        # Configure HTTP client with connection pooling and SSL settings
-        transport = httpx.HTTPTransport(
-            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
-            verify=True,  # Enable SSL verification
-            retries=3,
-        )
-
-        # Create HTTP client with timeout and retry settings
-        http_client = httpx.Client(
-            transport=transport, timeout=httpx.Timeout(30.0), follow_redirects=True  # 30 second timeout
-        )
-
         _supabase_client = create_client(settings.supabase_url, settings.supabase_service_key)
-
-        # Override the HTTP client for better connection handling
-        # Note: Commenting out due to API changes in Supabase 2.17.0
-        # _supabase_client.postgrest._client._client = http_client
-
-        logger.info("Supabase client initialized with enhanced connection settings")
+        logger.info("Supabase client initialized")
 
     return _supabase_client
 

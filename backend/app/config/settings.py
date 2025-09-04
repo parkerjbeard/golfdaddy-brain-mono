@@ -70,6 +70,13 @@ class Settings(BaseSettings):
     # GitHub Webhook Configuration
     GITHUB_WEBHOOK_SECRET: Optional[str] = Field(None, env="GITHUB_WEBHOOK_SECRET")
 
+    # Legacy integration/webhook values (optional). Defining to avoid AttributeError when accessed via properties.
+    MAKE_INTEGRATION_API_KEY: Optional[str] = Field(None, env="MAKE_INTEGRATION_API_KEY")
+    MAKE_WEBHOOK_TASK_CREATED: Optional[str] = Field(None, env="MAKE_WEBHOOK_TASK_CREATED")
+    MAKE_WEBHOOK_TASK_BLOCKED: Optional[str] = Field(None, env="MAKE_WEBHOOK_TASK_BLOCKED")
+    MAKE_WEBHOOK_EOD_REMINDER: Optional[str] = Field(None, env="MAKE_WEBHOOK_EOD_REMINDER")
+    MAKE_WEBHOOK_MASTERY_REMINDER: Optional[str] = Field(None, env="MAKE_WEBHOOK_MASTERY_REMINDER")
+
     # Legacy webhook URL placeholders removed; direct Slack messages are generally disabled
 
     # OpenAI settings
@@ -81,6 +88,10 @@ class Settings(BaseSettings):
     # Service-specific AI models
     COMMIT_ANALYSIS_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="COMMIT_ANALYSIS_MODEL")
     CODE_QUALITY_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="CODE_QUALITY_MODEL")
+
+    # Health check toggles
+    HEALTH_CHECK_TIMEOUT: int = Field(10, env="HEALTH_CHECK_TIMEOUT")
+    ENABLE_DETAILED_HEALTH_CHECKS: bool = Field(False, env="ENABLE_DETAILED_HEALTH_CHECKS")
 
     # Embeddings/semantic search removed — related config deleted
 

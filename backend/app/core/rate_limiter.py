@@ -17,21 +17,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RateLimitConfig:
-    """Configuration for rate limiting behavior."""
+    """Configuration for rate limiting behavior.
+
+    Note: `requests_per_hour` is treated as "requests per window" when
+    paired with a custom `window_seconds` in sliding-window mode.
+    """
 
     requests_per_hour: int
     burst_limit: Optional[int] = None  # Allow short bursts
     name: str = "default"
+    window_seconds: int = 3600
 
 
-class RateLimitExceededError(Exception):
-    """Raised when rate limit is exceeded."""
-
-    def __init__(self, service_name: str, reset_time: float):
-        self.service_name = service_name
-        self.reset_time = reset_time
-        self.retry_after = max(0, reset_time - time.time())
-        super().__init__(f"Rate limit exceeded for '{service_name}'. " f"Retry after {self.retry_after:.1f} seconds.")
+from app.core.exceptions import RateLimitExceededError
 
 
 class TokenBucketRateLimiter:
@@ -78,8 +76,15 @@ class TokenBucketRateLimiter:
                 wait_time = needed_tokens / self.refill_rate
                 reset_time = time.time() + wait_time
 
-                logger.warning(f"Rate limit exceeded for '{self.config.name}', " f"need {needed_tokens} more tokens")
-                raise RateLimitExceededError(self.config.name, reset_time)
+                logger.warning(f"Rate limit exceeded for '{self.config.name}', need {needed_tokens} more tokens")
+                retry_after = max(0, reset_time - time.time())
+                raise RateLimitExceededError(
+                    message=(
+                        f"Rate limit exceeded for '{self.config.name}'. Retry after {retry_after:.1f} seconds."
+                    ),
+                    retry_after=retry_after,
+                    service_name=self.config.name,
+                )
 
     def _refill_bucket(self):
         """Refill tokens based on elapsed time."""
@@ -114,7 +119,7 @@ class SlidingWindowRateLimiter:
 
     def __init__(self, config: RateLimitConfig):
         self.config = config
-        self.window_size = 3600  # 1 hour in seconds
+        self.window_size = config.window_seconds  # seconds
         self.request_times: list = []
         self._lock = asyncio.Lock()
 
@@ -148,10 +153,17 @@ class SlidingWindowRateLimiter:
                 else:
                     reset_time = now + self.window_size
 
+                retry_after = max(0, reset_time - now)
                 logger.warning(
-                    f"Rate limit exceeded for '{self.config.name}', " f"current requests: {len(self.request_times)}"
+                    f"Rate limit exceeded for '{self.config.name}', current requests: {len(self.request_times)}"
                 )
-                raise RateLimitExceededError(self.config.name, reset_time)
+                raise RateLimitExceededError(
+                    message=(
+                        f"Rate limit exceeded for '{self.config.name}'. Retry after {retry_after:.1f} seconds."
+                    ),
+                    retry_after=retry_after,
+                    service_name=self.config.name,
+                )
 
             # Add request timestamps
             for _ in range(requests):
