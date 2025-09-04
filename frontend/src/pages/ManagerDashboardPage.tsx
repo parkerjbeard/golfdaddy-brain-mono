@@ -433,24 +433,61 @@ const ManagerDashboardPageV2: React.FC = () => {
                                     <p className="text-sm font-medium text-gray-700">Quick Stats</p>
                                     <div className="h-20 bg-white rounded-lg p-3 border">
                                       <p className="text-xs text-gray-500">7-Day Trend</p>
-                                      <div className="flex items-end gap-1 h-12 mt-1">
-                                        {[40, 65, 55, 80, 70, 90, 85].map((h, i) => (
-                                          <div 
-                                            key={i} 
-                                            className="flex-1 bg-blue-500 rounded-t"
-                                            style={{ height: `${h}%` }}
-                                          />
-                                        ))}
-                                      </div>
+                                      {(() => {
+                                        // Build a compact bar sparkline from real daily hours
+                                        const series = (widgetData?.daily_hours_series || []).slice(-7);
+                                        const max = Math.max(0, ...series.map(s => s.hours || 0));
+                                        return (
+                                          <div className="flex items-end gap-1 h-12 mt-1">
+                                            {series.map((s, i) => {
+                                              const pct = max > 0 ? Math.round((s.hours / max) * 100) : 0;
+                                              return (
+                                                <div
+                                                  key={i}
+                                                  className="flex-1 bg-blue-500/90 rounded-t"
+                                                  style={{ height: `${pct}%` }}
+                                                  title={`${s.date}: ${s.hours.toFixed(2)}h`}
+                                                />
+                                              );
+                                            })}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                   <div className="space-y-2">
                                     <p className="text-sm font-medium text-gray-700">Recent Activity</p>
-                                    <div className="space-y-1 text-sm text-gray-600">
-                                      <p>• Last commit: 2 hours ago</p>
-                                      <p>• Today's hours: {(hours / 7).toFixed(1)}</p>
-                                      <p>• Weekly average: {(pph * 1.2).toFixed(1)} pts/hr</p>
-                                    </div>
+                                    {(() => {
+                                      const hoursSeries = widgetData?.daily_hours_series || [];
+                                      // Today's hours is the end of the applied global range (UTC date key)
+                                      const endDate = confirmedGlobalDateRange?.to || confirmedGlobalDateRange?.from || new Date();
+                                      const todayStr = format(endDate as Date, 'yyyy-MM-dd');
+                                      const todayHours = hoursSeries.find(d => d.date === todayStr)?.hours ?? 0;
+                                      // Weekly average points/hr based on last 7 days
+                                      const pointsSeries = widgetData?.daily_points_series || [];
+                                      const last7Hours = hoursSeries.slice(-7).reduce((a, b) => a + (b.hours || 0), 0);
+                                      const last7Points = pointsSeries.slice(-7).reduce((a, b) => a + (b.points || 0), 0);
+                                      const weeklyAvg = last7Hours > 0 ? (last7Points / last7Hours) : 0;
+                                      // Last active (last day with any hours)
+                                      let lastActiveText = 'No recent activity';
+                                      for (let i = hoursSeries.length - 1; i >= 0; i--) {
+                                        if ((hoursSeries[i]?.hours || 0) > 0) {
+                                          const d = new Date(hoursSeries[i]!.date);
+                                          const diffMs = Date.now() - d.getTime();
+                                          const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+                                          const diffDays = Math.floor(diffHrs / 24);
+                                          lastActiveText = diffDays >= 1 ? `${diffDays}d ago` : `${diffHrs}h ago`;
+                                          break;
+                                        }
+                                      }
+                                      return (
+                                        <div className="space-y-1 text-sm text-gray-600">
+                                          <p>• Last activity: {lastActiveText}</p>
+                                          <p>• Today's hours: {todayHours.toFixed(1)}</p>
+                                          <p>• Weekly average: {weeklyAvg.toFixed(1)} pts/hr</p>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               </td>
