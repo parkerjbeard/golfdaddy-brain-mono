@@ -155,6 +155,14 @@ if os.path.exists(frontend_dist_path):
         if os.path.isfile(static_file):
             return FileResponse(static_file)
 
+        # Fallback: some bundlers may request chunks without the /assets prefix
+        # Try to resolve to the assets directory using the basename
+        basename = os.path.basename(full_path)
+        if basename:
+            asset_candidate = os.path.join(frontend_dist_path, "assets", basename)
+            if os.path.isfile(asset_candidate):
+                return FileResponse(asset_candidate)
+
         # For everything else, serve the SPA index.html
         index_file = os.path.join(frontend_dist_path, "index.html")
         if os.path.exists(index_file):
