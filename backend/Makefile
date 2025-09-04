@@ -72,24 +72,27 @@ migrate-create: ## Create a new migration
 	@read -p "Enter migration name: " name; \
 	alembic revision -m "$$name"
 
-docker-build: ## Build Docker image
-	docker build -t golfdaddy-backend:latest .
-	docker build -f Dockerfile.prod -t golfdaddy-backend:prod .
+docker-build: ## Build unified app image (root Dockerfile)
+	docker build -f ../Dockerfile -t golfdaddy-app:latest ..
 
 docker-run: ## Run application with Docker Compose (root compose)
 	docker-compose -f ../docker-compose.yml up -d
 
 docker-stop: ## Stop Docker Compose services
-	docker-compose -f ../docker-compose.yml down
+	docker compose -f ../docker-compose.yml down
 
-docker-logs: ## View Docker logs
-	docker-compose -f ../docker-compose.yml logs -f backend
+docker-logs: ## View Docker logs (backend)
+	docker compose -f ../docker-compose.yml logs -f backend
 
 docker-shell: ## Open shell in backend container
-	docker-compose -f ../docker-compose.yml exec backend /bin/bash
+	docker compose -f ../docker-compose.yml exec backend /bin/sh
 
-db-shell: ## Open PostgreSQL shell
-	docker-compose -f ../docker-compose.yml exec db psql -U postgres -d golfdaddy
+db-shell: ## Connect to Supabase via psql (requires psql and $DATABASE_URL)
+	@if [ -z "$$DATABASE_URL" ]; then \
+		echo "DATABASE_URL is not set. Export it (from Supabase) then rerun."; \
+		exit 1; \
+	fi
+	psql "$$DATABASE_URL"
 
 
 

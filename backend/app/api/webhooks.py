@@ -1,7 +1,5 @@
 """
 Direct webhook endpoints for external integrations.
-
-This module replaces Make.com webhook forwarding with direct webhook handling.
 """
 
 import logging
@@ -50,9 +48,8 @@ async def github_webhook(
     """
     Handle GitHub webhook events directly.
 
-    This endpoint receives webhooks from GitHub and processes them without
-    going through Make.com. It verifies the webhook signature and processes
-    push events to analyze commits.
+    This endpoint receives webhooks from GitHub, verifies the signature,
+    and processes push events to analyze commits.
 
     Headers:
         X-Hub-Signature-256: HMAC signature for verification

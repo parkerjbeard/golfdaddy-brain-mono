@@ -89,7 +89,7 @@ const userUpdateSchema = z.object({
   team_id: z.string().uuid("Invalid UUID format for Team ID").optional().nullable(),
   reports_to_id: z.string().uuid("Invalid UUID format for Reports To ID").optional().nullable(),
   is_active: z.boolean().optional().nullable(),
-  // avatar_url, metadata, personal_mastery, preferences are not directly in this form for now
+  // avatar_url, metadata, preferences are not directly in this form for now
 });
 
 type UserUpdateFormData = z.infer<typeof userUpdateSchema>;

@@ -15,7 +15,7 @@ class CommitPayload(BaseModel):
     repository_url: HttpUrl = Field(..., description="URL of the repository")
     branch: str = Field(..., description="Branch the commit was pushed to")
     diff_url: Optional[HttpUrl] = Field(None, description="URL to the .diff or .patch file for the commit")
-    commit_diff: Optional[str] = Field(None, description="Optional: The actual diff content if fetched by Make.com")
+    commit_diff: Optional[str] = Field(None, description="Optional: The actual diff content if fetched upstream")
     files_changed: Optional[List[str]] = Field(None, description="List of files changed in the commit")
     additions: Optional[int] = Field(None, description="Number of additions in the commit")
     deletions: Optional[int] = Field(None, description="Number of deletions in the commit")

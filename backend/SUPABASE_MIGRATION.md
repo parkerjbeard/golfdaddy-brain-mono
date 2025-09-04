@@ -26,7 +26,7 @@ Update your environment variables in `.env`:
 ```
 # Supabase Configuration
 SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+SUPABASE_SERVICE_KEY=your-service-role-key-here
 SUPABASE_ANON_KEY=your-anon-key-here
 DATABASE_URL=postgres://postgres:postgres@your-project-ref.supabase.co:5432/postgres
 ```
@@ -95,7 +95,7 @@ Supabase automatically creates backups of your database. Consider setting up add
 
 ### Common Issues
 
-1. **Authentication Errors**: Ensure your SUPABASE_SERVICE_ROLE_KEY is valid and has the appropriate permissions.
+1. **Authentication Errors**: Ensure your SUPABASE_SERVICE_KEY is valid and has the appropriate permissions.
 
 2. **Database Connection Errors**: Check that DATABASE_URL is correctly formatted and accessible.
 

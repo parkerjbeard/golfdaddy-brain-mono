@@ -1,8 +1,5 @@
 """
-Webhook handlers for direct integrations.
-
-This module contains webhook handlers that replace Make.com integrations
-with direct webhook processing.
+Webhook handlers for direct integrations with external services.
 """
 
 from .base import WebhookHandler, WebhookVerificationError

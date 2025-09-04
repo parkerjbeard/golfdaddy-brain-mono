@@ -23,12 +23,7 @@ class User(BaseModel):
     team: Optional[str] = None
     team_id: Optional[UUID] = None  # Foreign key to Team model
     reports_to_id: Optional[UUID] = Field(None, description="ID of the user this user reports to")
-    # personal_mastery field seems specific, maps to metadata or a separate feature.
-    # For generic metadata from DB:
     metadata: Optional[Dict[str, Any]] = Field(None, description="Arbitrary user metadata from DB")
-    personal_mastery: Optional[Dict[str, Any]] = Field(
-        None, description="Manager-specific tasks/feedback, potentially part of metadata or separate structure"
-    )
     created_at: datetime
     updated_at: datetime
     last_login_at: Optional[datetime] = None

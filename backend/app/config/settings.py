@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     # Integration Keys
     GITHUB_TOKEN: Optional[str] = Field(None, env="GITHUB_TOKEN")  # Legacy PAT, prefer GitHub App
     AI_SERVICE_KEY: Optional[str] = Field(None, env="AI_SERVICE_KEY")
-    # MAKE_INTEGRATION_API_KEY: Optional[str] = Field(None, env="MAKE_INTEGRATION_API_KEY")  # Removed - no longer using Make.com
+    # Optional legacy integration key support (env: MAKE_INTEGRATION_API_KEY)
 
     # GitHub App Configuration (preferred over PAT)
     GITHUB_APP_ID: Optional[str] = Field(None, env="GITHUB_APP_ID")
@@ -70,8 +70,7 @@ class Settings(BaseSettings):
     # GitHub Webhook Configuration
     GITHUB_WEBHOOK_SECRET: Optional[str] = Field(None, env="GITHUB_WEBHOOK_SECRET")
 
-    # Make.com Webhook URLs - Removed as per requirements
-    # Direct Slack messages are now disabled except for EOD reminders
+    # Legacy webhook URL placeholders removed; direct Slack messages are generally disabled
 
     # OpenAI settings
     OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")

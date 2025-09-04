@@ -1,6 +1,5 @@
 """
-Slack message templates using Block Kit for rich formatting.
-Replaces Make.com webhook message formatting.
+Slack message templates using Slack Block Kit for rich formatting.
 """
 
 from datetime import datetime
@@ -167,50 +166,7 @@ class SlackMessageTemplates:
             "blocks": blocks,
         }
 
-    @staticmethod
-    def personal_mastery_reminder(
-        user_id: str, skill_area: str, learning_goal: str, resources: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
-        """Template for personal mastery reminder."""
-        blocks = [
-            {"type": "header", "text": {"type": "plain_text", "text": "🎯 Personal Mastery Reminder", "emoji": True}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"<@{user_id}>, time to invest in your growth! 🌱"}},
-            {
-                "type": "section",
-                "fields": [
-                    {"type": "mrkdwn", "text": f"*Skill Area:*\n{skill_area}"},
-                    {"type": "mrkdwn", "text": f"*Today's Goal:*\n{learning_goal}"},
-                ],
-            },
-        ]
-
-        if resources:
-            blocks.append({"type": "divider"})
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "*📚 Suggested Resources:*"}})
-
-            for resource in resources[:3]:
-                blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"• {resource}"}})
-
-        blocks.append(
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Mark as Complete", "emoji": True},
-                        "style": "primary",
-                        "action_id": "mastery_complete",
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Snooze", "emoji": True},
-                        "action_id": "mastery_snooze",
-                    },
-                ],
-            }
-        )
-
-        return {"text": f"Personal mastery reminder: {skill_area}", "blocks": blocks}
+    
 
     @staticmethod
     def development_plan_created(

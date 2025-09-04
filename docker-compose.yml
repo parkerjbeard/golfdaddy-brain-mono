@@ -1,5 +1,7 @@
 services:
+  # Development backend (FastAPI with reload)
   backend:
+    profiles: ["dev"]
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -8,11 +10,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # Keep non-secret toggles here or move to .env as needed
       - AUTH_EXCLUDE_PATHS=/docs,/redoc,/openapi.json,/health,/auth,/api/auth/
-    depends_on:
-      db:
-        condition: service_healthy
     volumes:
       - ./backend:/app
     networks:
@@ -24,11 +22,12 @@ services:
       retries: 5
       start_period: 30s
 
+  # Development frontend (Vite dev server)
   frontend:
+    profiles: ["dev"]
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: golfdaddy_frontend_dev
     depends_on:
       backend:
         condition: service_healthy
@@ -47,27 +46,29 @@ services:
     networks:
       - golfdaddy-network
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=golfdaddy
+  # Production-like single service (builds frontend and serves via Gunicorn)
+  app:
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    env_file:
+      - ./.env
     ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - "8000:8000"
     networks:
       - golfdaddy-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
       timeout: 5s
       retries: 5
-
-volumes:
-  postgres_data:
+    restart: unless-stopped
 
 networks:
   golfdaddy-network:
-    driver: bridge 
+    driver: bridge

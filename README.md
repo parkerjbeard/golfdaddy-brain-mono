@@ -10,7 +10,7 @@ GolfDaddy Brain is an AI-powered software engineering assistant that helps teams
 - **RACI Task Management**: Complete task tracking with Responsible, Accountable, Consulted, and Informed roles
 - **KPI Tracking**: Automated calculation of velocity, completion rates, and team performance
 - **Automatic Documentation**: AI generates and updates documentation based on code changes
-- **Manager Development**: Personal mastery tracking and AI-generated development plans
+ 
 
 ## Project Structure
 
@@ -77,17 +77,31 @@ The project is structured into two main parts:
    - Backend API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
 
-### Docker Setup
+### Docker Setup (Supabase-only)
 
-1. **Build and start the containers**:
-   ```bash
-   docker-compose up --build
-   ```
+This project uses Supabase for the database in all environments. No local Postgres container is used.
 
-2. **Access the application**:
-   - Frontend: http://localhost:5173
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
+- Dev (containers):
+  ```bash
+  docker compose --profile dev up --build
+  ```
+  - Frontend (Vite dev): http://localhost:8080
+  - Backend API: http://localhost:8001
+
+- Dev (native, recommended):
+  ```bash
+  # In one terminal
+  npm start
+  # Frontend: http://localhost:5173, Backend: http://localhost:8000
+  ```
+
+- Prod-like single container (serves built frontend + API):
+  ```bash
+  docker compose --profile prod up --build
+  ```
+  - App: http://localhost:8000
+
+Ensure your `.env` (root) and `backend/.env` are configured with your Supabase `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and `DATABASE_URL` before starting.
 
 ## Testing
 
@@ -149,8 +163,9 @@ The application can be deployed using Docker Compose or separately for the front
 
 ### Docker Deployment
 
+Single-container (serves frontend + API):
 ```bash
-docker-compose -f docker-compose.yml up -d
+docker compose --profile prod up -d --build
 ```
 
 ## Automated Documentation

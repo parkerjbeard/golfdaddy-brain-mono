@@ -41,7 +41,6 @@ class UserUpdatePayload(BaseModel):
     reports_to_id: Optional[UUID] = None
     is_active: Optional[bool] = None
     metadata: Optional[Dict[str, Any]] = None
-    personal_mastery: Optional[Dict[str, Any]] = None
     preferences: Optional[Dict[str, Any]] = None
 
 

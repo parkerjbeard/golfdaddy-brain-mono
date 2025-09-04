@@ -17,11 +17,10 @@ This is the single, canonical deployment for GolfDaddy Brain using a PaaS plus m
 
 ## Components (choose ONE hosting platform)
 
-### Option A: Render + Supabase
-- Web Service: 2 instances (≥ 0.5 vCPU / 1 GB) with HTTP health checks to `/health`
-- Background Worker: 1 instance (1 vCPU / 2 GB recommended) for AI batch
-- Cron Jobs: nightly/daily schedule to run batch worker or hit secure endpoint
-- Static Site: Frontend with CDN + managed TLS
+### Option A: Render + Supabase (recommended simplest)
+- Single Web Service using the root `Dockerfile` (builds frontend and serves API + SPA) — 2 instances (≥ 0.5 vCPU / 1 GB) with HTTP health checks to `/health`
+- Optional Background Worker (if long-running jobs move out of request path)
+- Cron Jobs: nightly/daily schedule to hit a secure endpoint or run worker command
 - Secrets: Environment Group shared by services
 
 ### Option B: Fly.io + Supabase
@@ -80,7 +79,7 @@ app = "golfdaddy-brain"
 primary_region = "iad"
 
 [build]
-  dockerfile = "Dockerfile.backend-only"
+  dockerfile = "Dockerfile"
 
 [env]
   UVICORN_WORKERS = "2"
@@ -126,7 +125,7 @@ fly secrets set \
   DATABASE_URL="postgres://..." \
   SUPABASE_URL="https://<ref>.supabase.co" \
   SUPABASE_ANON_KEY="..." \
-  SUPABASE_SERVICE_ROLE_KEY="..." \
+  SUPABASE_SERVICE_KEY="..." \
   OPENAI_API_KEY="..." \
   GITHUB_TOKEN="..." \
   SLACK_BOT_TOKEN="..." \
@@ -171,12 +170,12 @@ Add a `render.yaml` at repo root:
 ```yaml
 services:
   - type: web
-    name: brain-api
+    name: brain-app
     env: docker
     plan: starter
     numInstances: 2
     healthCheckPath: /health
-    dockerfilePath: Dockerfile.backend-only
+    dockerfilePath: Dockerfile
     envVars:
       - key: DATABASE_URL
         fromGroup: brain-secrets
@@ -186,35 +185,23 @@ services:
         fromGroup: brain-secrets
       - key: OPENAI_API_KEY
         fromGroup: brain-secrets
-  - type: worker
-    name: brain-worker
-    env: docker
-    plan: starter
-    dockerfilePath: Dockerfile.backend-only
-    startCommand: python -m backend.scripts.worker
-    envVars:
-      - key: DATABASE_URL
-        fromGroup: brain-secrets
-  - type: cron
-    name: brain-daily-batch
-    schedule: "0 2 * * *"
-    command: python -m backend.scripts.run_daily_analysis
-    env: docker
-    dockerfilePath: Dockerfile.backend-only
-staticSites:
-  - name: brain-frontend
-    buildCommand: npm ci && npm run build
-    publishPath: dist
-    envVars:
-      - key: VITE_API_BASE_URL
-        value: https://brain-api.onrender.com
+  # Optionally add a worker or cron if you don't call a secure endpoint
+  # - type: worker
+  #   name: brain-worker
+  #   env: docker
+  #   plan: starter
+  #   dockerfilePath: Dockerfile
+  #   startCommand: python -m backend.scripts.worker
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromGroup: brain-secrets
 envVarGroups:
   - name: brain-secrets
 ```
 
 ### 2) Create environment group and set secrets
 Use the Render dashboard or API to create `brain-secrets` and set:
-`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`.
+`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`.
 
 ### 3) Deploy via API (non-interactive)
 ```bash
@@ -245,7 +232,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: docker build -t brain-api -f Dockerfile.backend-only .
+      - run: docker build -t brain-app -f Dockerfile .
       - run: flyctl deploy --detach --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

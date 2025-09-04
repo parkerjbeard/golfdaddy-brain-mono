@@ -24,7 +24,6 @@ export interface UserResponse {
   reports_to_id?: string | null; // UUID, ID of the user this user reports to
   avatar_url?: string | null; // HttpUrl
   metadata?: Record<string, any> | null; // Arbitrary user metadata
-  personal_mastery?: Record<string, any> | null; // Manager-specific tasks/feedback
   created_at?: string | null; // datetime
   updated_at?: string | null; // datetime
   last_login_at?: string | null; // datetime
@@ -52,7 +51,6 @@ export interface UserUpdateByAdminPayload {
   avatar_url?: string | null;
   reports_to_id?: string | null; // Added
   metadata?: Record<string, any> | null; // Added
-  personal_mastery?: Record<string, any> | null; // Added
   is_active?: boolean | null; // Added
   preferences?: Record<string, any> | null; // Added
-} 
+}

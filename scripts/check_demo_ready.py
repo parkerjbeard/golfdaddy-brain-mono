@@ -28,7 +28,7 @@ def check_demo_readiness():
         "OPENAI_API_KEY": "Required for AI analysis",
         "GITHUB_TOKEN": "Required for GitHub integration", 
         "SUPABASE_URL": "Required for database",
-        "SUPABASE_SERVICE_ROLE_KEY": "Required for database",
+        "SUPABASE_SERVICE_KEY": "Required for database",
     }
     
     for var, description in env_vars.items():
@@ -106,7 +106,7 @@ def check_demo_readiness():
             console.print(f"3. Install Python packages: pip install {' '.join(missing_packages)}")
         
         if any("Backend API" in check[0] and "❌" in check[1] for check in checks):
-            console.print("4. Start backend: docker-compose up -d")
+            console.print("4. Start dev stack: docker compose --profile dev up -d")
 
 if __name__ == "__main__":
     check_demo_readiness()

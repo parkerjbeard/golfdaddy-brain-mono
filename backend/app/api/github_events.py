@@ -18,7 +18,7 @@ api_key_header = APIKeyHeader(name=settings.api_key_header, auto_error=False)
 
 
 async def get_api_key(request: Request, api_key_header: str = Security(api_key_header)):
-    """Dependency to validate the incoming API key from Make.com."""
+    """Validate incoming API key from an external system."""
     actual_header_name = settings.api_key_header
     received_value = request.headers.get(actual_header_name)
     logger.info(f"Attempting API key authentication for header '{actual_header_name}'")
@@ -47,7 +47,7 @@ async def handle_commit_event(
     db_session: Client = Depends(get_db),
 ):
     """
-    Receives commit information (likely forwarded by Make.com).
+    Receives commit information posted by an external system.
     Validates the payload, finds the user, triggers AI analysis,
     optionally fetches diff content from GitHub if needed,
     and saves the commit record.

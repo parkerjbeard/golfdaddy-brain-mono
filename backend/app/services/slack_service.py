@@ -1,6 +1,5 @@
 """
-Slack service for direct API integration.
-Replaces Make.com webhooks with native Slack API calls.
+Slack service for direct API integration using Slack Web API.
 """
 
 import json

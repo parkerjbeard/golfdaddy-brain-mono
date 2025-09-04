@@ -22,7 +22,7 @@ Render Services:
 1. In Render, delete/disable the previous `brain-api` and `brain-frontend` services.
 2. Use the updated `render.yaml` (single service `brain`). Create a new Web Service from this repo, or click "Blueprints" and apply.
 3. Ensure your env group `brain-secrets` contains at least:
-   - `DATABASE_URL` (Render PostgreSQL external URL)
+   - `DATABASE_URL` (Supabase Postgres connection string)
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_KEY`
    - `OPENAI_API_KEY` (if applicable)
@@ -81,11 +81,11 @@ With unified single-service deployment, CORS should not apply. Ensure the fronte
 
 ### Issue: "Failed to fetch user profile"
 **Cause**: Backend can't verify Supabase token
-**Fix**: Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` match
+**Fix**: Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` match your Supabase project
 
 ### Issue: "Database connection failed"
 **Cause**: Wrong DATABASE_URL
-**Fix**: Copy external URL from Render PostgreSQL dashboard
+**Fix**: Copy the connection string from Supabase (Project Settings → Database)
 
 ## Deployment Checklist
 
@@ -95,7 +95,7 @@ With unified single-service deployment, CORS should not apply. Ensure the fronte
 - [ ] Backend env vars configured
 - [ ] Frontend env vars configured (especially API URL)
 - [ ] Database migrations run
-- [ ] Health check passes: `/api/v1/health`
+- [ ] Health check passes: `/health`
 - [ ] API docs accessible: `/docs`
 - [ ] Frontend loads without console errors
 - [ ] Authentication works (sign in/out)

@@ -64,7 +64,6 @@ export interface User {
   team_id?: string;
   reports_to_id?: string;
   metadata?: Record<string, any>;
-  personal_mastery?: Record<string, any>;
   created_at: string;
   updated_at: string;
   last_login_at?: string;
@@ -102,7 +101,6 @@ export interface UpdateUserRequest {
 export interface UpdateCurrentUserRequest {
   name?: string;
   preferences?: Record<string, any>;
-  personal_mastery?: Record<string, any>;
 }
 
 // ========== TASK TYPES ==========
