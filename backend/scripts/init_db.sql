@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS users (
   github_username TEXT,
   team_id UUID,
   reports_to_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  personal_mastery JSONB DEFAULT '{}'::JSONB,
   last_login_at TIMESTAMPTZ,
   is_active BOOLEAN DEFAULT TRUE,
   preferences JSONB DEFAULT '{}'::JSONB

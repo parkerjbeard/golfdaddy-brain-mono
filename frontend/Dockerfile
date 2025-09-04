@@ -1,17 +1,16 @@
-FROM node:20-slim AS builder
+FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package*.json ./
-# Clean install with platform-specific dependencies
-RUN npm ci --no-audit --no-fund || (rm -rf node_modules package-lock.json && npm install --legacy-peer-deps)
+# Copy package files and install dependencies via Bun
+COPY package.json bun.lockb ./
+RUN (bun ci) || bun install --frozen-lockfile
 
 # Copy the rest of the application
 COPY . .
 
 # Build the application
-RUN npm run build
+RUN bun run build
 
 # Production image
 FROM nginx:alpine

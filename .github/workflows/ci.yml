@@ -58,18 +58,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm ci
+          bun ci
 
       - name: Run frontend tests
         run: |
           cd frontend
-          npm test -- --run
+          bun run test -- --run
 
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          bun ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          bun run build

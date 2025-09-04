@@ -24,8 +24,7 @@ The project is structured into two main parts:
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 20+
-- npm or yarn
+- Bun 1.x (frontend dev/build)
 - Docker and Docker Compose (optional, for containerized setup)
 
 ### Local Development Setup
@@ -41,41 +40,58 @@ The project is structured into two main parts:
    # Create root .env file
    cp .env.example .env
    
-   # Create frontend .env file
-   echo "VITE_API_BASE_URL=http://localhost:8000" > frontend/.env
+   # Frontend .env is optional (frontend defaults to '/api' or '/api/v1')
+   # echo "VITE_API_BASE_URL=http://localhost:8000" > frontend/.env
    ```
 
 3. **Install dependencies**:
-   ```bash
-   # Install root dependencies
-   npm install
-   
-   # Install frontend dependencies
-   npm install --prefix frontend
-   
-   # Install backend dependencies (preferably in a virtual environment)
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r backend/requirements.txt
-   ```
+  ```bash
+  # Install frontend dependencies
+  cd frontend && bun install
+  
+  # Install backend dependencies (preferably in a virtual environment)
+  python -m venv venv
+  source venv/bin/activate  # On Windows: venv\Scripts\activate
+  pip install -r backend/requirements.txt
+  ```
 
 4. **Start development servers**:
    ```bash
-   # Start both frontend and backend with one command
-   npm start
-   
-   # Or start them separately:
-   # Backend
-   npm run start:backend
-   
-   # Frontend
-   npm run start:frontend
+  # Start separately (recommended for clarity)
+  # Backend
+  (cd backend && make run)
+
+  # Frontend (Bun + Vite)
+  (cd frontend && bun run dev)
    ```
 
 5. **Access the application**:
    - Frontend: http://localhost:5173
    - Backend API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
+
+### Viewing Logs
+
+- Native dev:
+  - Backend: logs print in the terminal running `make run`
+  - Frontend: logs print in the terminal running `bun run dev`
+
+- Docker (dev profile):
+  ```bash
+  # Tail backend logs
+  docker compose --profile dev logs -f backend
+
+  # Tail frontend logs
+  docker compose --profile dev logs -f frontend
+
+  # Show last N lines
+  docker compose --profile dev logs --tail=100 backend
+  ```
+
+- Docker (prod profile):
+  ```bash
+  docker compose --profile prod logs -f app
+  ```
 
 ### Docker Setup (Supabase-only)
 
@@ -90,9 +106,11 @@ This project uses Supabase for the database in all environments. No local Postgr
 
 - Dev (native, recommended):
   ```bash
-  # In one terminal
-  npm start
-  # Frontend: http://localhost:5173, Backend: http://localhost:8000
+  # Backend (FastAPI)
+  cd backend && make run
+
+  # Frontend (Bun + Vite)
+  cd frontend && bun install && bun run dev
   ```
 
 - Prod-like single container (serves built frontend + API):
@@ -115,8 +133,7 @@ pytest
 ### Running Frontend Tests
 
 ```bash
-cd frontend
-npm test
+cd frontend && bun run test
 ```
 
 ## Daily Batch Commit Analysis
