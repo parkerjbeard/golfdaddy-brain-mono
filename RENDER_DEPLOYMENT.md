@@ -20,7 +20,7 @@ Render Services:
 ## Deploy or Migrate
 
 1. In Render, delete/disable the previous `brain-api` and `brain-frontend` services.
-2. Use the updated `render.yaml` (single service `brain`). Create a new Web Service from this repo, or click "Blueprints" and apply.
+2. Use the updated `render.yaml` (single service `brain`, PR previews enabled). Create a new Web Service from this repo, or click "Blueprints" and apply.
 3. Ensure your env group `brain-secrets` contains at least:
    - `DATABASE_URL` (Supabase Postgres connection string)
    - `SUPABASE_URL`
@@ -29,7 +29,7 @@ Render Services:
    - Any other keys referenced in `backend/app/config/settings.py`
 
 Notes:
-- `VITE_API_BASE_URL` is optional. The frontend defaults to relative paths (`/api` or `/api/v1`) which work with same-origin deployment.
+- `VITE_API_BASE_URL` is no longer passed at build time (unified service defaults to `/api/v1`). Only the public Supabase vars are injected at build time.
 - Keep `/health` exposed; Render uses it for health checks.
 
 ## Build & Start (handled by Dockerfile)
@@ -38,6 +38,12 @@ Notes:
   ```
   gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
   ```
+
+## Pull Request Previews
+
+- Previews are enabled via `pullRequestPreviewsEnabled: true` in `render.yaml`.
+- Previews build the same Docker image with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the `brain-secrets` group.
+- Use preview URLs shared by Render to validate changes before merging.
 
 ## Database Setup
 

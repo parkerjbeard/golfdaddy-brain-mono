@@ -3,13 +3,17 @@ services:
     name: brain
     env: docker
     dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    pullRequestPreviewsEnabled: true
     healthCheckPath: /health
     envVars:
       - fromGroup: brain-secrets
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHONUNBUFFERED
+        value: "1"
     dockerBuildArgs:
       - key: VITE_SUPABASE_URL
         fromGroup: brain-secrets
       - key: VITE_SUPABASE_ANON_KEY
-        fromGroup: brain-secrets  
-      - key: VITE_API_BASE_URL
         fromGroup: brain-secrets

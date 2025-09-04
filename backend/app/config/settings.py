@@ -59,8 +59,7 @@ class Settings(BaseSettings):
 
     # Integration Keys
     GITHUB_TOKEN: Optional[str] = Field(None, env="GITHUB_TOKEN")  # Legacy PAT, prefer GitHub App
-    AI_SERVICE_KEY: Optional[str] = Field(None, env="AI_SERVICE_KEY")
-    # Optional legacy integration key support (env: MAKE_INTEGRATION_API_KEY)
+    # Legacy AI service key removed
 
     # GitHub App Configuration (preferred over PAT)
     GITHUB_APP_ID: Optional[str] = Field(None, env="GITHUB_APP_ID")
@@ -69,13 +68,7 @@ class Settings(BaseSettings):
 
     # GitHub Webhook Configuration
     GITHUB_WEBHOOK_SECRET: Optional[str] = Field(None, env="GITHUB_WEBHOOK_SECRET")
-
-    # Legacy integration/webhook values (optional). Defining to avoid AttributeError when accessed via properties.
-    MAKE_INTEGRATION_API_KEY: Optional[str] = Field(None, env="MAKE_INTEGRATION_API_KEY")
-    MAKE_WEBHOOK_TASK_CREATED: Optional[str] = Field(None, env="MAKE_WEBHOOK_TASK_CREATED")
-    MAKE_WEBHOOK_TASK_BLOCKED: Optional[str] = Field(None, env="MAKE_WEBHOOK_TASK_BLOCKED")
-    MAKE_WEBHOOK_EOD_REMINDER: Optional[str] = Field(None, env="MAKE_WEBHOOK_EOD_REMINDER")
-    MAKE_WEBHOOK_MASTERY_REMINDER: Optional[str] = Field(None, env="MAKE_WEBHOOK_MASTERY_REMINDER")
+    # Legacy MAKE_* integration variables removed
 
     # Legacy webhook URL placeholders removed; direct Slack messages are generally disabled
 
@@ -217,28 +210,7 @@ class Settings(BaseSettings):
         return self.GITHUB_TOKEN
 
     @property
-    def ai_service_key(self):
-        return self.AI_SERVICE_KEY
-
-    @property
-    def make_integration_api_key(self):
-        return self.MAKE_INTEGRATION_API_KEY
-
-    @property
-    def make_webhook_task_created(self):
-        return self.MAKE_WEBHOOK_TASK_CREATED
-
-    @property
-    def make_webhook_task_blocked(self):
-        return self.MAKE_WEBHOOK_TASK_BLOCKED
-
-    @property
-    def make_webhook_eod_reminder(self):
-        return self.MAKE_WEBHOOK_EOD_REMINDER
-
-    @property
-    def make_webhook_mastery_reminder(self):
-        return self.MAKE_WEBHOOK_MASTERY_REMINDER
+    # Legacy AI and MAKE_* accessors removed
 
     @property
     def github_webhook_secret(self):
