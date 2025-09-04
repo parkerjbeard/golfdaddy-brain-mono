@@ -9,13 +9,18 @@ logger.info('API Client initialized', 'api-client', {
   environment: import.meta.env.MODE
 });
 
-// Use proxy in development
+// Resolve URL without double-prefixing
 const getApiUrl = (endpoint: string) => {
-  // In development, use the Vite proxy for /api, /auth, /dev, /test paths
-  if (import.meta.env.DEV && (endpoint.startsWith('/api') || endpoint.startsWith('/auth') || endpoint.startsWith('/dev') || endpoint.startsWith('/test'))) {
+  // If caller already passed a rooted API path, keep it
+  if (
+    endpoint.startsWith('/api') ||
+    endpoint.startsWith('/auth') ||
+    endpoint.startsWith('/dev') ||
+    endpoint.startsWith('/test')
+  ) {
     return endpoint;
   }
-  // In production or for non-proxied requests, use full URL
+  // Otherwise, prefix with configured base (defaults to /api/v1)
   return `${API_BASE_URL}${endpoint}`;
 }
 

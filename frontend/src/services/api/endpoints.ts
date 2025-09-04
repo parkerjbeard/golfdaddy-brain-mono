@@ -219,6 +219,33 @@ export const api = {
   batch,
   search,
   docApprovals,
+  zapier: {
+    getWeeklyData: async () => {
+      const res = await apiClient.get('/api/v1/zapier/weekly-data');
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    getObjectives: async () => {
+      const res = await apiClient.get('/api/v1/zapier/objectives');
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    getBusinessGoals: async () => {
+      const res = await apiClient.get('/api/v1/zapier/business-goals');
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    getCompanyMission: async () => {
+      const res = await apiClient.get('/api/v1/zapier/mission');
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    refreshDashboardData: async () => {
+      const res = await apiClient.post('/api/v1/zapier/refresh');
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+  },
 };
 
 export default api;
