@@ -1,11 +1,10 @@
-FROM oven/bun:1 AS frontend-build
+FROM node:20-bullseye-slim AS frontend-build
 
 WORKDIR /app/frontend
 
-# Copy package files and install deps deterministically using Bun
-COPY frontend/package.json frontend/bun.lockb ./
-# Prefer reproducible installs; fallback to frozen-lockfile if ci is unavailable
-RUN (bun ci) || bun install --frozen-lockfile
+# Copy package files and install deps deterministically using npm
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 # Copy source
 COPY frontend/ .
@@ -21,7 +20,7 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
 ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
-RUN bun run build
+RUN npm run build
 
 FROM python:3.11-slim AS backend-base
 
