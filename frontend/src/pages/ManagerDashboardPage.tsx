@@ -411,7 +411,7 @@ const ManagerDashboardPageV2: React.FC = () => {
                           {isExpanded && (
                             <tr className="bg-gray-50">
                               <td colSpan={6} className="p-6">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                   <div className="space-y-2">
                                     <p className="text-sm font-medium text-gray-700">Performance Metrics</p>
                                     <div className="space-y-1">
@@ -429,32 +429,7 @@ const ManagerDashboardPageV2: React.FC = () => {
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="space-y-2">
-                                    <p className="text-sm font-medium text-gray-700">Quick Stats</p>
-                                    <div className="h-20 bg-white rounded-lg p-3 border">
-                                      <p className="text-xs text-gray-500">7-Day Trend</p>
-                                      {(() => {
-                                        // Build a compact bar sparkline from real daily hours
-                                        const series = (widgetData?.daily_hours_series || []).slice(-7);
-                                        const max = Math.max(0, ...series.map(s => s.hours || 0));
-                                        return (
-                                          <div className="flex items-end gap-1 h-12 mt-1">
-                                            {series.map((s, i) => {
-                                              const pct = max > 0 ? Math.round((s.hours / max) * 100) : 0;
-                                              return (
-                                                <div
-                                                  key={i}
-                                                  className="flex-1 bg-blue-500/90 rounded-t"
-                                                  style={{ height: `${pct}%` }}
-                                                  title={`${s.date}: ${s.hours.toFixed(2)}h`}
-                                                />
-                                              );
-                                            })}
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  </div>
+                                  {/* Quick Stats trend removed for simplicity */}
                                   <div className="space-y-2">
                                     <p className="text-sm font-medium text-gray-700">Recent Activity</p>
                                     {(() => {
