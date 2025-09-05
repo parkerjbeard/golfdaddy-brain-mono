@@ -749,13 +749,22 @@ class CommitAnalysisService:
             if existing_commit:
                 logger.info(f"✓ Commit {commit_hash} already exists in database")
                 # If existing and has analysis, we could skip or perform re-analysis
-                # based on settings.reanalyze_existing_commits
+                # based on settings.reanalyze_existing_commits. However, if the commit exists
+                # but is missing analysis fields, we should proceed to analyze it.
 
-                # Opt out early of re-analysis if conditions are met
-                if not settings.reanalyze_existing_commits:
+                has_analysis = (
+                    getattr(existing_commit, "ai_estimated_hours", None) is not None
+                    or getattr(existing_commit, "seniority_score", None) is not None
+                )
+
+                if has_analysis and not settings.reanalyze_existing_commits:
                     logger.info(f"Skipping re-analysis (reanalyze_existing_commits=False)")
                     self._log_separator(f"END: COMMIT {commit_hash} ALREADY PROCESSED", "=")
                     return existing_commit
+                elif not has_analysis:
+                    logger.info(
+                        "Existing commit found without analysis; proceeding with analysis to populate fields"
+                    )
                 else:
                     logger.info(f"Re-analyzing existing commit (reanalyze_existing_commits=True)")
 

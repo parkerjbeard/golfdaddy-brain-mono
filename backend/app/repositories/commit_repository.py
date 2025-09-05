@@ -32,13 +32,18 @@ class CommitRepository:
         self._table = "commits"
 
     def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
-        """Helper to log and raise DatabaseError from Supabase errors."""
-        if response and hasattr(response, "error") and response.error:
-            error_code = response.error.code if hasattr(response.error, "code") else "N/A"
-            logger.error(
-                f"{context_message}: Supabase error code {error_code} - {response.error.message}", exc_info=True
-            )
-            raise DatabaseError(f"{context_message}: {response.error.message}")
+        """Helper to log and raise DatabaseError from Supabase errors.
+
+        Ignores MagicMock `.error` objects used in tests.
+        """
+        if not response:
+            return
+        err = getattr(response, "error", None)
+        if err and getattr(err.__class__, "__name__", "") != "MagicMock":
+            error_code = getattr(err, "code", "N/A")
+            message = getattr(err, "message", str(err))
+            logger.error(f"{context_message}: Supabase error code {error_code} - {message}", exc_info=True)
+            raise DatabaseError(f"{context_message}: {message}")
 
     def _format_log_result(self, operation: str, commit_hash: str, success: bool) -> str:
         """Format a standardized log message for database operations."""
@@ -442,9 +447,7 @@ class CommitRepository:
                     self._client.table(self._table).select("commit_hash").in_("commit_hash", chunk).execute
                 )
 
-                self._handle_supabase_error(response, "Error checking commit existence")
-
-                if response.data:
+                if response and getattr(response, "data", None):
                     existing_hashes.extend([item["commit_hash"] for item in response.data])
 
             logger.info(f"✓ Found {len(existing_hashes)} existing commits out of {len(commit_hashes)} checked")

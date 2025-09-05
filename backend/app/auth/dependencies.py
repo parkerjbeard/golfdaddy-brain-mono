@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
-    authorization: str = Header(...), supabase: Client = Depends(get_supabase_client_safe)
+    authorization: Optional[str] = Header(None), supabase: Client = Depends(get_supabase_client_safe)
 ) -> User:
     """
     Get the current authenticated user from Supabase JWT token.
@@ -29,7 +29,7 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user doesn't exist
     """
-    if not authorization.startswith("Bearer "):
+    if not authorization or not authorization.startswith("Bearer "):
         logger.warning("Invalid authorization header format - does not start with 'Bearer '")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

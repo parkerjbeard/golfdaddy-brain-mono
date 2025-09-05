@@ -127,15 +127,24 @@ def mock_supabase_client():
     with patch("app.config.supabase_client.get_supabase_client", return_value=mock_client):
         # Also patch any direct imports of the function
         with patch("app.repositories.user_repository.get_supabase_client_safe", return_value=mock_client):
-            with patch("app.repositories.task_repository.get_supabase_client", return_value=mock_client):
+            # Patch the auth endpoint's import as well
+            with patch("app.api.auth_endpoints.get_supabase_client", return_value=mock_client):
                 yield mock_client
 
 
 @pytest.fixture(scope="function")
 def client(mock_supabase_client):
     """Create a FastAPI TestClient with mocked Supabase dependency."""
+    from app.config.supabase_client import get_supabase_client
+    
+    # Override the dependency to return the mock
+    app.dependency_overrides[get_supabase_client] = lambda: mock_supabase_client
+    
     with TestClient(app) as test_client:
         yield test_client
+    
+    # Clean up the override
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="session")

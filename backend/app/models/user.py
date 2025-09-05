@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -24,8 +24,8 @@ class User(BaseModel):
     team_id: Optional[UUID] = None  # Foreign key to Team model
     reports_to_id: Optional[UUID] = Field(None, description="ID of the user this user reports to")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Arbitrary user metadata from DB")
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login_at: Optional[datetime] = None
     is_active: bool = True
     preferences: Optional[dict] = None  # For storing user-specific settings

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
@@ -86,9 +86,10 @@ def sample_daily_report():
     return DailyReport(
         id=uuid4(),
         user_id=uuid4(),
-        summary="Worked on new feature and bug fixes",
+        raw_text_input="Worked on new feature and bug fixes",
+        clarified_tasks_summary="Worked on new feature and bug fixes",
         additional_hours=Decimal("0.5"),
-        report_date=date(2025, 1, 15),
+        report_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
     )
 
 
@@ -118,7 +119,8 @@ async def test_analyze_for_report_new_analysis(
     """Test analyzing commits when daily report is submitted (new analysis)"""
 
     # Setup mocks
-    service.repository.get_by_user_and_date.return_value = None  # No existing analysis
+    # Awaited methods must be AsyncMock
+    service.repository.get_by_user_and_date = AsyncMock(return_value=None)  # No existing analysis
     service._get_user_commits_for_date = AsyncMock(return_value=sample_commits)
     service._prepare_analysis_context = AsyncMock(return_value={"mock": "context"})
     service.ai_integration.analyze_daily_work = AsyncMock(return_value=sample_ai_analysis)
@@ -132,6 +134,8 @@ async def test_analyze_for_report_new_analysis(
             daily_report_id=sample_daily_report.id,
             analysis_type="with_report",
             ai_analysis=sample_ai_analysis,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
     )
     service._link_commits_to_analysis = AsyncMock()
@@ -164,6 +168,8 @@ async def test_analyze_for_report_existing_analysis(service, sample_user_id, sam
         daily_report_id=None,
         analysis_type="automatic",
         ai_analysis={},
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
     updated_analysis = DailyCommitAnalysis(
@@ -175,11 +181,23 @@ async def test_analyze_for_report_existing_analysis(service, sample_user_id, sam
         daily_report_id=sample_daily_report.id,
         analysis_type="automatic",
         ai_analysis={},
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
     # Setup mocks
-    service.repository.get_by_user_and_date.return_value = existing_analysis
+    service.repository.get_by_user_and_date = AsyncMock(return_value=existing_analysis)
     service.repository.update = AsyncMock(return_value=updated_analysis)
+    service._get_user_commits_for_date = AsyncMock(return_value=[])
+    service.daily_report_repo.get_daily_reports_by_user_and_date = AsyncMock(return_value=sample_daily_report)
+    service.ai_integration.analyze_daily_work = AsyncMock(
+        return_value={
+            "total_estimated_hours": 3.0,
+            "average_complexity_score": 5,
+            "average_seniority_score": 6,
+        }
+    )
+    service.user_repo.get_by_id = AsyncMock(return_value=Mock())
 
     # Execute
     result = await service.analyze_for_report(sample_user_id, sample_date, sample_daily_report)
@@ -198,7 +216,7 @@ async def test_analyze_for_report_no_commits(service, sample_user_id, sample_dat
     """Test analyzing when no commits exist for the date"""
 
     # Setup mocks
-    service.repository.get_by_user_and_date.return_value = None
+    service.repository.get_by_user_and_date = AsyncMock(return_value=None)
     service._get_user_commits_for_date = AsyncMock(return_value=[])
     service._create_zero_hour_analysis = AsyncMock(
         return_value=DailyCommitAnalysis(
@@ -210,6 +228,8 @@ async def test_analyze_for_report_no_commits(service, sample_user_id, sample_dat
             daily_report_id=sample_daily_report.id,
             analysis_type="with_report",
             ai_analysis={"message": "No commits found for this date"},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
     )
 
@@ -230,8 +250,9 @@ async def test_analyze_for_date_automatic(service, sample_user_id, sample_date, 
     """Test automatic analysis for a date without daily report"""
 
     # Setup mocks
-    service.repository.get_by_user_and_date.return_value = None
-    service.daily_report_repo.get_user_report_for_date.return_value = None
+    service.repository.get_by_user_and_date = AsyncMock(return_value=None)
+    # The service calls get_daily_reports_by_user_and_date
+    service.daily_report_repo.get_daily_reports_by_user_and_date = AsyncMock(return_value=None)
     service._get_user_commits_for_date = AsyncMock(return_value=sample_commits)
     service._prepare_analysis_context = AsyncMock(return_value={"mock": "context"})
     service.ai_integration.analyze_daily_work = AsyncMock(return_value=sample_ai_analysis)
@@ -245,6 +266,8 @@ async def test_analyze_for_date_automatic(service, sample_user_id, sample_date, 
             daily_report_id=None,
             analysis_type="automatic",
             ai_analysis=sample_ai_analysis,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
     )
     service._link_commits_to_analysis = AsyncMock()
@@ -258,7 +281,7 @@ async def test_analyze_for_date_automatic(service, sample_user_id, sample_date, 
     assert result.daily_report_id is None
 
     # Verify daily report check was made
-    service.daily_report_repo.get_user_report_for_date.assert_called_once()
+    service.daily_report_repo.get_daily_reports_by_user_and_date.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -269,7 +292,7 @@ async def test_run_midnight_analysis(service):
     yesterday = date.today() - timedelta(days=1)
 
     # Setup mocks
-    service.repository.get_users_without_analysis.return_value = user_ids
+    service.repository.get_users_without_analysis = AsyncMock(return_value=user_ids)
     service.analyze_for_date = AsyncMock(
         side_effect=[
             Mock(total_estimated_hours=Decimal("4.0")),  # Success
@@ -296,7 +319,7 @@ async def test_prepare_analysis_context(service, sample_commits, sample_daily_re
     # Setup mock user
     mock_user = Mock()
     mock_user.name = "John Doe"
-    service.user_repo.get_by_id.return_value = mock_user
+    service.user_repo.get_by_id = AsyncMock(return_value=mock_user)
 
     # Execute
     context = await service._prepare_analysis_context(sample_commits, sample_daily_report, sample_user_id, sample_date)
@@ -315,7 +338,7 @@ async def test_prepare_analysis_context(service, sample_commits, sample_daily_re
     assert context["commits"][1]["message"] == "Fix bug in feature"
 
     # Verify daily report context
-    assert context["daily_report"]["summary"] == sample_daily_report.summary
+    assert context["daily_report"]["summary"] == sample_daily_report.clarified_tasks_summary
 
 
 @pytest.mark.asyncio
@@ -327,7 +350,7 @@ async def test_get_user_analysis_history(service, sample_user_id):
 
     mock_analyses = [Mock(analysis_date=date(2025, 1, 15)), Mock(analysis_date=date(2025, 1, 10))]
 
-    service.repository.get_user_analyses_in_range.return_value = mock_analyses
+    service.repository.get_user_analyses_in_range = AsyncMock(return_value=mock_analyses)
 
     # Execute
     result = await service.get_user_analysis_history(sample_user_id, start_date, end_date)

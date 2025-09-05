@@ -8,12 +8,16 @@ from fastapi.testclient import TestClient
 from app.middleware.api_key_auth import ApiKeyMiddleware
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_metrics import RequestMetricsMiddleware
+from app.core.error_handlers import add_exception_handlers
 
 
 @pytest.fixture
 def test_app():
     """Create a test FastAPI app."""
     app = FastAPI()
+    
+    # Add exception handlers to properly handle custom exceptions
+    add_exception_handlers(app)
 
     @app.get("/test")
     def test_endpoint():
@@ -55,7 +59,7 @@ class TestApiKeyMiddleware:
         client = TestClient(app)
         response = client.get("/test", headers={"X-API-Key": "invalid-key"})
 
-        assert response.status_code == 403
+        assert response.status_code == 401  # AuthenticationError returns 401
 
     def test_missing_api_key(self, test_app, api_keys):
         """Test request with no API key."""
@@ -159,27 +163,29 @@ class TestRequestMetrics:
     def test_metrics_collection(self, test_app):
         """Test metrics collection."""
         app = test_app
-        metrics_middleware = RequestMetricsMiddleware(None)
+        
+        # We'll capture the middleware instance when it's created
+        captured_middleware = []
+        
+        original_init = RequestMetricsMiddleware.__init__
+        def capture_init(self, app):
+            original_init(self, app)
+            captured_middleware.append(self)
+        
+        with patch.object(RequestMetricsMiddleware, '__init__', capture_init):
+            # Add the middleware to the app and create client while patch is active
+            app.add_middleware(RequestMetricsMiddleware)
+            client = TestClient(app)
+            # Make a request within patch so instantiation is captured
+            with patch("time.time", side_effect=[100, 100.5, 100.5, 100.5, 100.5, 100.5]):
+                response = client.get("/test")
 
-        # Mock the middleware dispatch method to avoid adding it to the app
-        original_dispatch = metrics_middleware.dispatch
-
-        async def mock_dispatch(request, call_next):
-            # Call the original but with a mocked response
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.headers = {}
-
-            with patch("time.time", side_effect=[100, 100.5]):  # Mock 0.5s duration
-                return await original_dispatch(request, lambda: mock_response)
-
-        metrics_middleware.dispatch = mock_dispatch
-        app.add_middleware(RequestMetricsMiddleware)
-
-        client = TestClient(app)
-        response = client.get("/test")
-
-        # Get metrics
+        # Check the response
+        assert response.status_code == 200
+        
+        # Get metrics from the captured middleware instance
+        assert len(captured_middleware) > 0
+        metrics_middleware = captured_middleware[0]
         metrics = metrics_middleware.get_metrics()
 
         # Check metrics

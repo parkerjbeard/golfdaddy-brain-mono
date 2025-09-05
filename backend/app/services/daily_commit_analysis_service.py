@@ -75,6 +75,24 @@ class DailyCommitAnalysisService:
             ai_result = await self.ai_integration.analyze_daily_work(context)
 
             # Create or update analysis record
+            # Normalize repository field name across possible commit schema variants
+            repositories = list(
+                set(
+                    (
+                        getattr(c, "repository", None)
+                        or getattr(c, "repository_name", None)
+                        or None
+                    )
+                    for c in commits
+                    if (getattr(c, "repository", None) or getattr(c, "repository_name", None))
+                )
+            )
+
+            total_added = sum((getattr(c, "additions", None) or getattr(c, "lines_added", 0) or 0) for c in commits)
+            total_deleted = sum(
+                (getattr(c, "deletions", None) or getattr(c, "lines_deleted", 0) or 0) for c in commits
+            )
+
             analysis_data = DailyCommitAnalysisCreate(
                 user_id=user_id,
                 analysis_date=analysis_date,
@@ -85,9 +103,9 @@ class DailyCommitAnalysisService:
                 ai_analysis=ai_result,
                 complexity_score=ai_result.get("average_complexity_score"),
                 seniority_score=ai_result.get("average_seniority_score"),
-                repositories_analyzed=list(set(c.repository for c in commits if c.repository)),
-                total_lines_added=sum(c.additions or 0 for c in commits),
-                total_lines_deleted=sum(c.deletions or 0 for c in commits),
+                repositories_analyzed=repositories,
+                total_lines_added=total_added,
+                total_lines_deleted=total_deleted,
             )
 
             existing = await self.repository.get_by_user_and_date(user_id, analysis_date)
@@ -217,15 +235,23 @@ class DailyCommitAnalysisService:
         # Prepare commit summaries
         commit_summaries = []
         for commit in commits:
+            repo_value = getattr(commit, "repository", None) or getattr(commit, "repository_name", None)
+            files_changed = (
+                getattr(commit, "files_changed", None)
+                or getattr(commit, "changed_files", None)
+                or []
+            )
+            additions = getattr(commit, "additions", None) or getattr(commit, "lines_added", 0) or 0
+            deletions = getattr(commit, "deletions", None) or getattr(commit, "lines_deleted", 0) or 0
             commit_summaries.append(
                 {
                     "hash": commit.commit_hash[:8],
                     "message": commit.commit_message,
                     "timestamp": commit.commit_timestamp.isoformat() if commit.commit_timestamp else None,
-                    "repository": commit.repository,
-                    "files_changed": commit.files_changed or [],
-                    "additions": commit.additions or 0,
-                    "deletions": commit.deletions or 0,
+                    "repository": repo_value,
+                    "files_changed": files_changed,
+                    "additions": additions,
+                    "deletions": deletions,
                     "ai_estimated_hours": float(commit.ai_estimated_hours) if commit.ai_estimated_hours else None,
                 }
             )
@@ -235,8 +261,22 @@ class DailyCommitAnalysisService:
             "user_name": user_name,
             "commits": commit_summaries,
             "total_commits": len(commits),
-            "repositories": list(set(c.repository for c in commits if c.repository)),
-            "total_lines_changed": sum((c.additions or 0) + (c.deletions or 0) for c in commits),
+            "repositories": list(
+                set(
+                    (
+                        getattr(c, "repository", None)
+                        or getattr(c, "repository_name", None)
+                        or None
+                    )
+                    for c in commits
+                    if (getattr(c, "repository", None) or getattr(c, "repository_name", None))
+                )
+            ),
+            "total_lines_changed": sum(
+                (getattr(c, "additions", None) or getattr(c, "lines_added", 0) or 0)
+                + (getattr(c, "deletions", None) or getattr(c, "lines_deleted", 0) or 0)
+                for c in commits
+            ),
         }
 
         # Add daily report context if available

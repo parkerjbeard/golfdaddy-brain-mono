@@ -77,9 +77,20 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         # If rate limit exceeded, return 429 with headers
         if not is_allowed:
             logger.warning(f"Rate limit exceeded for {identifier} on {request.url.path}")
-            raise RateLimitExceededError(
-                message="Rate limit exceeded. Please try again later.", retry_after=retry_after, service_name="api"
+            from fastapi.responses import JSONResponse
+            response = JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "code": "RATE_LIMIT_EXCEEDED",
+                        "message": "Rate limit exceeded. Please try again later."
+                    }
+                }
             )
+            # Add rate limit headers to response
+            for header_name, header_value in headers.items():
+                response.headers[header_name] = header_value
+            return response
 
         # Rate limit not exceeded, proceed with request
         response = await call_next(request)

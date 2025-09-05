@@ -47,6 +47,16 @@ app = FastAPI(
 
 # Middleware
 app.add_middleware(RequestMetricsMiddleware)
+
+# API key auth middleware (conditional)
+if settings.enable_api_auth and settings.api_keys is not None:
+    app.add_middleware(
+        ApiKeyMiddleware,
+        api_keys=settings.api_keys,
+        api_key_header=settings.api_key_header,
+        exclude_paths=settings.auth_exclude_paths.split(","),
+    )
+
 if settings.ENABLE_RATE_LIMITING:
     app.add_middleware(
         RateLimiterMiddleware,

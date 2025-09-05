@@ -1,69 +1,116 @@
-# Welcome to your Lovable project
+# GolfDaddy Brain Frontend
 
-## Project info
+This is the frontend application for GolfDaddy Brain, an AI-powered software engineering assistant that helps teams track work, manage tasks, and improve productivity through intelligent analysis of code commits and daily reports.
 
-**URL**: https://lovable.dev/projects/09829599-4c2e-4bbb-9272-4c3bd7457708
+## Tech Stack
 
-## How can I edit this code?
+- React 18 with TypeScript
+- Vite for build tooling
+- TailwindCSS for styling
+- Shadcn/ui component library
+- Zustand for state management
+- React Query for server state
+- Supabase for authentication
 
-There are several ways of editing your application.
+## Getting Started
 
-**Use Lovable**
+### Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/09829599-4c2e-4bbb-9272-4c3bd7457708) and start prompting.
+- Node.js 18+ and npm
+- Backend API running at `http://localhost:8000`
 
-Changes made via Lovable will be committed automatically to this repo.
+### Installation
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+# Install dependencies
+npm install
 ```
 
-**Edit a file directly in GitHub**
+### Development
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+# Start development server
+npm run dev
 
-**Use GitHub Codespaces**
+# The app will be available at http://localhost:8080
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Build
 
-## What technologies are used for this project?
+```bash
+# Production build
+npm run build
 
-This project is built with .
+# Preview production build
+npm run preview
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Testing
 
-## How can I deploy this project?
+```bash
+# Run tests
+npm test
 
-Simply open [Lovable](https://lovable.dev/projects/09829599-4c2e-4bbb-9272-4c3bd7457708) and click on Share -> Publish.
+# Run tests with UI
+npm run test:ui
 
-## I want to use a custom domain - is that possible?
+# Run tests with coverage
+npm run test:coverage
+```
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+### Linting
+
+```bash
+npm run lint
+```
+
+## Environment Variables
+
+Create a `.env` file in the frontend directory:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+## Project Structure
+
+```
+frontend/
+├── src/
+│   ├── components/     # Reusable UI components
+│   ├── pages/          # Page components
+│   ├── services/       # API clients and services
+│   ├── stores/         # Zustand stores
+│   ├── hooks/          # Custom React hooks
+│   ├── lib/            # Utility functions
+│   └── types/          # TypeScript type definitions
+├── public/             # Static assets
+└── index.html          # Entry HTML file
+```
+
+## Features
+
+- User authentication with Supabase
+- Role-based access control (Employee, Manager, Admin)
+- Daily report submissions
+- Commit analysis and insights
+- KPI tracking and visualization
+- RACI matrix management
+- Documentation generation
+- Semantic search across codebase
+
+## API Integration
+
+The frontend proxies the following paths to the backend:
+- `/api` - API endpoints
+- `/auth` - Authentication endpoints
+- `/dev` - Development tools
+- `/test` - Test endpoints
+
+## Deployment
+
+The frontend can be deployed to any static hosting service that supports SPAs (Single Page Applications). The build output is in the `dist` directory after running `npm run build`.
+
+For custom domain deployment, we recommend using services like Netlify, Vercel, or Cloudflare Pages.

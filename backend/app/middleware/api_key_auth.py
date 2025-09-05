@@ -56,19 +56,32 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         # Check if API key is provided and valid
         if not api_key:
             logger.warning(f"No API key provided for {request.url.path}")
-            # Return a custom error response through the exception handling system
-            raise AuthenticationError(message="API key required")
+            # Return JSON response directly instead of raising exception
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "error": {
+                        "code": "AUTHENTICATION_ERROR",
+                        "message": "API key required"
+                    }
+                }
+            )
 
         # Validate API key
         if api_key not in self.api_keys:
             logger.warning(f"Invalid API key provided for {request.url.path}")
-            # No longer log any details about the key
-
-            # Using AuthenticationError, which defaults to 401.
-            # If 403 is specifically needed for an invalid key vs missing key:
-            # raise PermissionDeniedError(message="Invalid API key")
-            # Or, AuthenticationError(message="Invalid API key", status_code=status.HTTP_403_FORBIDDEN)
-            raise AuthenticationError(message="Invalid API key")
+            # Return JSON response directly instead of raising exception
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "error": {
+                        "code": "AUTHENTICATION_ERROR",
+                        "message": "Invalid API key"
+                    }
+                }
+            )
 
         # Add API key info to request state for use in routes
         request.state.api_key_info = self.api_keys[api_key]

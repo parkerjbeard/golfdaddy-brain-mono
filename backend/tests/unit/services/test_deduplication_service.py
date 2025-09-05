@@ -53,42 +53,36 @@ def sample_commits():
     return [
         Commit(
             id=uuid4(),
-            repository="test/repo",
+            repository_name="test/repo",
             commit_hash="abc123",
-            message="feat: implement user authentication",
+            commit_message="feat: implement user authentication",
             author_email="dev@test.com",
-            commit_date=base_time - timedelta(hours=6),
-            estimated_hours=3.0,
-            estimated_points=5,
-            user_id=user_id,
-            files_changed=["auth.py", "login.py"],
-            analysis={"complexity": "medium", "impact_areas": ["authentication", "security"]},
+            commit_timestamp=base_time - timedelta(hours=6),
+            ai_estimated_hours=Decimal("3.0"),
+            author_id=user_id,
+            changed_files=["auth.py", "login.py"],
         ),
         Commit(
             id=uuid4(),
-            repository="test/repo",
+            repository_name="test/repo",
             commit_hash="def456",
-            message="fix: resolve login bug",
+            commit_message="fix: resolve login bug",
             author_email="dev@test.com",
-            commit_date=base_time - timedelta(hours=4),
-            estimated_hours=1.5,
-            estimated_points=2,
-            user_id=user_id,
-            files_changed=["login.py"],
-            analysis={"complexity": "low", "impact_areas": ["authentication"]},
+            commit_timestamp=base_time - timedelta(hours=4),
+            ai_estimated_hours=Decimal("1.5"),
+            author_id=user_id,
+            changed_files=["login.py"],
         ),
         Commit(
             id=uuid4(),
-            repository="test/repo",
+            repository_name="test/repo",
             commit_hash="ghi789",
-            message="docs: update README",
+            commit_message="docs: update README",
             author_email="dev@test.com",
-            commit_date=base_time - timedelta(hours=2),
-            estimated_hours=0.5,
-            estimated_points=1,
-            user_id=user_id,
-            files_changed=["README.md"],
-            analysis={"complexity": "trivial", "impact_areas": ["documentation"]},
+            commit_timestamp=base_time - timedelta(hours=2),
+            ai_estimated_hours=Decimal("0.5"),
+            author_id=user_id,
+            changed_files=["README.md"],
         ),
     ]
 
@@ -98,12 +92,9 @@ def sample_daily_report():
     return DailyReport(
         id=uuid4(),
         user_id=uuid4(),
-        date=date.today(),
-        content="Worked on user authentication feature and fixed login bugs. Also updated documentation.",
-        hours_worked=8.0,
-        key_achievements=["Implemented authentication", "Fixed login bug", "Updated docs"],
-        blockers=[],
-        sentiment_score=0.8,
+        report_date=datetime.now(timezone.utc),
+        raw_text_input="Worked on user authentication feature and fixed login bugs. Also updated documentation.",
+        additional_hours=8.0,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -143,9 +134,9 @@ class TestDeduplicationService:
         report = DailyReport(
             id=uuid4(),
             user_id=uuid4(),
-            date=date.today(),
-            content="Worked on completely different tasks - data migration and database optimization",
-            hours_worked=6.0,
+            report_date=datetime.now(timezone.utc),
+            raw_text_input="Worked on completely different tasks - data migration and database optimization",
+            additional_hours=6.0,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -194,28 +185,28 @@ class TestDeduplicationService:
         recent_commit = Commit(
             id=uuid4(),
             commit_hash="recent",
-            message="feat: add feature",
-            commit_date=now - timedelta(hours=2),
-            estimated_hours=2.0,
-            user_id=user_id,
+            commit_message="feat: add feature",
+            commit_timestamp=now - timedelta(hours=2),
+            ai_estimated_hours=Decimal("2.0"),
+            author_id=user_id,
         )
 
         # Commit from yesterday
         old_commit = Commit(
             id=uuid4(),
             commit_hash="old",
-            message="feat: add feature",
-            commit_date=now - timedelta(days=1, hours=2),
-            estimated_hours=2.0,
-            user_id=user_id,
+            commit_message="feat: add feature",
+            commit_timestamp=now - timedelta(days=1, hours=2),
+            ai_estimated_hours=Decimal("2.0"),
+            author_id=user_id,
         )
 
         report = DailyReport(
             id=uuid4(),
             user_id=user_id,
-            date=date.today(),
-            content="Added new feature",
-            hours_worked=2.0,
+            report_date=now,
+            raw_text_input="Added new feature",
+            additional_hours=2.0,
             created_at=now,
             updated_at=now,
         )
@@ -245,22 +236,23 @@ class TestDeduplicationService:
             Commit(
                 id=uuid4(),
                 commit_hash=f"commit{i}",
-                message=f"feat: feature {i}",
-                commit_date=datetime.now(timezone.utc) - timedelta(days=i),
-                estimated_hours=2.0,
-                user_id=sample_user.id,
+                commit_message=f"feat: feature {i}",
+                commit_timestamp=datetime.now(timezone.utc) - timedelta(days=i),
+                ai_estimated_hours=Decimal("2.0"),
+                author_id=sample_user.id,
             )
             for i in range(5)
         ]
 
         # Mock daily reports for the week
+        # Align report dates with commit dates for deterministic aggregation
         reports = [
             DailyReport(
                 id=uuid4(),
                 user_id=sample_user.id,
-                date=start_date + timedelta(days=i),
-                content=f"Worked on feature {i} and other tasks",
-                hours_worked=8.0,
+                report_date=(datetime.now(timezone.utc) - timedelta(days=i)),
+                raw_text_input=f"Worked on feature {i} and other tasks",
+                additional_hours=8.0,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),
             )
@@ -320,9 +312,9 @@ class TestDeduplicationService:
         report = DailyReport(
             id=uuid4(),
             user_id=uuid4(),
-            date=date.today(),
-            content="Did some work",
-            hours_worked=8.0,
+            report_date=datetime.now(timezone.utc),
+            raw_text_input="Did some work",
+            additional_hours=8.0,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -355,41 +347,41 @@ class TestDeduplicationService:
             Commit(
                 id=uuid4(),
                 commit_hash="feat1",
-                message="feat: implement dashboard",
-                commit_date=datetime.now(timezone.utc) - timedelta(hours=5),
-                estimated_hours=4.0,
-                user_id=uuid4(),
+                commit_message="feat: implement dashboard",
+                commit_timestamp=datetime.now(timezone.utc) - timedelta(hours=5),
+                ai_estimated_hours=Decimal("4.0"),
+                author_id=uuid4(),
             ),
             Commit(
                 id=uuid4(),
                 commit_hash="fix1",
-                message="fix: resolve dashboard rendering issue",
-                commit_date=datetime.now(timezone.utc) - timedelta(hours=3),
-                estimated_hours=1.0,
-                user_id=uuid4(),
+                commit_message="fix: resolve dashboard rendering issue",
+                commit_timestamp=datetime.now(timezone.utc) - timedelta(hours=3),
+                ai_estimated_hours=Decimal("1.0"),
+                author_id=uuid4(),
             ),
             Commit(
                 id=uuid4(),
                 commit_hash="test1",
-                message="test: add dashboard tests",
-                commit_date=datetime.now(timezone.utc) - timedelta(hours=1),
-                estimated_hours=2.0,
-                user_id=uuid4(),
+                commit_message="test: add dashboard tests",
+                commit_timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+                ai_estimated_hours=Decimal("2.0"),
+                author_id=uuid4(),
             ),
         ]
 
         report = DailyReport(
             id=uuid4(),
             user_id=uuid4(),
-            date=date.today(),
-            content="""
+            report_date=datetime.now(timezone.utc),
+            raw_text_input="""
             Completed dashboard implementation including:
             - Built main dashboard component
             - Fixed rendering issues that were blocking users
             - Added comprehensive test coverage
             - Reviewed PRs and helped team members
             """,
-            hours_worked=9.0,  # More than commit hours
+            additional_hours=9.0,  # More than commit hours
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
