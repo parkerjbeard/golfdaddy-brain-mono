@@ -26,6 +26,10 @@ class UserWidgetSummary(BaseModel):
     # New business points fields
     total_business_points: float
     efficiency_points_per_hour: float
+    # Normalized efficiency (category-normalized, personal baselines)
+    normalized_efficiency_points_per_hour: Optional[float] = None
+    efficiency_provisional: Optional[bool] = None
+    efficiency_baseline_source: Optional[str] = None  # "personal" or "default"
     # Small daily series for sparklines and trend chart
     daily_hours_series: List[Dict[str, Any]] = Field(default_factory=list)  # [{"date": "YYYY-MM-DD", "hours": float}]
     daily_points_series: List[Dict[str, Any]] = Field(default_factory=list)  # [{"date": "YYYY-MM-DD", "points": float}]
@@ -38,6 +42,132 @@ class KpiService:
         self.user_repo = UserRepository()
         self.commit_repo = CommitRepository()
         self.daily_report_repo = DailyReportRepository()
+        # Normalization config (keep simple; prioritize personal data)
+        self.norm_h_min = 2.0  # hours floor per category when computing period PPH
+        self.baseline_window_days = 60  # lookback for personal baselines
+        self.baseline_min_hours = 10.0  # require at least this many hours to accept personal baseline for a category
+        self.norm_ratio_min = 0.25  # clamp lower bound
+        self.norm_ratio_max = 4.0   # clamp upper bound
+        # Static defaults if personal baseline insufficient
+        self.category_default_pph = {
+            "capability": 3.0,
+            "improvement": 2.5,
+            "fix": 2.0,
+            "foundation": 1.2,
+            "maintenance": 1.0,
+        }
+
+    # ---- Internal helpers for normalization ----
+    def _parse_commit_ai_notes(self, commit: Commit) -> Dict[str, Any]:
+        try:
+            if getattr(commit, "ai_analysis_notes", None):
+                return json.loads(commit.ai_analysis_notes) or {}
+        except Exception:
+            return {}
+        return {}
+
+    def _get_commit_category(self, notes: Dict[str, Any]) -> str:
+        # Try nested classification first
+        cls = notes.get("impact_classification") or {}
+        if isinstance(cls, dict):
+            cat = cls.get("primary_category") or cls.get("primary") or cls.get("category")
+            if isinstance(cat, str) and cat:
+                return cat.lower()
+        # Try dominant category string
+        dom = notes.get("impact_dominant_category")
+        if isinstance(dom, str) and dom:
+            return dom.lower()
+        return "maintenance"  # conservative default
+
+    def _sum_points_hours_by_category(self, commits: List[Commit]) -> Dict[str, Dict[str, float]]:
+        agg: Dict[str, Dict[str, float]] = {}
+        for c in commits:
+            notes = self._parse_commit_ai_notes(c)
+            points = 0.0
+            try:
+                points = float(notes.get("impact_score", 0.0) or 0.0)
+            except Exception:
+                points = 0.0
+            hours = float(c.ai_estimated_hours or 0.0)
+            cat = self._get_commit_category(notes)
+            if cat not in agg:
+                agg[cat] = {"points": 0.0, "hours": 0.0}
+            agg[cat]["points"] += points
+            agg[cat]["hours"] += hours
+        return agg
+
+    async def _compute_personal_baselines(self, user_id: UUID, baseline_end: datetime) -> Dict[str, float]:
+        """Compute personal baseline PPH per category over the lookback window.
+        Falls back to static defaults if insufficient hours in a category."""
+        try:
+            from datetime import timedelta
+
+            baseline_start_date = (baseline_end - timedelta(days=self.baseline_window_days)).date()
+            baseline_end_date = baseline_end.date()
+            commits: List[Commit] = await self.commit_repo.get_commits_by_user_in_range(
+                user_id, baseline_start_date, baseline_end_date
+            )
+        except Exception:
+            commits = []
+
+        agg = self._sum_points_hours_by_category(commits)
+        baselines: Dict[str, float] = {}
+
+        # Populate defaults first
+        for k, v in self.category_default_pph.items():
+            baselines[k] = v
+
+        # Override with personal data where sufficient
+        for cat, vals in agg.items():
+            hours = vals.get("hours", 0.0) or 0.0
+            points = vals.get("points", 0.0) or 0.0
+            if hours >= self.baseline_min_hours and hours > 0:
+                baselines[cat] = max(points / hours, 0.01)
+
+        return baselines
+
+    def _compute_normalized_efficiency(
+        self,
+        period_agg: Dict[str, Dict[str, float]],
+        baselines: Dict[str, float],
+    ) -> Tuple[float, bool, str]:
+        """Compute hours-weighted normalized PPH across categories.
+        Returns (normalized_pph, provisional_flag, baseline_source)."""
+        total_hours = 0.0
+        weighted_sum = 0.0
+        used_default = False
+
+        for cat, vals in period_agg.items():
+            hours = vals.get("hours", 0.0) or 0.0
+            points = vals.get("points", 0.0) or 0.0
+            if hours <= 0 and points <= 0:
+                continue
+            total_hours += hours
+
+        if total_hours <= 0:
+            return (0.0, False, "personal")
+
+        for cat, vals in period_agg.items():
+            hours = vals.get("hours", 0.0) or 0.0
+            points = vals.get("points", 0.0) or 0.0
+            if hours <= 0:
+                continue
+            pph_c = points / max(hours, self.norm_h_min)
+            baseline = baselines.get(cat)
+            if baseline is None:
+                # Shouldn't happen due to prefill, but guard anyway
+                baseline = self.category_default_pph.get(cat, 1.0)
+                used_default = True
+            # Consider as default used if baseline equals default map (best-effort check)
+            if abs(baseline - self.category_default_pph.get(cat, baseline)) < 1e-9:
+                used_default = True
+            ratio = pph_c / max(baseline, 0.01)
+            # clamp
+            ratio = max(self.norm_ratio_min, min(self.norm_ratio_max, ratio))
+            weighted_sum += ratio * hours
+
+        normalized = weighted_sum / total_hours if total_hours > 0 else 0.0
+        return (round(normalized, 2), used_default, "default" if used_default else "personal")
 
     def calculate_commit_metrics_for_user(
         self, user_id: UUID, start_date: datetime, end_date: datetime
@@ -171,6 +301,17 @@ class KpiService:
             else 0.0
         )
 
+        # Normalized efficiency using personal baselines
+        try:
+            period_agg = self._sum_points_hours_by_category(commits_in_period)
+            baselines = await self._compute_personal_baselines(user_id, end_date)
+            normalized_pph, used_default, source = self._compute_normalized_efficiency(period_agg, baselines)
+            efficiency_provisional = used_default
+        except Exception:
+            normalized_pph = 0.0
+            efficiency_provisional = True
+            source = "default"
+
         # Top commits by impact
         def _impact(c: Commit) -> float:
             try:
@@ -208,6 +349,9 @@ class KpiService:
             # New business points metrics
             "total_business_points": round(total_business_points, 2),
             "efficiency_points_per_hour": efficiency_pph,
+            "normalized_efficiency_points_per_hour": normalized_pph,
+            "efficiency_provisional": efficiency_provisional,
+            "efficiency_baseline_source": source,
             "daily_hours_series": daily_hours_series,
             "daily_points_series": daily_points_series,
             "top_commits_by_impact": top_commits_by_impact,
@@ -280,6 +424,17 @@ class KpiService:
                 ]
                 efficiency_pph = round(total_points / total_hours, 2) if total_hours > 0 else 0.0
 
+                # Normalized efficiency for the widget entry (personal baseline)
+                try:
+                    period_agg = self._sum_points_hours_by_category(commits)
+                    baselines = await self._compute_personal_baselines(user.id, end_date_dt)
+                    normalized_pph, used_default, source = self._compute_normalized_efficiency(period_agg, baselines)
+                    efficiency_provisional = used_default
+                except Exception:
+                    normalized_pph = 0.0
+                    efficiency_provisional = True
+                    source = "default"
+
                 widget_summaries.append(
                     UserWidgetSummary(
                         user_id=user.id,
@@ -288,6 +443,9 @@ class KpiService:
                         total_ai_estimated_commit_hours=round(total_hours, 2),
                         total_business_points=round(total_points, 2),
                         efficiency_points_per_hour=efficiency_pph,
+                        normalized_efficiency_points_per_hour=normalized_pph,
+                        efficiency_provisional=efficiency_provisional,
+                        efficiency_baseline_source=source,
                         daily_hours_series=daily_hours_series,
                         daily_points_series=daily_points_series,
                     )

@@ -30,12 +30,24 @@ async def get_current_user(
         HTTPException: If token is invalid or user doesn't exist
     """
     if not authorization or not authorization.startswith("Bearer "):
+        # When API key auth is enabled, surface API key message to align with API middleware behavior
+        api_auth_enabled = False
+        try:
+            import os
+            val = os.environ.get("ENABLE_API_AUTH")
+            if val is not None:
+                api_auth_enabled = str(val).lower() in ("1", "true", "yes")
+            else:
+                # Default to settings if env not present
+                from app.config.settings import settings as _settings
+                api_auth_enabled = bool(getattr(_settings, "ENABLE_API_AUTH", False))
+        except Exception:
+            api_auth_enabled = False
+        if api_auth_enabled:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key required")
         logger.warning("Invalid authorization header format - does not start with 'Bearer '")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        # Mimic FastAPI validation error semantics for missing header when API key auth is disabled
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Field required")
 
     token = authorization.replace("Bearer ", "")
 

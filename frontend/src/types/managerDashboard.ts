@@ -32,6 +32,9 @@ export interface UserPerformanceSummary {
   // New business points metrics and series for the detailed view
   total_business_points?: number;
   efficiency_points_per_hour?: number;
+  normalized_efficiency_points_per_hour?: number;
+  efficiency_provisional?: boolean;
+  efficiency_baseline_source?: string;
   daily_hours_series?: { date: string; hours: number }[];
   daily_points_series?: { date: string; points: number }[];
   // Additional data we store server-side and display in UI
@@ -61,6 +64,9 @@ export interface UserWidgetSummary {
   // New fields to support dual-metric tiles and sparklines
   total_business_points: number;
   efficiency_points_per_hour: number;
+  normalized_efficiency_points_per_hour?: number;
+  efficiency_provisional?: boolean;
+  efficiency_baseline_source?: string;
   daily_hours_series: { date: string; hours: number }[];
   daily_points_series: { date: string; points: number }[];
 } 

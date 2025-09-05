@@ -211,14 +211,14 @@ const ManagerDashboardPageV2: React.FC = () => {
     return <Minus className="w-4 h-4" />;
   };
 
-  // Sort users by efficiency
+  // Sort users by efficiency (prefer normalized if available)
   const sortedUserData = useMemo(() => {
     return users.map(user => {
       const widgetData = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === user.id) : undefined;
       return { user, widgetData };
     }).sort((a, b) => {
-      const aEfficiency = a.widgetData?.efficiency_points_per_hour ?? 0;
-      const bEfficiency = b.widgetData?.efficiency_points_per_hour ?? 0;
+      const aEfficiency = a.widgetData?.normalized_efficiency_points_per_hour ?? a.widgetData?.efficiency_points_per_hour ?? 0;
+      const bEfficiency = b.widgetData?.normalized_efficiency_points_per_hour ?? b.widgetData?.efficiency_points_per_hour ?? 0;
       return bEfficiency - aEfficiency;
     });
   }, [users, userWidgetsData]);
@@ -251,11 +251,16 @@ const ManagerDashboardPageV2: React.FC = () => {
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-gray-900">
-                    {userWidgetsData.length > 0 
-                      ? (userWidgetsData.reduce((sum, w) => sum + (w.efficiency_points_per_hour ?? 0), 0) / userWidgetsData.length).toFixed(2)
+                    {userWidgetsData.length > 0
+                      ? (
+                          userWidgetsData.reduce(
+                            (sum, w) => sum + (w.normalized_efficiency_points_per_hour ?? w.efficiency_points_per_hour ?? 0),
+                            0
+                          ) / userWidgetsData.length
+                        ).toFixed(2)
                       : '0.00'}
                   </p>
-                  <p className="text-xs text-gray-500">Avg Efficiency</p>
+                  <p className="text-xs text-gray-500">Avg Efficiency (normalized)</p>
                 </div>
               </div>
             </div>
@@ -344,7 +349,7 @@ const ManagerDashboardPageV2: React.FC = () => {
                         );
                       }
 
-                      const pph = widgetData.efficiency_points_per_hour ?? 0;
+                      const pph = widgetData.normalized_efficiency_points_per_hour ?? widgetData.efficiency_points_per_hour ?? 0;
                       const points = widgetData.total_business_points ?? 0;
                       const hours = widgetData.total_ai_estimated_commit_hours ?? 0;
                       const tier = getPerformanceTier(pph);
@@ -415,9 +420,14 @@ const ManagerDashboardPageV2: React.FC = () => {
                                   <div className="space-y-2">
                                     <p className="text-sm font-medium text-gray-700">Performance Metrics</p>
                                     <div className="space-y-1">
-                                      <div className="flex justify-between">
-                                        <span className="text-sm text-gray-500">Efficiency Score</span>
-                                        <span className="text-sm font-medium">{pph.toFixed(2)} pts/hr</span>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-500">Efficiency (normalized)</span>
+                                        <span className="text-sm font-medium flex items-center gap-2">
+                                          {pph.toFixed(2)} pts/hr
+                                          {widgetData.efficiency_provisional && (
+                                            <span className="text-[11px] text-gray-500 px-2 py-0.5 border border-gray-200 rounded">Provisional</span>
+                                          )}
+                                        </span>
                                       </div>
                                       <div className="flex justify-between">
                                         <span className="text-sm text-gray-500">Total Hours</span>
@@ -442,8 +452,8 @@ const ManagerDashboardPageV2: React.FC = () => {
                                       const pointsSeries = widgetData?.daily_points_series || [];
                                       const last7Hours = hoursSeries.slice(-7).reduce((a, b) => a + (b.hours || 0), 0);
                                       const last7Points = pointsSeries.slice(-7).reduce((a, b) => a + (b.points || 0), 0);
-                                      const weeklyAvg = last7Hours > 0 ? (last7Points / last7Hours) : 0;
-                                      // Last active (last day with any hours)
+                                          const weeklyAvg = last7Hours > 0 ? (last7Points / last7Hours) : 0;
+                                          // Last active (last day with any hours)
                                       let lastActiveText = 'No recent activity';
                                       for (let i = hoursSeries.length - 1; i >= 0; i--) {
                                         if ((hoursSeries[i]?.hours || 0) > 0) {
@@ -535,11 +545,14 @@ const ManagerDashboardPageV2: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-white border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-500">Efficiency</span>
+                          <span className="text-xs text-gray-500">Efficiency (normalized)</span>
                           <TrendingUp className="w-3 h-3 text-green-500" />
                         </div>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {(focusedUserPerformanceData.efficiency_points_per_hour ?? 0).toFixed(2)}
+                        <p className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                          {(focusedUserPerformanceData.normalized_efficiency_points_per_hour ?? focusedUserPerformanceData.efficiency_points_per_hour ?? 0).toFixed(2)}
+                          {focusedUserPerformanceData.efficiency_provisional && (
+                            <span className="text-[11px] text-gray-500 px-2 py-0.5 border border-gray-200 rounded">Provisional</span>
+                          )}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">points/hour</p>
                       </div>

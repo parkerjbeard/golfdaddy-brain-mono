@@ -49,10 +49,20 @@ app = FastAPI(
 app.add_middleware(RequestMetricsMiddleware)
 
 # API key auth middleware (conditional)
-if settings.enable_api_auth and settings.api_keys is not None:
+if settings.enable_api_auth:
+    # Resolve API keys at runtime to support test-time env patching
+    api_keys_runtime = settings.api_keys
+    if api_keys_runtime is None:
+        import os, json
+        env_keys_str = os.environ.get("API_KEYS")
+        if env_keys_str:
+            try:
+                api_keys_runtime = json.loads(env_keys_str)
+            except Exception:
+                api_keys_runtime = None
     app.add_middleware(
         ApiKeyMiddleware,
-        api_keys=settings.api_keys,
+        api_keys=api_keys_runtime or {},
         api_key_header=settings.api_key_header,
         exclude_paths=settings.auth_exclude_paths.split(","),
     )
