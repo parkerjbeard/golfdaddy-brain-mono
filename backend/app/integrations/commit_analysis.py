@@ -648,6 +648,9 @@ Primary type:
 - foundation: Tests, refactoring, infrastructure
 - maintenance: Docs, configs, cleanup
 
+Heuristic subtypes (to guide conservative scoring):
+- deletions-heavy cleanup: predominately deletions, minimal additions, few or no new files, no new capabilities
+
 Check ALL that apply:
 □ Test code >80% of changes
 □ Modifies critical path (per commit message)
@@ -668,16 +671,20 @@ START: Who benefits from this change?
 │   └─ Nice to have?
 │       └─ Score 3-4
 └─ DEVELOPERS/MAINTAINERS ONLY
-    ├─ Significantly improves development velocity, quality, or operational efficiency?
-    │   ├─ YES → Score 4-5 (internal tooling still provides business value)
-    │   └─ NO → Score 2-3
-    └─ Minimal development impact → Score 1-2
+    ├─ Pure cleanup (deletions-heavy, no new capability) → Score 1-2
+    ├─ Refactor that improves structure/maintainability (no new capability) → Score 2-4
+    └─ Clear improvements to development velocity/operational efficiency → Score 4-5
 ```
 
 HARD CAPS:
 - Test-only commits (>80% test code): MAX 4
 - Documentation-only commits: MAX 3
 - Refactoring with no new functionality: MAX 4
+
+Deletions-heavy maintenance caps (apply when the work is predominately deletions with little/no new code):
+- Business Value: MAX 2
+- Technical Complexity: MAX 2
+- Overall Impact: MAX 8
 
 NOTE: Developer productivity tools, CI/CD improvements, monitoring, and infrastructure 
 changes provide measurable business value through reduced costs, faster delivery, 
@@ -728,6 +735,8 @@ MANDATORY CHECKS:
 2. If commit message/files indicate tooling → Technical Complexity CANNOT exceed 5
 3. If >80% test code → Both Value and Complexity capped appropriately
 4. Verify all caps were applied correctly
+
+For deletions-heavy maintenance (predominately deletions and minimal/no new code), apply the specific caps above before computing final Impact.
 
 For EACH score, confirm:
 - Does it respect all applicable caps?

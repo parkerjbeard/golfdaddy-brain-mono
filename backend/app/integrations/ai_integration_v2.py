@@ -752,43 +752,222 @@ Respond with JSON:
         repositories = context.get("repositories", [])
         total_lines = context.get("total_lines_changed", 0)
 
-        prompt = f"""Analyze this developer's complete work for {analysis_date}.
+        # Build the comprehensive daily prompt (parallel to individual, adapted for day-level analysis)
+        header = (
+            "You are a senior engineering manager analyzing a developer’s entire day of work across one or more repositories. "
+            "Output only valid JSON with no additional commentary."
+        )
+
+        scoring = """
+## Scoring Guidelines
+
+### 1. HOURS-BASED DAILY SCORING
+
+Estimate total productive engineering time for the day considering:
+- Actual development time (not AI-assisted time)
+- Code review and refinement cycles
+- Mental effort, context switching, and architecture decisions
+- Cross-repo/component coordination
+
+#### Reference Anchors — DAILY CLASSIFICATION
+Select a base anchor using day-level totals (sum across all commits):
+
+STEP 1: Initial Classification (use total lines = additions + deletions)
+- Under 50 lines → Start with Anchor A
+- 50–199 lines → Start with Anchor B
+- 200–499 lines → Start with Anchor C
+- 500–1499 lines → Start with Anchor D
+- 1500+ lines → Consider Anchor D or E (see Step 2)
+
+STEP 2: Refinement Checks (apply IN ORDER; day-level evidence)
+1) Major Change Detection (can upgrade D→E):
+   □ Commit messages signal "new system/service/framework" or "breaking change"
+   □ 5+ new files created in new top-level directories
+   □ 20+ files changed across 3+ top-level directories
+   □ New technology/dependency introduced (new language, DB, framework)
+   If 2+ checked → Upgrade to Anchor E
+
+2) File Count Override (supersedes Step 1):
+   □ 25+ unique files changed during the day
+   If checked → Set to Anchor E
+
+3) Simplicity Reduction (can downgrade by one level):
+   □ >70% of changes are tests, docs, or comments
+   □ Messages emphasize "refactor", "rename", "move", or "cleanup"
+   □ Only config/constants/data files changed
+   If any checked → Downgrade one anchor level (but never below A)
+
+ANCHOR VALUES (base for the day before multipliers):
+- A: Minimal (0.5h) — Typos/configs/small fixes
+- B: Simple (2.5h) — Small, focused changes
+- C: Standard (6.0h) — Multi-file features or several moderate changes
+- D: Complex (12.0h) — Cross-component/day-spanning work
+- E: Major (20.0h) — New subsystems/architecture-level changes
+
+#### Daily Multipliers (apply to base hours)
+• High context switching (4+ distinct areas/repos): +30%
+• Multi-repo or cross-service coordination: +20%
+• Modifies critical path (messages indicate): +30%
+• Includes comprehensive tests (>50% of changes): +20%
+• Performance-critical work: +20%
+• Security-sensitive changes: +30%
+• Documentation-only day: -50%
+• Formatting/refactor-only day: -30%
+
+Daily sanity bounds:
+- Round final hours to nearest 0.5h
+- Typical days range 0.5–12h; rarely exceed 14h; hard cap at 16h unless overwhelming evidence suggests otherwise
+
+### 2. COMPLEXITY SCORING (1–10)
+
+Compute an average complexity for the day (weighted by significance/size). Count these factors:
+□ Changes core functionality (+3)
+□ Modifies multiple components (+2)
+□ Adds new abstractions/patterns (+2)
+□ Requires algorithmic thinking (+2)
+□ Handles error cases (+1)
+Total: Min 1, Max 10
+
+### 3. SENIORITY SCORING (1–10)
+
+Assess the day’s implementation quality (average across the work):
+□ Comprehensive error handling (+2)
+□ Well-structured tests (+2)
+□ Follows established patterns (+2)
+□ Good abstractions (+2)
+□ Forward-thinking design (+2)
+Total: Min 1, Max 10
+
+For trivial days (<20 lines AND average per-commit complexity ≤ 2 AND minimal changes):
+- Do not automatically set seniority = 10
+- Use seniority 6–9 if quality signals are consistently strong; otherwise 4–6
+
+### 4. RISK LEVEL (low|medium|high)
+
+Day-level deployment risk:
+- low: Docs/tests/isolated changes
+- medium: Core features or integrations with some risk
+- high: Critical path, data migrations, security-sensitive
+
+### 5. DAILY IMPACT SUMMARY (optional but recommended)
+
+Provide a compact day-level impact summary using the same additive formula as individual commits:
+- business_value (1–10)
+- technical_complexity (1–10)
+- code_quality_points (0.5–1.5)
+- risk_penalty (0–3)
+- impact_score = (business_value × 2) + (technical_complexity × 1.5) + code_quality_points − risk_penalty
+Also include:
+- classification: primary_category (feature|maintenance|refactor|docs|infra), with brief rationale
+- category_breakdown: counts or percentages by category
+- top_repositories_by_impact: list of {repo, score}
+
+### 6. EOD REPORT ALIGNMENT (if available)
+
+- consistency_with_report: true|false
+- eod_hours_reported: number or null
+- consistency_notes: brief explanation of alignment or discrepancy
+"""
+
+        output_schema = """
+## Output Format (JSON only)
+
+{
+  "analysis_date": "<YYYY-MM-DD>",
+  "user_name": "<string>",
+  "repositories": ["<owner/repo>", "..."],
+  "commits_evaluated": <int>,
+  "totals": {
+    "total_lines": <int>,
+    "total_files": <int>,
+    "commit_count": <int>,
+    "repos_count": <int>,
+    "components_touched": <int>
+  },
+
+  "initial_anchor": "<A|B|C|D|E>",
+  "major_change_checks": ["<string>", "..."],
+  "major_change_count": <int>,
+  "file_count_override": <boolean>,
+  "simplicity_reduction_checks": ["<string>", "..."],
+  "final_anchor": "<A|B|C|D|E>",
+  "base_hours": <float>,
+  "multipliers_applied": ["<string>", "..."],
+  "total_estimated_hours": <float>,
+  "average_complexity": <int>,
+  "risk_level": "<low|medium|high>",
+  "average_seniority": <int>,
+  "seniority_rationale": "<string>",
+
+  "work_summary": "<concise paragraph>",
+  "key_achievements": ["<string>", "..."],
+  "hour_estimation_reasoning": "<brief explanation>",
+
+  "impact_summary": {
+    "business_value": <int>,
+    "technical_complexity": <int>,
+    "code_quality_points": <float>,
+    "risk_penalty": <int>,
+    "impact_score": <float>,
+    "classification": {
+      "primary_category": "<feature|maintenance|refactor|docs|infra>",
+      "rationale": "<string>"
+    },
+    "category_breakdown": {"feature": <int>, "maintenance": <int>, "refactor": <int>, "docs": <int>, "infra": <int>},
+    "top_repositories_by_impact": [{"repo": "<owner/repo>", "score": <float>}]
+  },
+
+  "consistency_with_report": <boolean>,
+  "eod_hours_reported": <float|null>,
+  "consistency_notes": "<string>",
+
+  "top_changes": ["<string>", "..."],
+  "warnings": ["<string>", "..."],
+  "method": "daily_batch_v2"
+}
+"""
+
+        context_header = f"""
+## Daily Work to Analyze
 
 Developer: {user_name}
+Analysis Date: {analysis_date}
 Total Commits: {total_commits}
 Repositories: {', '.join(repositories)}
 Total Lines Changed: {total_lines}
 
-Commits:
+Guidance for large days:
+- Do not drop commits. If there are many, mentally cluster by repository and top-level directory to form coherent themes.
+- Weigh effort by significance and size, not just count. Penalize heavy context switching using the multiplier.
+- If file lists are partial, infer totals from additions/deletions and commit distribution; note any assumptions in "warnings".
 """
 
-        for i, commit in enumerate(context.get("commits", [])[:20], 1):
-            prompt += f"""
-{i}. [{commit['timestamp']}] {commit['repository']}
-   Message: {commit['message']}
-   Changes: +{commit['additions']} -{commit['deletions']}
-"""
+        # Build the commits list (include all commits provided by context)
+        commits_lines: List[str] = ["\nCommits:"]
+        for i, commit in enumerate(context.get("commits", []), 1):
+            ts = commit.get("timestamp", "")
+            repo = commit.get("repository", "")
+            msg = commit.get("message", "")
+            adds = commit.get("additions", 0)
+            dels = commit.get("deletions", 0)
+            files = ", ".join(commit.get("files_changed", [])[:15])  # cap file list per entry to limit length
+            line = (
+                f"{i}. [{ts}] {repo}\n   Message: {msg}\n   Changes: +{adds} -{dels}\n   Files: {files}"
+            )
+            commits_lines.append(line)
 
-        prompt += """
-
-Provide a JSON response with:
-- total_estimated_hours: Float, total productive hours
-- average_complexity_score: Integer 1-10
-- average_seniority_score: Integer 1-10
-- work_summary: Summary of the day's work
-- key_achievements: List of 3-5 major accomplishments
-- hour_estimation_reasoning: Explanation of hour estimate
-- consistency_with_report: Boolean
-- recommendations: List of 1-3 suggestions
-"""
+        prompt = "\n\n".join([header, scoring, output_schema, context_header, "\n".join(commits_lines)])
 
         messages = [
-            {"role": "system", "content": "You are a senior engineering manager analyzing developer productivity."},
+            {
+                "role": "system",
+                "content": "You are a senior engineering manager analyzing developer productivity. Output only valid JSON.",
+            },
             {"role": "user", "content": prompt},
         ]
 
         response = await self._make_completion_request(
-            messages, response_format={"type": "json_object"}, temperature=0.5
+            messages, response_format={"type": "json_object"}, temperature=0.4
         )
 
         if not response:
@@ -797,18 +976,36 @@ Provide a JSON response with:
         try:
             result = json.loads(response)
 
-            # Ensure all fields exist
+            # Provide sane defaults and compatibility keys
+            result.setdefault("analysis_date", analysis_date)
+            result.setdefault("user_name", user_name)
+            result.setdefault("repositories", repositories)
+            result.setdefault("commits_evaluated", total_commits)
+            result.setdefault("totals", {})
+            result["totals"].setdefault("total_lines", total_lines)
+            result["totals"].setdefault("commit_count", total_commits)
+            result["totals"].setdefault("repos_count", len(repositories))
+
             result.setdefault("total_estimated_hours", 0.0)
-            result.setdefault("average_complexity_score", 5)
-            result.setdefault("average_seniority_score", 5)
+            result.setdefault("average_complexity", result.get("average_complexity_score", 5))
+            result.setdefault("average_complexity_score", result.get("average_complexity", 5))
+            result.setdefault("average_seniority", result.get("average_seniority_score", 5))
+            result.setdefault("average_seniority_score", result.get("average_seniority", 5))
+            result.setdefault("risk_level", "medium")
             result.setdefault("work_summary", "No summary available")
             result.setdefault("key_achievements", [])
             result.setdefault("hour_estimation_reasoning", "")
             result.setdefault("consistency_with_report", True)
-            result.setdefault("recommendations", [])
+            result.setdefault("eod_hours_reported", None)
+            result.setdefault("consistency_notes", "")
+            result.setdefault("impact_summary", {})
+            result.setdefault("method", "daily_batch_v2")
 
             # Round hours
-            result["total_estimated_hours"] = round(float(result["total_estimated_hours"]), 1)
+            try:
+                result["total_estimated_hours"] = round(float(result["total_estimated_hours"]), 1)
+            except Exception:
+                result["total_estimated_hours"] = 0.0
 
             result["analyzed_at"] = datetime.now().isoformat()
             result["model_used"] = self.model

@@ -1718,9 +1718,11 @@ async def main():
     if args.analysis_mode == "daily":
         seeder.set_daily_analysis_mode(True)
         print(f"🔬 Using daily batch analysis mode")
+        print("📄 Prompt: daily_batch_v2")
     else:  # individual
         seeder.set_daily_analysis_mode(False)
         print(f"🔬 Using individual commit analysis mode")
+        print("📄 Prompt: individual_v2 (anchors + optional impact)")
 
     # Display scoring method and concurrency
     if args.scoring_method == "hours":
