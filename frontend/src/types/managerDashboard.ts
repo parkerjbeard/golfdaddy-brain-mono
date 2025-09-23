@@ -1,8 +1,7 @@
 export interface User {
   id: string;
-  name: string; // Assuming users have a display name
+  name: string;
   email?: string;
-  // Add other relevant user fields if needed, e.g., role
 }
 
 export interface EodReportDetail {
@@ -13,41 +12,44 @@ export interface EodReportDetail {
   clarification_requests_count: number;
 }
 
-export interface CommitComparisonInsight {
-  commit_hash: string;
-  commit_timestamp: string;
-  notes: string;
+export interface PullRequestDetail {
+  pr_number: number;
+  title?: string | null;
+  status: string;
+  activity_timestamp?: string | null;
+  ai_summary?: string | null;
+  ai_prompts: string[];
+  impact_score: number;
+  ai_estimated_hours: number;
+  url?: string | null;
+  repository_name?: string | null;
+  review_comments?: number | null;
 }
 
 export interface UserPerformanceSummary {
   user_id: string;
   period_start_date: string;
   period_end_date: string;
-  total_eod_reported_hours: number;
-  eod_report_details: EodReportDetail[];
-  total_commits_in_period: number;
-  total_commit_ai_estimated_hours: number;
-  average_commit_seniority_score: number;
-  commit_comparison_insights: CommitComparisonInsight[];
-  // New business points metrics and series for the detailed view
-  total_business_points?: number;
-  efficiency_points_per_hour?: number;
+  total_prs_in_period: number;
+  merged_prs_in_period: number;
+  total_ai_estimated_pr_hours: number;
+  total_business_points: number;
+  efficiency_points_per_hour: number;
   normalized_efficiency_points_per_hour?: number;
   efficiency_provisional?: boolean;
   efficiency_baseline_source?: string;
-  daily_hours_series?: { date: string; hours: number }[];
-  daily_points_series?: { date: string; points: number }[];
-  // Additional data we store server-side and display in UI
-  top_commits_by_impact?: {
-    commit_hash: string;
-    impact_score: number;
-    message?: string | null;
-    url?: string | null;
-    timestamp?: string | null;
-  }[];
+  activity_score: number;
+  average_pr_turnaround_hours: number;
+  daily_hours_series: { date: string; hours: number }[];
+  daily_points_series: { date: string; points: number }[];
+  daily_prs_series: { date: string; count: number }[];
+  pr_details: PullRequestDetail[];
+  top_prs_by_impact: PullRequestDetail[];
+  day_off_dates: string[];
+  total_eod_reported_hours: number;
+  eod_report_details: EodReportDetail[];
 }
 
-// For API request parameters
 export interface PerformanceSummaryParams {
   userId: string;
   periodDays?: number;
@@ -55,18 +57,23 @@ export interface PerformanceSummaryParams {
   endDate?: string;
 }
 
-// New type for the bulk widget summaries
 export interface UserWidgetSummary {
-  user_id: string; 
+  user_id: string;
   name?: string | null;
   avatar_url?: string | null;
-  total_ai_estimated_commit_hours: number;
-  // New fields to support dual-metric tiles and sparklines
+  total_prs: number;
+  merged_prs: number;
+  total_ai_estimated_pr_hours: number;
   total_business_points: number;
   efficiency_points_per_hour: number;
   normalized_efficiency_points_per_hour?: number;
   efficiency_provisional?: boolean;
   efficiency_baseline_source?: string;
+  activity_score: number;
+  day_off: boolean;
+  daily_prs_series: { date: string; count: number }[];
   daily_hours_series: { date: string; hours: number }[];
   daily_points_series: { date: string; points: number }[];
-} 
+  latest_activity_timestamp?: string | null;
+  latest_pr_title?: string | null;
+}

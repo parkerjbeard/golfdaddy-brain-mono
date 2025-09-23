@@ -14,6 +14,7 @@ from app.models.daily_report import (
     DailyReportUpdate,
 )
 from app.models.daily_work_analysis import DailyWorkAnalysis, DeduplicationResult, WorkItem
+from app.models.pull_request import PullRequest
 from app.models.raci_matrix import (
     CreateRaciMatrixPayload,
     RaciActivity,
@@ -53,4 +54,5 @@ __all__ = [
     "DailyWorkAnalysis",
     "WorkItem",
     "DeduplicationResult",
+    "PullRequest",
 ]

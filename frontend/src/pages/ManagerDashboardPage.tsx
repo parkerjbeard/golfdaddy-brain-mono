@@ -1,40 +1,35 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, UserPerformanceSummary, PerformanceSummaryParams, UserWidgetSummary } from '@/types/managerDashboard';
 import api from '@/services/api';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableCaption, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { addDays, format, isEqual } from 'date-fns';
+import { addDays, format, formatDistanceToNow, isEqual } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DailyReportsView } from "@/components/DailyReportsView";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Chart } from "@/components/ui/chart";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, BarChart, Calendar, Filter, Clock, Target } from 'lucide-react';
+import { TrendingUp, ChevronDown, ChevronUp, BarChart, Clock, Target } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { buildRangeForTimeframe, computeProgressValue, ManagerTimeframe } from './managerDashboardUtils';
 
 const ManagerDashboardPageV2: React.FC = () => {
   const { session } = useAuth();
   const token = session?.access_token || null;
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [selectedTimeframe, setSelectedTimeframe] = useState<ManagerTimeframe | 'custom'>('biweekly');
 
   // Global date range state for the widget's summary stat
-  const [globalDateRange, setGlobalDateRange] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: addDays(today, -7), to: today };
-  });
+  const [globalDateRange, setGlobalDateRange] = useState<DateRange | undefined>(() => buildRangeForTimeframe('biweekly'));
   // Stores the date range that has been *confirmed* for global use
-  const [confirmedGlobalDateRange, setConfirmedGlobalDateRange] = useState<DateRange | undefined>(globalDateRange);
-
+  const [confirmedGlobalDateRange, setConfirmedGlobalDateRange] = useState<DateRange | undefined>(() => buildRangeForTimeframe('biweekly'));
   // Widget-specific state
   const [userWidgetsData, setUserWidgetsData] = useState<UserWidgetSummary[]>([]);
   const [isLoadingWidgets, setIsLoadingWidgets] = useState<boolean>(false);
@@ -50,6 +45,8 @@ const ManagerDashboardPageV2: React.FC = () => {
   
   const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(false);
   const [errorUsers, setErrorUsers] = useState<string | null>(null);
+
+const widgetSummaries = useMemo(() => (Array.isArray(userWidgetsData) ? userWidgetsData : []), [userWidgetsData]);
 
   // Fetch users
   useEffect(() => {
@@ -87,7 +84,8 @@ const ManagerDashboardPageV2: React.FC = () => {
         endDate: dateRangeToUse.to ? format(dateRangeToUse.to, 'yyyy-MM-dd') : format(dateRangeToUse.from, 'yyyy-MM-dd'),
       };
       const response = await api.kpi.getWidgetSummaries(params);
-      setUserWidgetsData(response?.data || response || []);
+      const widgets = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+      setUserWidgetsData(widgets as UserWidgetSummary[]);
     } catch (err) {
       setErrorWidgets(err instanceof Error ? err.message : 'Failed to fetch bulk widget summaries.');
       setUserWidgetsData([]);
@@ -160,17 +158,47 @@ const ManagerDashboardPageV2: React.FC = () => {
     }
   };
 
-  // Handler for clicking a widget
+  // Open focused sheet and sync its range to confirmed global range
   const handleWidgetClick = (userId: string) => {
     setShowFocusedViewForUserId(userId);
-    setFocusedUserDateRange(confirmedGlobalDateRange);
-    setConfirmedFocusedDateRange(confirmedGlobalDateRange);
+    const range =
+      confirmedGlobalDateRange ??
+      buildRangeForTimeframe(
+        selectedTimeframe === 'custom' ? 'biweekly' : (selectedTimeframe as ManagerTimeframe),
+      );
+    setFocusedUserDateRange(range);
+    setConfirmedFocusedDateRange(range);
     setFocusedUserPerformanceData(null);
   };
 
-  // Handler for Internal (Focused View) Confirm Date Change button
+  // Confirm focused range to trigger refetch via effect
   const handleFocusedDateConfirm = () => {
     setConfirmedFocusedDateRange(focusedUserDateRange);
+  };
+
+  // Handler for clicking a widget
+  const applyTimeframeRange = useCallback((timeframe: ManagerTimeframe) => {
+    const range = buildRangeForTimeframe(timeframe);
+    setGlobalDateRange(range);
+    setConfirmedGlobalDateRange(range);
+    if (showFocusedViewForUserId) {
+      setFocusedUserDateRange(range);
+      setConfirmedFocusedDateRange(range);
+    }
+  }, [showFocusedViewForUserId]);
+
+  const handleTimeframeChange = (timeframe: ManagerTimeframe | 'custom') => {
+    if (timeframe === 'custom') {
+      setSelectedTimeframe('custom');
+      return;
+    }
+    setSelectedTimeframe(timeframe);
+    applyTimeframeRange(timeframe);
+  };
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    setSelectedTimeframe('custom');
+    setGlobalDateRange(range);
   };
 
   const toggleRowExpansion = (userId: string) => {
@@ -190,12 +218,20 @@ const ManagerDashboardPageV2: React.FC = () => {
     return `${fromDate} - ${toDate}`;
   }, []);
 
+  const widgetSummaryById = useMemo(() => {
+    const map = new Map<string, UserWidgetSummary>();
+    widgetSummaries.forEach(widget => {
+      map.set(widget.user_id, widget);
+    });
+    return map;
+  }, [widgetSummaries]);
+
   const focusedUserName = useMemo(() => {
-    const widgetUser = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === showFocusedViewForUserId) : undefined;
+    const widgetUser = showFocusedViewForUserId ? widgetSummaryById.get(showFocusedViewForUserId) : undefined;
     if (widgetUser?.name) return widgetUser.name;
     const generalUser = users.find(u => u.id === showFocusedViewForUserId);
     return generalUser?.name || "Focused User";
-  }, [users, userWidgetsData, showFocusedViewForUserId]);
+  }, [users, widgetSummaryById, showFocusedViewForUserId]);
 
   // Calculate performance tier based on points per hour
   const getPerformanceTier = (pph: number) => {
@@ -205,23 +241,29 @@ const ManagerDashboardPageV2: React.FC = () => {
     return { label: 'Needs Support', color: 'text-red-600', bgColor: 'bg-red-100', trend: 'down' };
   };
 
-  const getTrendIcon = (trend: string) => {
-    if (trend === 'up') return <TrendingUp className="w-4 h-4" />;
-    if (trend === 'down') return <TrendingDown className="w-4 h-4" />;
-    return <Minus className="w-4 h-4" />;
-  };
-
-  // Sort users by efficiency (prefer normalized if available)
+  // Sort users by activity score for leaderboard
   const sortedUserData = useMemo(() => {
-    return users.map(user => {
-      const widgetData = Array.isArray(userWidgetsData) ? userWidgetsData.find(w => w.user_id === user.id) : undefined;
-      return { user, widgetData };
-    }).sort((a, b) => {
-      const aEfficiency = a.widgetData?.normalized_efficiency_points_per_hour ?? a.widgetData?.efficiency_points_per_hour ?? 0;
-      const bEfficiency = b.widgetData?.normalized_efficiency_points_per_hour ?? b.widgetData?.efficiency_points_per_hour ?? 0;
-      return bEfficiency - aEfficiency;
-    });
-  }, [users, userWidgetsData]);
+    return users
+      .map(user => {
+        const widgetData = widgetSummaryById.get(user.id);
+        const activityScore = widgetData?.activity_score ?? 0;
+        return { user, widgetData, activityScore };
+      })
+      .sort((a, b) => b.activityScore - a.activityScore);
+  }, [users, widgetSummaryById]);
+
+  const maxActivityScore = useMemo(() => {
+    if (!widgetSummaries.length) return 0;
+    return Math.max(...widgetSummaries.map(w => w.activity_score ?? 0));
+  }, [widgetSummaries]);
+
+  const totalPrs = useMemo(() => widgetSummaries.reduce((sum, w) => sum + (w.total_prs ?? 0), 0), [widgetSummaries]);
+  const totalMergedPrs = useMemo(() => widgetSummaries.reduce((sum, w) => sum + (w.merged_prs ?? 0), 0), [widgetSummaries]);
+  const averageActivityScore = useMemo(() => {
+    if (!widgetSummaries.length) return 0;
+    const total = widgetSummaries.reduce((sum, w) => sum + (w.activity_score ?? 0), 0);
+    return total / widgetSummaries.length;
+  }, [widgetSummaries]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -238,42 +280,45 @@ const ManagerDashboardPageV2: React.FC = () => {
               {/* Quick Stats */}
               <div className="hidden lg:flex items-center gap-4 pl-6 border-l">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-gray-900">
-                    {userWidgetsData.reduce((sum, w) => sum + (w.total_ai_estimated_commit_hours ?? 0), 0).toFixed(0)}
-                  </p>
-                  <p className="text-xs text-gray-500">Total Hours</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalPrs}</p>
+                  <p className="text-xs text-gray-500">Total PRs</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-gray-900">
-                    {userWidgetsData.reduce((sum, w) => sum + (w.total_business_points ?? 0), 0).toFixed(0)}
-                  </p>
-                  <p className="text-xs text-gray-500">Total Points</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalMergedPrs}</p>
+                  <p className="text-xs text-gray-500">Merged</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-gray-900">
-                    {userWidgetsData.length > 0
-                      ? (
-                          userWidgetsData.reduce(
-                            (sum, w) => sum + (w.normalized_efficiency_points_per_hour ?? w.efficiency_points_per_hour ?? 0),
-                            0
-                          ) / userWidgetsData.length
-                        ).toFixed(2)
-                      : '0.00'}
-                  </p>
-                  <p className="text-xs text-gray-500">Avg Efficiency (normalized)</p>
+                  <p className="text-2xl font-bold text-gray-900">{averageActivityScore.toFixed(1)}</p>
+                  <p className="text-xs text-gray-500">Avg Activity Score</p>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <DateRangePicker 
-                id="global-date-range-picker" 
-                date={globalDateRange} 
-                onDateChange={setGlobalDateRange}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={selectedTimeframe === 'biweekly' ? 'default' : 'outline'}
+                  onClick={() => handleTimeframeChange('biweekly')}
+                >
+                  Bi-weekly
+                </Button>
+                <Button
+                  size="sm"
+                  variant={selectedTimeframe === 'monthly' ? 'default' : 'outline'}
+                  onClick={() => handleTimeframeChange('monthly')}
+                >
+                  Monthly
+                </Button>
+              </div>
+              <DateRangePicker
+                id="global-date-range-picker"
+                date={globalDateRange}
+                onDateChange={handleDateRangeChange}
                 className="w-auto"
               />
-              <Button 
-                onClick={handleGlobalDateConfirm} 
+              <Button
+                onClick={handleGlobalDateConfirm}
                 disabled={!globalDateRange?.from || isLoadingWidgets}
                 size="sm"
               >
@@ -312,10 +357,11 @@ const ManagerDashboardPageV2: React.FC = () => {
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="text-left py-4 px-6 font-medium text-gray-700 text-sm">Developer</th>
-                      <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm">Efficiency</th>
+                      <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm">Activity Score</th>
+                      <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm">PRs</th>
                       <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm hidden sm:table-cell">Hours</th>
                       <th className="text-right py-4 px-4 font-medium text-gray-700 text-sm hidden sm:table-cell">Points</th>
-                      <th className="text-center py-4 px-4 font-medium text-gray-700 text-sm">Progress</th>
+                      <th className="text-center py-4 px-4 font-medium text-gray-700 text-sm">Status</th>
                       <th className="text-center py-4 px-6 font-medium text-gray-700 text-sm">Actions</th>
                     </tr>
                   </thead>
@@ -342,17 +388,24 @@ const ManagerDashboardPageV2: React.FC = () => {
                                 </div>
                               </div>
                             </td>
-                            <td colSpan={5} className="text-center py-4 text-gray-400 text-sm">
-                              Awaiting reports for selected period
+                            <td colSpan={6} className="text-center py-4 text-gray-400 text-sm">
+                              No pull requests recorded for selected range
                             </td>
                           </tr>
                         );
                       }
 
-                      const pph = widgetData.normalized_efficiency_points_per_hour ?? widgetData.efficiency_points_per_hour ?? 0;
+                      const activityScore = widgetData.activity_score ?? 0;
+                      const totalPrs = widgetData.total_prs ?? 0;
+                      const mergedPrs = widgetData.merged_prs ?? 0;
                       const points = widgetData.total_business_points ?? 0;
-                      const hours = widgetData.total_ai_estimated_commit_hours ?? 0;
-                      const tier = getPerformanceTier(pph);
+                      const hours = widgetData.total_ai_estimated_pr_hours ?? 0;
+                      const normalizedPph = widgetData.normalized_efficiency_points_per_hour ?? widgetData.efficiency_points_per_hour ?? 0;
+                      const tier = getPerformanceTier(normalizedPph);
+                      const isDayOff = widgetData.day_off ?? totalPrs === 0;
+                      const latestActivityTimestamp = widgetData.latest_activity_timestamp;
+                      const latestRelative = latestActivityTimestamp ? formatDistanceToNow(new Date(latestActivityTimestamp), { addSuffix: true }) : null;
+                      const progressValue = computeProgressValue(activityScore, maxActivityScore);
 
                       return (
                         <React.Fragment key={user.id}>
@@ -372,9 +425,28 @@ const ManagerDashboardPageV2: React.FC = () => {
                               </div>
                             </td>
                             <td className="text-right py-4 px-4">
-                              <div>
-                                <p className="font-semibold text-gray-900">{pph.toFixed(2)}</p>
-                                <p className="text-xs text-gray-500">pts/hr</p>
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-semibold text-gray-900">{activityScore.toFixed(1)}</p>
+                                  {!isDayOff && (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn('text-xs font-medium', tier.color, tier.bgColor)}
+                                    >
+                                      {tier.label}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="w-28">
+                                  <Progress value={progressValue} className="h-2" />
+                                  <p className="text-xs text-gray-500 text-right mt-1">{Math.round(progressValue)}%</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="text-right py-4 px-4">
+                              <div className="flex flex-col items-end">
+                                <p className="font-semibold text-gray-900">{totalPrs}</p>
+                                <p className="text-xs text-gray-500">{mergedPrs} merged</p>
                               </div>
                             </td>
                             <td className="text-right py-4 px-4 hidden sm:table-cell">
@@ -383,13 +455,22 @@ const ManagerDashboardPageV2: React.FC = () => {
                             <td className="text-right py-4 px-4 hidden sm:table-cell">
                               <p className="font-medium text-gray-700">{points.toFixed(1)}</p>
                             </td>
-                            <td className="py-4 px-4">
-                              <div className="w-24 mx-auto">
-                                <Progress value={Math.min((pph / 3) * 100, 100)} className="h-2" />
-                                <p className="text-xs text-gray-500 text-center mt-1">
-                                  {Math.min(Math.round((pph / 3) * 100), 100)}%
-                                </p>
-                              </div>
+                            <td className="py-4 px-4 text-center">
+                              {isDayOff ? (
+                                <Badge variant="secondary" className="bg-red-100 text-red-700 border-red-100">
+                                  Day Off
+                                </Badge>
+                              ) : (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <p
+                                    className="text-sm text-gray-800 max-w-[160px] truncate"
+                                    title={widgetData.latest_pr_title || 'Active'}
+                                  >
+                                    {widgetData.latest_pr_title || 'Active'}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{latestRelative || 'Updated just now'}</p>
+                                </div>
+                              )}
                             </td>
                             <td className="text-center py-4 px-6">
                               <div className="flex items-center justify-center gap-2">
@@ -421,13 +502,16 @@ const ManagerDashboardPageV2: React.FC = () => {
                                     <p className="text-sm font-medium text-gray-700">Performance Metrics</p>
                                     <div className="space-y-1">
                                       <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-500">Efficiency (normalized)</span>
-                                        <span className="text-sm font-medium flex items-center gap-2">
-                                          {pph.toFixed(2)} pts/hr
-                                          {widgetData.efficiency_provisional && (
-                                            <span className="text-[11px] text-gray-500 px-2 py-0.5 border border-gray-200 rounded">Provisional</span>
-                                          )}
-                                        </span>
+                                        <span className="text-sm text-gray-500">Activity Score</span>
+                                        <span className="text-sm font-medium">{activityScore.toFixed(1)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-xs text-gray-500">Normalized PPH</span>
+                                        <span className="text-xs font-medium text-gray-600">{normalizedPph.toFixed(2)} pts/hr</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-sm text-gray-500">Pull Requests</span>
+                                        <span className="text-sm font-medium">{totalPrs} ({mergedPrs} merged)</span>
                                       </div>
                                       <div className="flex justify-between">
                                         <span className="text-sm text-gray-500">Total Hours</span>
@@ -454,17 +538,10 @@ const ManagerDashboardPageV2: React.FC = () => {
                                       const last7Points = pointsSeries.slice(-7).reduce((a, b) => a + (b.points || 0), 0);
                                           const weeklyAvg = last7Hours > 0 ? (last7Points / last7Hours) : 0;
                                           // Last active (last day with any hours)
-                                      let lastActiveText = 'No recent activity';
-                                      for (let i = hoursSeries.length - 1; i >= 0; i--) {
-                                        if ((hoursSeries[i]?.hours || 0) > 0) {
-                                          const d = new Date(hoursSeries[i]!.date);
-                                          const diffMs = Date.now() - d.getTime();
-                                          const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-                                          const diffDays = Math.floor(diffHrs / 24);
-                                          lastActiveText = diffDays >= 1 ? `${diffDays}d ago` : `${diffHrs}h ago`;
-                                          break;
-                                        }
-                                      }
+                                      const lastActiveEntry = [...hoursSeries].reverse().find(entry => (entry?.hours || 0) > 0);
+                                      const lastActiveText = lastActiveEntry
+                                        ? formatDistanceToNow(new Date(lastActiveEntry.date), { addSuffix: true })
+                                        : 'No recent activity';
                                       return (
                                         <div className="space-y-1 text-sm text-gray-600">
                                           <p>• Last activity: {lastActiveText}</p>
@@ -545,52 +622,105 @@ const ManagerDashboardPageV2: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-white border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-500">Efficiency (normalized)</span>
+                          <span className="text-xs text-gray-500">Activity Score</span>
                           <TrendingUp className="w-3 h-3 text-green-500" />
                         </div>
                         <p className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                          {(focusedUserPerformanceData.normalized_efficiency_points_per_hour ?? focusedUserPerformanceData.efficiency_points_per_hour ?? 0).toFixed(2)}
+                          {focusedUserPerformanceData.activity_score.toFixed(1)}
                           {focusedUserPerformanceData.efficiency_provisional && (
-                            <span className="text-[11px] text-gray-500 px-2 py-0.5 border border-gray-200 rounded">Provisional</span>
+                            <span className="text-[11px] text-gray-500 px-2 py-0.5 border border-gray-200 rounded">Baseline</span>
                           )}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">points/hour</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {(focusedUserPerformanceData.normalized_efficiency_points_per_hour ?? focusedUserPerformanceData.efficiency_points_per_hour ?? 0).toFixed(2)} pts/hr normalized
+                        </p>
                       </div>
-                      
+
                       <div className="bg-white border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-500">Total Hours</span>
+                          <span className="text-xs text-gray-500">Pull Requests</span>
+                          <BarChart className="w-3 h-3 text-blue-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {focusedUserPerformanceData.total_prs_in_period}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {focusedUserPerformanceData.merged_prs_in_period} merged
+                        </p>
+                      </div>
+
+                      <div className="bg-white border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">AI Estimated Hours</span>
                           <Clock className="w-3 h-3 text-blue-500" />
                         </div>
                         <p className="text-2xl font-bold text-gray-900">
-                          {focusedUserPerformanceData.total_commit_ai_estimated_hours.toFixed(1)}
+                          {focusedUserPerformanceData.total_ai_estimated_pr_hours.toFixed(1)}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">committed</p>
+                        <p className="text-xs text-gray-500 mt-1">across all PRs</p>
                       </div>
-                      
+
                       <div className="bg-white border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-500">Business Points</span>
+                          <span className="text-xs text-gray-500">Business Impact</span>
                           <Target className="w-3 h-3 text-purple-500" />
                         </div>
                         <p className="text-2xl font-bold text-gray-900">
-                          {(focusedUserPerformanceData.total_business_points ?? 0).toFixed(0)}
+                          {focusedUserPerformanceData.total_business_points.toFixed(1)}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">earned</p>
-                      </div>
-                      
-                      <div className="bg-white border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-500">Seniority</span>
-                          <BarChart className="w-3 h-3 text-orange-500" />
-                        </div>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {focusedUserPerformanceData.average_commit_seniority_score.toFixed(1)}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">/ 10 avg</p>
+                        <p className="text-xs text-gray-500 mt-1">Avg turnaround {focusedUserPerformanceData.average_pr_turnaround_hours.toFixed(1)}h</p>
                       </div>
                     </div>
                   </div>
+
+                  {/* Pull Request Summaries */}
+                  <Collapsible defaultOpen>
+                    <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left hover:text-gray-700">
+                      <h3 className="text-sm font-semibold text-gray-900">Pull Request Summaries</h3>
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-3">
+                      <div className="bg-white border rounded-lg overflow-hidden">
+                        {focusedUserPerformanceData.pr_details.length ? (
+                          <div className="divide-y">
+                            {focusedUserPerformanceData.pr_details.slice(0, 10).map(pr => {
+                              const activityDate = pr.activity_timestamp ? new Date(pr.activity_timestamp) : null;
+                              return (
+                                <div key={`${pr.pr_number}-${pr.activity_timestamp}`} className="p-4 space-y-2">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-900">#{pr.pr_number} {pr.title || pr.ai_summary || 'Untitled PR'}</p>
+                                      <p className="text-xs text-gray-500">
+                                        {pr.status || 'pending'}
+                                        {activityDate && (
+                                          <span className="ml-2">• {format(activityDate, 'MMM dd, yyyy')}</span>
+                                        )}
+                                      </p>
+                                    </div>
+                                    {typeof pr.impact_score === 'number' && (
+                                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 border-emerald-100">
+                                        {pr.impact_score.toFixed(1)} pts
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {pr.ai_summary && <p className="text-sm text-gray-700">{pr.ai_summary}</p>}
+                                  {pr.ai_prompts?.length ? (
+                                    <div className="flex flex-wrap gap-2">
+                                      {pr.ai_prompts.map(prompt => (
+                                        <Badge key={prompt} variant="outline" className="text-[11px]">{prompt}</Badge>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="p-4 text-sm text-gray-500">No pull requests recorded in this range.</p>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
 
                   {/* Trend Chart - Simplified */}
                   <div>
@@ -620,35 +750,39 @@ const ManagerDashboardPageV2: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Top Commits - Collapsible */}
+                  {/* Top Pull Requests - Collapsible */}
                   <Collapsible defaultOpen>
                     <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left hover:text-gray-700">
-                      <h3 className="text-sm font-semibold text-gray-900">Top Commits by Impact</h3>
+                      <h3 className="text-sm font-semibold text-gray-900">Top PRs by Impact</h3>
                       <ChevronDown className="w-4 h-4 text-gray-400" />
                     </CollapsibleTrigger>
                     <CollapsibleContent className="mt-3">
                       <div className="bg-white border rounded-lg overflow-hidden">
-                        {Array.isArray((focusedUserPerformanceData as any).top_commits_by_impact) && (focusedUserPerformanceData as any).top_commits_by_impact.length > 0 ? (
+                        {focusedUserPerformanceData.top_prs_by_impact?.length ? (
                           <Table>
                             <TableHeader>
                               <TableRow className="bg-gray-50">
-                                <TableHead className="text-xs">Commit</TableHead>
-                                <TableHead className="text-xs">Message</TableHead>
+                                <TableHead className="text-xs">PR #</TableHead>
+                                <TableHead className="text-xs">Summary</TableHead>
                                 <TableHead className="text-right text-xs">Impact</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {(focusedUserPerformanceData as any).top_commits_by_impact.slice(0, 5).map((c: any, idx: number) => (
+                              {focusedUserPerformanceData.top_prs_by_impact.slice(0, 5).map((pr, idx) => (
                                 <TableRow key={idx}>
-                                  <TableCell className="font-mono text-xs py-2">{c.commit_hash?.slice(0, 7)}</TableCell>
-                                  <TableCell className="truncate max-w-[280px] text-sm py-2" title={c.message || ''}>{c.message || '—'}</TableCell>
-                                  <TableCell className="text-right text-sm py-2">{c.impact_score?.toFixed ? c.impact_score.toFixed(1) : c.impact_score}</TableCell>
+                                  <TableCell className="font-mono text-xs py-2">#{pr.pr_number ?? '—'}</TableCell>
+                                  <TableCell className="truncate max-w-[280px] text-sm py-2" title={pr.title || ''}>
+                                    {pr.title || pr.ai_summary || '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm py-2">
+                                    {typeof pr.impact_score === 'number' ? pr.impact_score.toFixed(1) : pr.impact_score}
+                                  </TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
                           </Table>
                         ) : (
-                          <p className="p-4 text-sm text-gray-500">No high-impact commits found for this period.</p>
+                          <p className="p-4 text-sm text-gray-500">No high-impact PRs found for this period.</p>
                         )}
                       </div>
                     </CollapsibleContent>
