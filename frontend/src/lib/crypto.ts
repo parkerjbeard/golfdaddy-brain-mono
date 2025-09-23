@@ -45,9 +45,11 @@ export class CryptoUtils {
    * Check if Web Crypto API is available
    */
   static isSupported(): boolean {
-    return typeof window !== 'undefined' && 
-           window.crypto && 
-           window.crypto.subtle !== undefined;
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return Boolean(window.crypto) && window.crypto.subtle !== undefined;
   }
 
   /**

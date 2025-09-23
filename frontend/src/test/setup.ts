@@ -3,7 +3,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { expect, afterEach, vi } from 'vitest';
+import { expect, afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
 
@@ -18,24 +18,45 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// Mock window.crypto for tests
-Object.defineProperty(window, 'crypto', {
-  value: {
-    subtle: {
-      encrypt: vi.fn(),
-      decrypt: vi.fn(),
-      generateKey: vi.fn(),
-      importKey: vi.fn(),
-      exportKey: vi.fn(),
-      deriveKey: vi.fn(),
-    },
-    getRandomValues: (array: Uint8Array) => {
-      for (let i = 0; i < array.length; i++) {
-        array[i] = Math.floor(Math.random() * 256);
-      }
-      return array;
-    },
+// Mock Web Crypto API with writable properties so tests can override behavior
+const createCryptoMock = () => ({
+  subtle: {
+    encrypt: vi.fn(),
+    decrypt: vi.fn(),
+    generateKey: vi.fn(),
+    importKey: vi.fn(),
+    exportKey: vi.fn(),
+    deriveKey: vi.fn(),
   },
+  getRandomValues: (array: Uint8Array) => {
+    for (let i = 0; i < array.length; i += 1) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+    return array;
+  },
+});
+
+let cryptoMock = createCryptoMock();
+
+const applyCryptoMock = () => {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: cryptoMock,
+    configurable: true,
+    writable: true,
+  });
+
+  Object.defineProperty(window, 'crypto', {
+    value: cryptoMock,
+    configurable: true,
+    writable: true,
+  });
+};
+
+applyCryptoMock();
+
+beforeEach(() => {
+  cryptoMock = createCryptoMock();
+  applyCryptoMock();
 });
 
 // Mock fetch for tests

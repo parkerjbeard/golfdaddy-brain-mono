@@ -216,7 +216,9 @@ const ManagerDashboardPage: React.FC = () => {
                 if (confirmedGlobalDateRange) {
                   fetchBulkWidgetData(confirmedGlobalDateRange);
                 }
-              } catch {}
+              } catch (error) {
+                console.error('Failed to load backfill JSON', error);
+              }
             }}
           >Load Backfill JSON</Button>
         </CardContent>

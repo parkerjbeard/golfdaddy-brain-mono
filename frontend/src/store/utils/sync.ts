@@ -222,7 +222,7 @@ export const useDataConsistencyCheck = () => {
 
   const fixConsistencyIssues = useCallback(async () => {
     const { issues } = checkConsistency();
-    let fixedCount = 0;
+    const fixedCount = 0;
 
     // For now, just log issues as user duplicate IDs would need manual resolution
     for (const issue of issues) {

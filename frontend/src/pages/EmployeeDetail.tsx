@@ -19,17 +19,6 @@ const EmployeeDetail = () => {
   const [employeeTasks, setEmployeeTasks] = useState<any[]>([]);
   const [employeeLogs, setEmployeeLogs] = useState<any[]>([]);
 
-  // Check if user has leadership role
-  if (user?.role !== 'leadership') {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-8">
-        <h1 className="text-2xl font-semibold mb-4">Access Denied</h1>
-        <p className="text-muted-foreground mb-6">You don't have permission to access this page.</p>
-        <Button onClick={() => navigate('/my-dashboard')}>Go to My Dashboard</Button>
-      </div>
-    );
-  }
-
   useEffect(() => {
     // In a real app, this would be an API call
     const foundEmployee = employees.find(emp => emp.id === id);
@@ -45,6 +34,17 @@ const EmployeeDetail = () => {
       setEmployeeLogs(dailyLogs);
     }
   }, [id]);
+
+  // Check if user has leadership role
+  if (user?.role !== 'leadership') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8">
+        <h1 className="text-2xl font-semibold mb-4">Access Denied</h1>
+        <p className="text-muted-foreground mb-6">You don't have permission to access this page.</p>
+        <Button onClick={() => navigate('/my-dashboard')}>Go to My Dashboard</Button>
+      </div>
+    );
+  }
 
   if (!employee) {
     return <div className="p-8">Loading employee details...</div>;

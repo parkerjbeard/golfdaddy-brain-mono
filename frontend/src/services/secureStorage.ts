@@ -52,8 +52,10 @@ export class SecureStorage {
       cleanupInterval: config.cleanupInterval ?? 5 * 60 * 1000 // 5 minutes
     };
 
-    // In development, enable fallback by default
-    if (import.meta.env.DEV && this.config.fallbackToPlain === false) {
+    const isTestEnv = import.meta.env.MODE === 'test' || (typeof process !== 'undefined' && process.env?.VITEST);
+
+    // In development, enable fallback by default (but never during tests or when explicitly disabled)
+    if (import.meta.env.DEV && !isTestEnv && config.fallbackToPlain === undefined) {
       console.warn('Development mode: Enabling fallback to plain storage');
       this.config.fallbackToPlain = true;
     }

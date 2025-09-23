@@ -45,7 +45,6 @@ const DeveloperHealthDashboard: React.FC = () => {
       }
     };
     fetchUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps 
   }, [token]); // Rerun if token changes
 
   // Fetch summary data when user or date changes
