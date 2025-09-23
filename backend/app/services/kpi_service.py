@@ -289,7 +289,29 @@ class KpiService:
             "Building PR performance summary for user %s over %s days", user_id, period_days
         )
 
-        daily_reports = await self.daily_report_repo.get_reports_by_user_and_date_range(user_id, start_date, end_date)
+        return await self._build_user_summary(user_id, start_date, end_date)
+
+    async def get_user_performance_summary_range(
+        self, user_id: UUID, start_dt: datetime, end_dt: datetime
+    ) -> Dict[str, Any]:
+        user = await self.user_repo.get_user_by_id(user_id)
+        if not user:
+            logger.warning("User %s not found when building KPI summary", user_id)
+            raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
+
+        logger.info(
+            "Building PR performance summary for user %s from %s to %s",
+            user_id,
+            start_dt.isoformat(),
+            end_dt.isoformat(),
+        )
+
+        return await self._build_user_summary(user_id, start_dt, end_dt)
+
+    async def _build_user_summary(
+        self, user_id: UUID, start_dt: datetime, end_dt: datetime
+    ) -> Dict[str, Any]:
+        daily_reports = await self.daily_report_repo.get_reports_by_user_and_date_range(user_id, start_dt, end_dt)
         total_eod_reported_hours = sum(dr.final_estimated_hours or 0.0 for dr in daily_reports)
         eod_report_details = [
             {
@@ -307,7 +329,7 @@ class KpiService:
         ]
 
         prs_in_period = await self.pull_request_repo.get_pull_requests_by_user_in_range(
-            user_id, start_date.date(), end_date.date()
+            user_id, start_dt.date(), end_dt.date()
         )
 
         total_prs = len(prs_in_period)
@@ -329,7 +351,7 @@ class KpiService:
         efficiency_pph = round(total_points / total_hours, 2) if total_hours > 0 else 0.0
         try:
             period_agg = self._sum_points_hours_by_category(prs_in_period)
-            baselines = await self._compute_personal_baselines(user_id, end_date)
+            baselines = await self._compute_personal_baselines(user_id, end_dt)
             normalized_pph, used_default, baseline_source = self._compute_normalized_efficiency(period_agg, baselines)
         except Exception as exc:  # pragma: no cover - defensive guard
             logger.warning("Failed to compute normalized efficiency for user %s: %s", user_id, exc, exc_info=True)
@@ -351,12 +373,12 @@ class KpiService:
             for pr in prs_in_period
             if self._resolve_activity_timestamp(pr)
         ]
-        day_off_dates = self._calculate_day_off_dates(start_date.date(), end_date.date(), activity_dates)
+        day_off_dates = self._calculate_day_off_dates(start_dt.date(), end_dt.date(), activity_dates)
 
         summary = {
             "user_id": str(user_id),
-            "period_start_date": start_date.date().isoformat(),
-            "period_end_date": end_date.date().isoformat(),
+            "period_start_date": start_dt.date().isoformat(),
+            "period_end_date": end_dt.date().isoformat(),
             "total_prs_in_period": total_prs,
             "merged_prs_in_period": merged_prs,
             "total_ai_estimated_pr_hours": round(total_hours, 2),
@@ -483,4 +505,3 @@ class KpiService:
         summaries.sort(key=lambda summary: summary.activity_score, reverse=True)
         logger.info("Generated %s widget summaries", len(summaries))
         return summaries
-

@@ -8,7 +8,8 @@ from uuid import UUID
 from app.config.supabase_client import get_supabase_client_safe
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
 from app.models.user import User, UserRole
-from supabase import Client, PostgrestAPIResponse
+from postgrest import APIResponse as PostgrestResponse
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class UserRepository:
         self._client = client if client is not None else get_supabase_client_safe()
         self._table = "users"
 
-    def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
+    def _handle_supabase_error(self, response: PostgrestResponse, context_message: str):
         """Helper to log and raise DatabaseError from Supabase errors."""
         if response and hasattr(response, "error") and response.error:
             logger.error(
@@ -55,7 +56,7 @@ class UserRepository:
                     "User profile creation requires a valid ID."
                 )
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).insert(user_dict).execute
             )
 
@@ -79,7 +80,7 @@ class UserRepository:
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
         """Retrieves a user by their UUID."""
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("id", str(user_id)).maybe_single().execute
             )
             if response.data:
@@ -100,7 +101,7 @@ class UserRepository:
     async def get_user_by_slack_id(self, slack_id: str) -> Optional[User]:
         """Retrieves a user by their Slack ID."""
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("slack_id", slack_id).maybe_single().execute
             )
             if response.data:
@@ -120,7 +121,7 @@ class UserRepository:
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Retrieves a user by their email address."""
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.from_(self._table).select("*").eq("email", email).maybe_single().execute
             )
 
@@ -146,7 +147,7 @@ class UserRepository:
     async def get_user_by_github_username(self, github_username: str) -> Optional[User]:
         """Retrieves a user by their GitHub username."""
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table)
                 .select("*")
                 .eq("github_username", github_username)
@@ -177,7 +178,7 @@ class UserRepository:
     async def list_users_by_role(self, role: UserRole) -> List[User]:
         """Lists all users with a specific role."""
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("role", role.value).execute
             )
             self._handle_supabase_error(response, f"Error listing users by role {role.value}")
@@ -191,13 +192,13 @@ class UserRepository:
     async def list_all_users(self, skip: int = 0, limit: int = 100) -> Tuple[List[User], int]:
         """Lists all users in the profile table with pagination."""
         try:
-            count_response: PostgrestAPIResponse = await asyncio.to_thread(
+            count_response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*", count="exact").limit(0).execute
             )
             self._handle_supabase_error(count_response, "Error fetching total user count")
             total_count = count_response.count if count_response.count is not None else 0
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").range(skip, skip + limit - 1).execute
             )
             self._handle_supabase_error(response, f"Error listing all users with skip={skip}, limit={limit}")
@@ -231,7 +232,7 @@ class UserRepository:
                     raise DatabaseError("Error updating auth user email")
 
             processed_update_data = self._process_user_dict_for_supabase(update_data)
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).update(processed_update_data).eq("id", str(user_id)).execute
             )
 
@@ -291,7 +292,7 @@ class UserRepository:
                 logger.warning(f"Attempted to delete non-existent user profile with ID {user_id}")
                 raise ResourceNotFoundError(resource_name="User", resource_id=str(user_id))
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).delete().eq("id", str(user_id)).execute
             )
             self._handle_supabase_error(response, f"Failed to delete user profile {user_id}")
@@ -329,7 +330,7 @@ class UserRepository:
     async def get_direct_reports(self, manager_id: UUID) -> List[User]:
         """Retrieves all direct reports for a given manager."""
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).select("*").eq("reports_to_id", str(manager_id)).execute
             )
             self._handle_supabase_error(response, f"Error finding direct reports for manager {manager_id}")
@@ -349,7 +350,7 @@ class UserRepository:
                 return []
 
             manager_id = user.reports_to_id
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table)
                 .select("*")
                 .eq("reports_to_id", str(manager_id))

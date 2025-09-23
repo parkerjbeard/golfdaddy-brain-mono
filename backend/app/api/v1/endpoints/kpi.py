@@ -89,26 +89,26 @@ async def get_user_kpi_summary(
         # If startDate and endDate are provided, we need to calculate period_days.
         # Or, refactor KpiService to directly accept startDate and endDate.
 
-        actual_period_days: int
-
         if startDate:
             summary_end_date_naive = endDate if endDate else datetime.now(timezone.utc).date()
             if startDate > summary_end_date_naive:
                 raise BadRequestError(message="Start date cannot be after end date.")
-
-            actual_period_days = (summary_end_date_naive - startDate).days + 1
-            if actual_period_days <= 0:
-                raise BadRequestError(message="Invalid date range resulting in non-positive period days.")
+            start_dt = datetime.combine(startDate, datetime.min.time(), tzinfo=timezone.utc)
+            end_dt = datetime.combine(
+                summary_end_date_naive,
+                datetime.max.time(),
+                tzinfo=timezone.utc,
+            )
+            summary_data = await kpi_service.get_user_performance_summary_range(user_id, start_dt, end_dt)
         elif periodDays:
             actual_period_days = periodDays
+            logger.info(f"Fetching KPI summary for user {user_id} for {actual_period_days} days.")
+            summary_data = await kpi_service.get_user_performance_summary(user_id, period_days=actual_period_days)
         else:
             # This case should be prevented by FastAPI/Pydantic if periodDays has a default and is required.
             # However, if periodDays was Optional without a default, this would be necessary.
             logger.error("KPI user-summary endpoint called without periodDays or startDate.")
             raise BadRequestError(message="You must provide either periodDays or startDate.")
-
-        logger.info(f"Fetching KPI summary for user {user_id} for {actual_period_days} days.")
-        summary_data = await kpi_service.get_user_performance_summary(user_id, period_days=actual_period_days)
 
         if summary_data is None:  # Assuming service returns None if user_id not found or no data
             logger.warning(
@@ -162,6 +162,7 @@ async def backfill_github_analysis(
         from app.config.supabase_client import get_supabase_client_safe
         from app.models.pull_request import PullRequest
         from app.repositories.pull_request_repository import PullRequestRepository
+        from app.repositories.user_repository import UserRepository
 
         def _parse_datetime(value: str | None) -> _dt | None:
             if not value:
@@ -201,7 +202,9 @@ async def backfill_github_analysis(
         if not daily_summaries:
             return {"status": "ok", "message": "No daily summaries found in JSON.", "inserted": 0}
 
-        repo = PullRequestRepository(get_supabase_client_safe())
+        client = get_supabase_client_safe()
+        repo = PullRequestRepository(client)
+        user_repo = UserRepository(client)
         inserted = 0
 
         for day in daily_summaries:
@@ -245,10 +248,29 @@ async def backfill_github_analysis(
                     if hours_value is None:
                         hours_value = hours_per_candidate
 
+                    author_id = None
+                    author_email = candidate.get("author_email") or day.get("author_email")
+                    author_username = (
+                        candidate.get("author_github_username")
+                        or candidate.get("author")
+                        or day.get("github_username")
+                    )
+
+                    if author_email:
+                        user_match = await user_repo.get_user_by_email(author_email)
+                        if user_match:
+                            author_id = user_match.id
+
+                    if not author_id and author_username:
+                        user_match = await user_repo.get_user_by_github_username(author_username)
+                        if user_match:
+                            author_id = user_match.id
+
                     summary = PullRequest(
                         pr_number=pr_number,
                         title=candidate.get("title") or candidate.get("summary") or candidate.get("message"),
                         description=candidate.get("description"),
+                        author_id=author_id,
                         author_github_username=candidate.get("author_github_username")
                         or candidate.get("author")
                         or day.get("github_username"),

@@ -9,7 +9,8 @@ from uuid import UUID
 from app.config.supabase_client import get_supabase_client_safe
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
 from app.models.commit import Commit  # Pydantic model
-from supabase import Client, PostgrestAPIResponse
+from postgrest import APIResponse as PostgrestResponse
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class CommitRepository:
         self._client = client if client is not None else get_supabase_client_safe()
         self._table = "commits"
 
-    def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
+    def _handle_supabase_error(self, response: PostgrestResponse, context_message: str):
         """Helper to log and raise DatabaseError from Supabase errors.
 
         Ignores MagicMock `.error` objects used in tests.
@@ -82,7 +83,7 @@ class CommitRepository:
                 f"eod_report_id={commit_dict.get('eod_report_id')}"
             )
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).upsert(commit_dict, on_conflict="commit_hash").execute
             )
 
@@ -133,7 +134,7 @@ class CommitRepository:
                     commit_dict["commit_timestamp"] = commit_dict["commit_timestamp"].isoformat()
                 commits_dict_list.append(commit_dict)
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).insert(commits_dict_list).execute
             )
 
@@ -171,7 +172,7 @@ class CommitRepository:
         """Retrieves a commit by its unique hash."""
         try:
             logger.info(f"Fetching commit: {commit_hash}")
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.from_(self._table).select("*").eq("commit_hash", commit_hash).maybe_single().execute
             )
 
@@ -223,7 +224,7 @@ class CommitRepository:
             if seniority_score is not None:
                 update_data["seniority_score"] = seniority_score
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).update(update_data).eq("commit_hash", commit_hash).execute
             )
 
@@ -272,7 +273,7 @@ class CommitRepository:
 
             end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).isoformat()
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table)
                 .select("*")
                 .eq("author_id", str(author_id))
@@ -324,7 +325,7 @@ class CommitRepository:
                 logger.warning(f"Attempted to delete non-existent commit with hash {commit_hash}")
                 raise ResourceNotFoundError(resource_name="Commit", resource_id=commit_hash)
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).delete().eq("commit_hash", commit_hash).execute()
             )
 
@@ -376,7 +377,7 @@ class CommitRepository:
 
             # Explicitly use from_ to ensure we're using the service role
             # This should bypass RLS policies
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.from_(self._table).insert(commit_data).execute()
             )
 
@@ -443,7 +444,7 @@ class CommitRepository:
             for i in range(0, len(commit_hashes), chunk_size):
                 chunk = commit_hashes[i : i + chunk_size]
 
-                response: PostgrestAPIResponse = await asyncio.to_thread(
+                response: PostgrestResponse = await asyncio.to_thread(
                     self._client.table(self._table).select("commit_hash").in_("commit_hash", chunk).execute
                 )
 
@@ -490,7 +491,7 @@ class CommitRepository:
             for i in range(0, len(commit_hashes), chunk_size):
                 chunk = commit_hashes[i : i + chunk_size]
 
-                response: PostgrestAPIResponse = await asyncio.to_thread(
+                response: PostgrestResponse = await asyncio.to_thread(
                     self._client.table(self._table).select("*").in_("commit_hash", chunk).execute
                 )
 

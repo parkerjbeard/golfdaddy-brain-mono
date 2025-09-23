@@ -3,7 +3,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
 
-from postgrest import APIResponse as PostgrestAPIResponse
+from postgrest import APIResponse as PostgrestResponse
 
 from app.config.supabase_client import get_supabase_client
 from app.core.exceptions import DatabaseError
@@ -19,7 +19,7 @@ class DailyCommitAnalysisRepository:
         self._client = get_supabase_client()
         self._table = "daily_commit_analysis"
 
-    def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
+    def _handle_supabase_error(self, response: PostgrestResponse, context_message: str):
         """Helper to log and raise DatabaseError from Supabase errors."""
         if response and hasattr(response, "error") and response.error:
             logger.error(
@@ -43,7 +43,7 @@ class DailyCommitAnalysisRepository:
             if "analysis_date" in data_dict:
                 data_dict["analysis_date"] = data_dict["analysis_date"].isoformat()
 
-            response: PostgrestAPIResponse = self._client.table(self._table).insert(data_dict).execute()
+            response: PostgrestResponse = self._client.table(self._table).insert(data_dict).execute()
 
             self._handle_supabase_error(response, "Failed to create daily commit analysis")
 
@@ -64,7 +64,7 @@ class DailyCommitAnalysisRepository:
         try:
             logger.info(f"Fetching daily analysis: {analysis_id}")
 
-            response: PostgrestAPIResponse = (
+            response: PostgrestResponse = (
                 self._client.table(self._table).select("*").eq("id", str(analysis_id)).maybe_single().execute()
             )
 
@@ -84,7 +84,7 @@ class DailyCommitAnalysisRepository:
         try:
             logger.info(f"Fetching daily analysis for user {user_id} on {analysis_date}")
 
-            response: PostgrestAPIResponse = (
+            response: PostgrestResponse = (
                 self._client.table(self._table)
                 .select("*")
                 .eq("user_id", str(user_id))
@@ -111,7 +111,7 @@ class DailyCommitAnalysisRepository:
         try:
             logger.info(f"Fetching daily analyses for user {user_id} from {start_date} to {end_date}")
 
-            response: PostgrestAPIResponse = (
+            response: PostgrestResponse = (
                 self._client.table(self._table)
                 .select("*")
                 .eq("user_id", str(user_id))
@@ -210,7 +210,7 @@ class DailyCommitAnalysisRepository:
             if "total_estimated_hours" in data_dict:
                 data_dict["total_estimated_hours"] = str(data_dict["total_estimated_hours"])
 
-            response: PostgrestAPIResponse = (
+            response: PostgrestResponse = (
                 self._client.table(self._table).update(data_dict).eq("id", str(analysis_id)).execute()
             )
 
@@ -234,7 +234,7 @@ class DailyCommitAnalysisRepository:
         try:
             logger.info(f"Deleting daily analysis: {analysis_id}")
 
-            response: PostgrestAPIResponse = (
+            response: PostgrestResponse = (
                 self._client.table(self._table).delete().eq("id", str(analysis_id)).execute()
             )
 

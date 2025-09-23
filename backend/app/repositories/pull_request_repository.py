@@ -5,7 +5,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from supabase import Client, PostgrestAPIResponse
+from postgrest import APIResponse as PostgrestResponse
+from supabase import Client
 
 from app.config.supabase_client import get_supabase_client_safe
 from app.core.exceptions import DatabaseError
@@ -24,7 +25,7 @@ class PullRequestRepository:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _handle_supabase_error(self, response: Optional[PostgrestAPIResponse], context_message: str) -> None:
+    def _handle_supabase_error(self, response: Optional[PostgrestResponse], context_message: str) -> None:
         if not response:
             return
         err = getattr(response, "error", None)
@@ -85,7 +86,7 @@ class PullRequestRepository:
     ) -> List[PullRequest]:
         bounds = self._date_bounds(start_date, end_date)
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table)
                 .select("*")
                 .eq("author_id", str(user_id))
@@ -111,7 +112,7 @@ class PullRequestRepository:
             return {}
         bounds = self._date_bounds(start_date, end_date)
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table)
                 .select("*")
                 .in_("author_id", [str(uid) for uid in user_ids])
@@ -155,7 +156,7 @@ class PullRequestRepository:
         if not payload.get("repository_name"):
             payload["repository_name"] = pull_request.repository_name or "unknown"
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).upsert(payload, on_conflict="repository_name,pr_number").execute
             )
             self._handle_supabase_error(response, "Failed to upsert pull request")

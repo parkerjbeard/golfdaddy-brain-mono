@@ -8,7 +8,8 @@ from uuid import UUID, uuid4
 from app.config.supabase_client import get_supabase_client_safe, retry_on_connection_error
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
 from app.models.daily_report import AiAnalysis, ClarificationRequest, DailyReport, DailyReportCreate, DailyReportUpdate
-from supabase import Client, PostgrestAPIResponse
+from postgrest import APIResponse as PostgrestResponse
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class DailyReportRepository:
         self._client = client if client is not None else get_supabase_client_safe()
         self._table_name = "daily_reports"
 
-    def _handle_supabase_error(self, response: PostgrestAPIResponse, context_message: str):
+    def _handle_supabase_error(self, response: PostgrestResponse, context_message: str):
         """Helper to log and raise DatabaseError from Supabase errors.
 
         Be tolerant of MagicMock placeholders in tests: ignore synthetic `.error` mocks.
@@ -153,7 +154,7 @@ class DailyReportRepository:
             raise DatabaseError("Cannot create daily report without user_id")
 
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).insert(report_dict).execute
             )
             self._handle_supabase_error(response, "Failed to create daily report")
@@ -184,7 +185,7 @@ class DailyReportRepository:
 
     async def get_daily_report_by_id(self, report_id: UUID) -> Optional[DailyReport]:
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).select("*").eq("id", str(report_id)).single().execute
             )
             if response.data:
@@ -210,7 +211,7 @@ class DailyReportRepository:
 
     async def get_daily_reports_by_user_id(self, user_id: UUID) -> List[DailyReport]:
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name)
                 .select("*")
                 .eq("user_id", str(user_id))
@@ -236,7 +237,7 @@ class DailyReportRepository:
         report_date_str = report_date.strftime("%Y-%m-%d")
         try:
             # Use RPC to call get_date_immutable to match the unique constraint
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.rpc(
                     "get_daily_report_by_user_date", {"p_user_id": str(user_id), "p_date": report_date_str}
                 ).execute
@@ -254,7 +255,7 @@ class DailyReportRepository:
             logger.warning(f"RPC method not available, falling back to date string comparison: {e}")
             # Fallback to original implementation
             try:
-                response: PostgrestAPIResponse = await asyncio.to_thread(
+                response: PostgrestResponse = await asyncio.to_thread(
                     self._client.table(self._table_name)
                     .select("*")
                     .eq("user_id", str(user_id))
@@ -294,7 +295,7 @@ class DailyReportRepository:
         start_date_iso = start_date.isoformat()
         end_date_iso = end_date.isoformat()
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name)
                 .select("*")
                 .eq("user_id", str(user_id))
@@ -339,7 +340,7 @@ class DailyReportRepository:
         update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).update(update_dict).eq("id", str(report_id)).execute
             )
             if response.data:
@@ -391,7 +392,7 @@ class DailyReportRepository:
                 logger.warning(f"Attempted to delete non-existent daily report with ID {report_id}")
                 return False
 
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).delete().eq("id", str(report_id)).execute
             )
             self._handle_supabase_error(response, f"Failed to delete daily report {report_id}")
@@ -413,7 +414,7 @@ class DailyReportRepository:
     async def get_all_daily_reports(self, limit: int = 100, offset: int = 0) -> List[DailyReport]:
         """Retrieves all daily reports with pagination (for admin/debugging)."""
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name)
                 .select("*")
                 .order("report_date", desc=True)
@@ -439,7 +440,7 @@ class DailyReportRepository:
         Get paginated daily reports for a specific user.
         """
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name)
                 .select("*")
                 .eq("user_id", str(user_id))
@@ -461,7 +462,7 @@ class DailyReportRepository:
         """
         try:
             # Supabase doesn't have a direct count method, so we use select with count option
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).select("id", count="exact").eq("user_id", str(user_id)).execute
             )
             self._handle_supabase_error(response, f"Error counting reports for user {user_id}")
@@ -484,7 +485,7 @@ class DailyReportRepository:
         Get the total count of all daily reports.
         """
         try:
-            response: PostgrestAPIResponse = await asyncio.to_thread(
+            response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table_name).select("id", count="exact").execute
             )
             self._handle_supabase_error(response, "Error counting all reports")
