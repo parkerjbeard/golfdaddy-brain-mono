@@ -5,10 +5,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.error_handlers import add_exception_handlers
 from app.middleware.api_key_auth import ApiKeyMiddleware
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_metrics import RequestMetricsMiddleware
-from app.core.error_handlers import add_exception_handlers
 
 
 @pytest.fixture

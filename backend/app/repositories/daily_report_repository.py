@@ -5,10 +5,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID, uuid4
 
+from postgrest import APIResponse as PostgrestResponse
+
 from app.config.supabase_client import get_supabase_client_safe, retry_on_connection_error
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
 from app.models.daily_report import AiAnalysis, ClarificationRequest, DailyReport, DailyReportCreate, DailyReportUpdate
-from postgrest import APIResponse as PostgrestResponse
 from supabase import Client
 
 logger = logging.getLogger(__name__)

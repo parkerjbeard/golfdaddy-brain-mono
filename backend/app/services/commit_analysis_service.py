@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
-
 from app.config.settings import settings
 
 # TODO: Import DailyReportService if direct interaction is needed, or pass data through other means

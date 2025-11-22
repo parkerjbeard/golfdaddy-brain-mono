@@ -6,10 +6,11 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from postgrest import APIResponse as PostgrestResponse
+
 from app.config.supabase_client import get_supabase_client_safe
 from app.core.exceptions import DatabaseError, ResourceNotFoundError
 from app.models.commit import Commit  # Pydantic model
-from postgrest import APIResponse as PostgrestResponse
 from supabase import Client
 
 logger = logging.getLogger(__name__)

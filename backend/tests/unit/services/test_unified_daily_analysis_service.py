@@ -15,7 +15,6 @@ from app.core.exceptions import AIIntegrationError, DatabaseError, ExternalServi
 from app.models.commit import Commit
 from app.models.daily_commit_analysis import DailyCommitAnalysis, DailyCommitAnalysisCreate
 from app.models.daily_report import AiAnalysis, DailyReport
-
 from app.services.unified_daily_analysis_service import UnifiedDailyAnalysisService
 
 

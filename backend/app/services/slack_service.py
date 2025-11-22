@@ -186,6 +186,7 @@ class SlackService:
     async def send_response_url_message(self, response_url: str, message: Dict[str, Any]) -> bool:
         """Send a message using a Slack response URL without extra async HTTP deps."""
         import asyncio
+
         import requests
 
         def _post():

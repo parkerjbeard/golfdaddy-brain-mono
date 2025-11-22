@@ -1,11 +1,13 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from fastapi import status
-from app.models.user import User, UserRole
-from app.services.kpi_service import KpiService
+
 from app.api.v1.endpoints.kpi import get_kpi_service
 from app.auth.dependencies import get_current_user
 from app.main import app
+from app.models.user import User, UserRole
+from app.services.kpi_service import KpiService
 
 # Mock data
 EMPLOYEE_USER = User(id="11111111-1111-1111-1111-111111111111", email="emp@test.com", role=UserRole.EMPLOYEE)

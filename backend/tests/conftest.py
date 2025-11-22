@@ -16,11 +16,12 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-# Removed SQLAlchemy-based test DB fixtures after consolidating to Supabase
-
 from app.config.settings import settings
 from app.config.supabase_client import get_supabase_client
 from app.main import app
+
+# Removed SQLAlchemy-based test DB fixtures after consolidating to Supabase
+
 
 # Add the project root to the path so that we can import from the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

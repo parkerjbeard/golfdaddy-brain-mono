@@ -7,8 +7,9 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from app.config.supabase_client import get_supabase_client_safe as get_db
+
 from app.config.settings import settings
+from app.config.supabase_client import get_supabase_client_safe as get_db
 from app.core.exceptions import BadRequestError, ConfigurationError, DatabaseError, ExternalServiceError
 from app.webhooks.base import WebhookVerificationError
 from app.webhooks.github import GitHubWebhookHandler

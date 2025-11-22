@@ -1,12 +1,12 @@
 from datetime import date
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from postgrest.exceptions import APIError
 
 from app.core.exceptions import DatabaseError
 from app.repositories.pull_request_repository import PullRequestRepository
-from postgrest.exceptions import APIError
 
 
 def _build_mock_client():

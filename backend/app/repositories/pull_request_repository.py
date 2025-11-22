@@ -7,11 +7,11 @@ from uuid import UUID
 
 from postgrest import APIResponse as PostgrestResponse
 from postgrest.exceptions import APIError
-from supabase import Client
 
 from app.config.supabase_client import get_supabase_client_safe
 from app.core.exceptions import DatabaseError
 from app.models.pull_request import PullRequest
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 

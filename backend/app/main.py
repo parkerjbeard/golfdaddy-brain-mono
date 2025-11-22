@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+
 import uvicorn
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -53,7 +54,8 @@ if settings.enable_api_auth:
     # Resolve API keys at runtime to support test-time env patching
     api_keys_runtime = settings.api_keys
     if api_keys_runtime is None:
-        import os, json
+        import json
+        import os
 
         env_keys_str = os.environ.get("API_KEYS")
         if env_keys_str:

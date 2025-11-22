@@ -151,7 +151,8 @@ async def backfill_github_analysis(
 
         import json
         import re
-        from datetime import datetime as _dt, timezone as _tz
+        from datetime import datetime as _dt
+        from datetime import timezone as _tz
         from decimal import Decimal
 
         from app.config.supabase_client import get_supabase_client_safe
