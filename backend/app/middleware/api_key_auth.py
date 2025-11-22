@@ -1,10 +1,8 @@
 import logging
 from typing import Callable, Dict, List, Optional
 
-from fastapi import HTTPException, Request, Response, status
+from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
-
-from app.core.exceptions import AuthenticationError
 
 logger = logging.getLogger(__name__)
 

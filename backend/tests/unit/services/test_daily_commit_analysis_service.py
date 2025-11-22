@@ -1,12 +1,12 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, Mock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
 from app.models.commit import Commit
-from app.models.daily_commit_analysis import DailyCommitAnalysis, DailyCommitAnalysisCreate
+from app.models.daily_commit_analysis import DailyCommitAnalysis
 from app.models.daily_report import DailyReport
 from app.services.daily_commit_analysis_service import DailyCommitAnalysisService
 

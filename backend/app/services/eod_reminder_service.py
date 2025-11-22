@@ -2,10 +2,9 @@
 EOD (End of Day) reminder service for scheduling daily report prompts via Slack.
 """
 
-import asyncio
 import logging
 from datetime import datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
 from app.config.settings import settings
@@ -260,7 +259,7 @@ class EODReminderService:
             # Get current time in user's timezone
             tz = ZoneInfo(timezone_str)
             now = datetime.now(tz)
-            current_time = now.time()
+            now.time()
 
             # Calculate window
             reminder_datetime = now.replace(

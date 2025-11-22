@@ -10,8 +10,7 @@ from app.core.exceptions import DatabaseError  # For repository/DB issues
 from app.core.exceptions import PermissionDeniedError  # For auth issues (though mostly handled by API layer)
 from app.core.exceptions import ResourceNotFoundError  # New imports; If a report/user is not found when expected
 from app.integrations.ai_integration_v2 import AIIntegrationV2
-from app.models.commit import Commit
-from app.models.daily_report import AiAnalysis, ClarificationRequest, DailyReport, DailyReportCreate, DailyReportUpdate
+from app.models.daily_report import AiAnalysis, DailyReport, DailyReportCreate, DailyReportUpdate
 from app.repositories.commit_repository import CommitRepository
 from app.repositories.daily_report_repository import DailyReportRepository
 from app.services.deduplication_service import DeduplicationService

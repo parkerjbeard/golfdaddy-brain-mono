@@ -6,7 +6,7 @@ import logging
 import re
 import unicodedata
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 

@@ -12,8 +12,6 @@ from typing import Any, Dict, List, Optional
 import jwt
 import requests
 
-from app.config.settings import settings
-
 logger = logging.getLogger(__name__)
 
 

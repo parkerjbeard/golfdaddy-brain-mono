@@ -94,4 +94,3 @@ class PushEvent(BaseModel):
     pusher: Optional[GitHubUser] = None
     commits: List[Commit] = []
     head_commit: Optional[Commit] = None
-    pass

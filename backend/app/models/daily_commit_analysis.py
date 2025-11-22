@@ -32,8 +32,6 @@ class DailyCommitAnalysisBase(BaseModel):
 class DailyCommitAnalysisCreate(DailyCommitAnalysisBase):
     """Model for creating a new daily commit analysis"""
 
-    pass
-
 
 class DailyCommitAnalysisUpdate(BaseModel):
     """Model for updating daily commit analysis"""

@@ -2,10 +2,8 @@
 Slack service for direct API integration using Slack Web API.
 """
 
-import json
 import logging
 from datetime import datetime, timedelta
-from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from slack_sdk import WebClient
@@ -13,7 +11,6 @@ from slack_sdk.errors import SlackApiError
 
 from app.config.settings import settings
 from app.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
-from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)

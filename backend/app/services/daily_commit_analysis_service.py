@@ -1,11 +1,10 @@
-import asyncio
 import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from app.core.exceptions import DatabaseError, ExternalServiceError
+from app.core.exceptions import ExternalServiceError
 from app.integrations.ai_integration_v2 import AIIntegrationV2
 from app.models.commit import Commit
 from app.models.daily_commit_analysis import DailyCommitAnalysis, DailyCommitAnalysisCreate, DailyCommitAnalysisUpdate

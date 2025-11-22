@@ -1,12 +1,9 @@
-import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import uvicorn
-from fastapi import Depends, FastAPI, Request, status
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -121,7 +118,7 @@ def public_runtime_config():
             + ";"
         )
         return PlainTextResponse(content, media_type="application/javascript")
-    except Exception as e:
+    except Exception:
         return PlainTextResponse(
             "window.__APP_CONFIG__ = {}; console.error('Failed to load runtime config');",
             media_type="application/javascript",

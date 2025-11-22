@@ -1,10 +1,8 @@
-import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from app.config.settings import settings
-from app.core.exceptions import AppExceptionBase, ConfigurationError, ExternalServiceError, ResourceNotFoundError
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.services.slack_message_templates import SlackMessageTemplates

@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -36,7 +36,7 @@ class HealthChecker:
         start_time = time.time()
         try:
             # Simple query to test connectivity
-            response = supabase.table("users").select("id").limit(1).execute()
+            supabase.table("users").select("id").limit(1).execute()
             duration = time.time() - start_time
 
             return {

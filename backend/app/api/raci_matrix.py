@@ -29,7 +29,7 @@ async def get_all_matrices(current_user: User = Depends(get_current_user)):
         return matrices
     except DatabaseError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch RACI matrices")
 
 
@@ -187,7 +187,7 @@ async def get_templates(current_user: User = Depends(get_current_user)):
         raci_service = RaciService()
         templates = raci_service.get_matrix_templates()
         return templates
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch templates")
 
 

@@ -1,12 +1,9 @@
 """Unit tests for GitHub App authentication service."""
 
-import time
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import jwt
 import pytest
-import requests
 
 from app.integrations.github_app import CheckRunConclusion, CheckRunStatus, GitHubApp
 

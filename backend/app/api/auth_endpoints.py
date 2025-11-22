@@ -1,16 +1,13 @@
 import logging
-from typing import Any, Dict, List, Optional
-from uuid import UUID
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, EmailStr
 
 from app.auth.dependencies import get_current_user as get_current_user_dependency
 from app.config.supabase_client import get_supabase_client
-from app.core.exceptions import AuthenticationError, BadRequestError, ExternalServiceError
-from app.models.user import User, UserRole
-from app.repositories.user_repository import UserRepository
+from app.core.exceptions import AuthenticationError, ExternalServiceError
+from app.models.user import User
 from supabase import Client
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -131,7 +128,7 @@ async def logout(authorization: str = Header(...), supabase: Client = Depends(ge
     if not authorization.startswith("Bearer "):
         raise AuthenticationError(message="Invalid authentication credentials")
 
-    token = authorization.replace("Bearer ", "")
+    authorization.replace("Bearer ", "")
 
     try:
         # Sign out using the Supabase client

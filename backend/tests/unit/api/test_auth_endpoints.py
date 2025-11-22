@@ -1,6 +1,3 @@
-import pytest
-
-
 def test_auth_me_v1_requires_bearer_token(client):
     """Test that /api/v1/auth/me endpoint requires authorization header."""
     # Provide API key to bypass middleware

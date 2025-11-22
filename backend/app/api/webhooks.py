@@ -3,14 +3,14 @@ Direct webhook endpoints for external integrations.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from app.config.settings import settings
 from app.config.supabase_client import get_supabase_client_safe as get_db
-from app.core.exceptions import BadRequestError, ConfigurationError, DatabaseError, ExternalServiceError
+from app.core.exceptions import ConfigurationError, ExternalServiceError
 from app.webhooks.base import WebhookVerificationError
 from app.webhooks.github import GitHubWebhookHandler
 from supabase import Client

@@ -9,7 +9,6 @@ from pydantic import BaseModel, EmailStr
 from app.auth.dependencies import get_admin_user, get_current_user
 from app.core.exceptions import (
     DatabaseError,
-    PermissionDeniedError,
     ResourceNotFoundError,
 )
 from app.models.user import User, UserRole  # Pydantic model for response

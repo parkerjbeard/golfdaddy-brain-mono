@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.auth.dependencies import get_current_user  # Import the standardized dependency
 from app.core.exceptions import (  # New import

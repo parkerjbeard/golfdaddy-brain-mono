@@ -6,7 +6,6 @@ Admin-only endpoints for managing data lifecycle.
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -15,7 +14,7 @@ from app.auth.dependencies import get_current_user as get_current_user_profile
 from app.config.supabase_client import get_supabase_client
 from app.core.exceptions import ConfigurationError, DatabaseError, PermissionDeniedError
 from app.models.user import User, UserRole
-from app.services.archive_service import ArchiveService, RetentionPolicy
+from app.services.archive_service import ArchiveService
 
 logger = logging.getLogger(__name__)
 

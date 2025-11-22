@@ -7,17 +7,12 @@ This file contains pytest fixtures that are accessible to all tests.
 import asyncio
 import os
 import sys
-import uuid
-from datetime import datetime, timedelta
-from typing import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from app.config.settings import settings
-from app.config.supabase_client import get_supabase_client
 from app.main import app
 
 # Removed SQLAlchemy-based test DB fixtures after consolidating to Supabase

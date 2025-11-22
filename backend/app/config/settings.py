@@ -1,13 +1,12 @@
 import json
 import logging
 import os
-import secrets
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import Field, HttpUrl, Json, field_validator
+from pydantic import Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -210,9 +209,6 @@ class Settings(BaseSettings):
         return self.GITHUB_TOKEN
 
     @property
-    # Legacy AI and MAKE_* accessors removed
-
-    @property
     def github_webhook_secret(self):
         return self.GITHUB_WEBHOOK_SECRET
 
@@ -265,12 +261,6 @@ class Settings(BaseSettings):
         return self.API_KEYS_FILE_PATH
 
     @property
-    # CORS accessors removed
-
-    @property
-    # Documentation agent accessors removed
-
-    @property
     def testing_mode(self):  # Added property for convenient access
         return self.TESTING_MODE
 
@@ -283,9 +273,6 @@ class Settings(BaseSettings):
         return self.REANALYZE_EXISTING_COMMITS
 
     @property
-    # Doc agent model accessor removed
-
-    @property
     def daily_reports_retention_months(self):
         return self.DAILY_REPORTS_RETENTION_MONTHS
 
@@ -296,9 +283,6 @@ class Settings(BaseSettings):
     @property
     def completed_tasks_retention_months(self):
         return self.COMPLETED_TASKS_RETENTION_MONTHS
-
-    @property
-    # Docs retention accessor removed
 
     @property
     def enable_auto_archive(self):
@@ -315,9 +299,6 @@ class Settings(BaseSettings):
     @property
     def slack_circuit_breaker_timeout(self):
         return self.SLACK_CIRCUIT_BREAKER_TIMEOUT
-
-    @property
-    # Documentation OpenAI model accessor removed
 
     @property
     def openai_reasoning_effort(self):

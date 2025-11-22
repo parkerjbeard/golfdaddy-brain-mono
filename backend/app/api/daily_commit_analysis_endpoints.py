@@ -3,7 +3,6 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
 
 from app.auth.dependencies import get_current_user
 from app.models.daily_commit_analysis import DailyCommitAnalysis

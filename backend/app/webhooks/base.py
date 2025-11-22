@@ -4,15 +4,13 @@ Base webhook handler classes and utilities.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
 
 class WebhookVerificationError(Exception):
     """Raised when webhook signature verification fails."""
-
-    pass
 
 
 class WebhookHandler(ABC):
@@ -33,7 +31,6 @@ class WebhookHandler(ABC):
         Raises:
             WebhookVerificationError: If signature is invalid
         """
-        pass
 
     @abstractmethod
     async def process_event(self, event_type: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -47,7 +44,6 @@ class WebhookHandler(ABC):
         Returns:
             Processing result
         """
-        pass
 
     def extract_event_type(self, headers: Dict[str, str], body: Dict[str, Any]) -> str:
         """

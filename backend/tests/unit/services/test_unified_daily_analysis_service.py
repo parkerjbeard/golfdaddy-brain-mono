@@ -3,17 +3,16 @@ Comprehensive tests for the Unified Daily Analysis Service.
 Tests the integration of EOD reports and commits with AI-powered deduplication.
 """
 
-import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from uuid import UUID, uuid4
+from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 import pytest
 
-from app.core.exceptions import AIIntegrationError, DatabaseError, ExternalServiceError
+from app.core.exceptions import AIIntegrationError, ExternalServiceError
 from app.models.commit import Commit
-from app.models.daily_commit_analysis import DailyCommitAnalysis, DailyCommitAnalysisCreate
+from app.models.daily_commit_analysis import DailyCommitAnalysis
 from app.models.daily_report import AiAnalysis, DailyReport
 from app.services.unified_daily_analysis_service import UnifiedDailyAnalysisService
 

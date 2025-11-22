@@ -3,9 +3,8 @@ Basic tests for authentication configuration and middleware.
 """
 
 import os
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 

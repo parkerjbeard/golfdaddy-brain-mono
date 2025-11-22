@@ -4,14 +4,10 @@ Unit tests for GitHub webhook handler.
 
 import hashlib
 import hmac
-import json
-from datetime import datetime
-from typing import Any, Dict
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from app.core.exceptions import ExternalServiceError
 from app.schemas.github_event import CommitPayload
 from app.webhooks.base import WebhookVerificationError
 from app.webhooks.github import GitHubWebhookHandler

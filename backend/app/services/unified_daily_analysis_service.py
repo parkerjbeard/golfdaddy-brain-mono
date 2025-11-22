@@ -1,11 +1,10 @@
-import asyncio
 import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from app.core.exceptions import DatabaseError, ExternalServiceError, ResourceNotFoundError
+from app.core.exceptions import ExternalServiceError, ResourceNotFoundError
 from app.models.commit import Commit
 from app.models.daily_commit_analysis import DailyCommitAnalysis, DailyCommitAnalysisCreate, DailyCommitAnalysisUpdate
 from app.models.daily_report import DailyReport

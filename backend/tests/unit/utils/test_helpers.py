@@ -4,7 +4,7 @@ Common test helper functions and utilities.
 
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def load_test_data(filename: str) -> Dict[str, Any]:

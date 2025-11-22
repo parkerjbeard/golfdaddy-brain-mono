@@ -2,10 +2,9 @@
 
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from pydantic import HttpUrl
 
 from app.integrations.commit_analysis import CommitAnalyzer

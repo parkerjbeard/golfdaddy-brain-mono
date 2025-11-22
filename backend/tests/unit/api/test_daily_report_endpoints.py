@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
-from uuid import UUID, uuid4
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
 pytestmark = pytest.mark.skip(reason="Daily report endpoint contract evolving; skipping brittle unit tests.")
-from fastapi import FastAPI, status
+from fastapi import status
 from fastapi.testclient import TestClient
 
 # Import the actual dependency functions

@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Dict
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -86,7 +85,7 @@ async def test_get_daily_report_by_id(
 
     # Mock for create
     mock_supabase_client.execute.return_value = MagicMock(data=[mock_response_data], error=None)
-    created_report = await report_repository.create_daily_report(sample_report_create)
+    await report_repository.create_daily_report(sample_report_create)
 
     # Mock for get by id
     mock_supabase_client.execute.return_value = MagicMock(data=mock_response_data, error=None)

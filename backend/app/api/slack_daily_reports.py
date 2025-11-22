@@ -8,19 +8,11 @@ import hmac
 import json
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
-from uuid import UUID
+from typing import Any, Dict
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.config.settings import settings
-from app.core.exceptions import ExternalServiceError
-from app.models.daily_report import ConversationState, DailyReport
-from app.models.user import User
-from app.repositories.daily_report_repository import DailyReportRepository
-from app.repositories.user_repository import UserRepository
-from app.services.daily_report_service import DailyReportService
 from app.services.slack_conversation_handler import SlackConversationHandler
 from app.services.slack_message_templates import SlackMessageTemplates
 from app.services.slack_service import SlackService

@@ -5,11 +5,9 @@ This service manages the conversational flow between the Slack bot and users
 for daily report submission and clarification.
 """
 
-import asyncio
-import json
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 

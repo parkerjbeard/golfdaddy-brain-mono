@@ -11,7 +11,6 @@ from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_user
 from app.config.supabase_client import get_supabase_client_safe as get_db
-from app.core.exceptions import ExternalServiceError
 from app.models.user import User
 from app.services.zapier_integration_service import ZapierIntegrationService
 from supabase import Client

@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
+from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 
-from app.models.daily_report import AiAnalysis, ClarificationRequest, DailyReport, DailyReportCreate, DailyReportUpdate
+from app.models.daily_report import AiAnalysis, DailyReport, DailyReportCreate, DailyReportUpdate
 from app.repositories.daily_report_repository import DailyReportRepository
 from app.services.daily_report_service import DailyReportService
 

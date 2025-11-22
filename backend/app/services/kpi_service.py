@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.core.exceptions import DatabaseError, ResourceNotFoundError
+from app.core.exceptions import ResourceNotFoundError
 from app.models.pull_request import PullRequest
 from app.models.user import User, UserRole
 from app.repositories.daily_report_repository import DailyReportRepository

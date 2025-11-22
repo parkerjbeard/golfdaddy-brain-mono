@@ -2,18 +2,11 @@
 Unit tests for the change analyzer service.
 """
 
-import pytest
-
 from app.services.change_analyzer import (
     ChangeAnalyzer,
     ChangeCategory,
-    ChangedEndpoint,
-    ChangedSymbol,
     ChangeType,
-    ConfigChange,
     DiffParser,
-    MigrationChange,
-    StructuredChange,
 )
 
 

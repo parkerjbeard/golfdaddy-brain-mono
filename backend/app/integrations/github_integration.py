@@ -1,10 +1,7 @@
 import hashlib
 import hmac
-import json
-import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Any, Dict, List
 
 import requests
 

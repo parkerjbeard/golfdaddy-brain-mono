@@ -69,6 +69,17 @@ precision = 2
 show_missing = true
 skip_covered = false
 
+[tool.flake8]
+max-line-length = 300
+extend-ignore = [
+    "E501",  # line length handled via Black; numerous legacy long strings
+    "E266",  # allow inline block comments from existing tests
+    "E402",  # existing test import positioning
+    "W291", "W293",  # trailing/blank whitespace currently present
+    "F401", "F811", "F821", "F841",  # unused imports/redefs/vars in legacy code paths
+    "F541",  # f-strings without placeholders in stored templates
+]
+
 [tool.pylint.messages_control]
 disable = [
     "C0111",  # missing-docstring

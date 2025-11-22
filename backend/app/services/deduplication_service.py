@@ -412,7 +412,7 @@ class DeduplicationService:
 
         for match in matches:
             commit_key = str(match.commit_item.metadata.get("commit_hash"))
-            report_key = (match.report_item.description, match.report_item.timestamp.isoformat())
+            (match.report_item.description, match.report_item.timestamp.isoformat())
             if commit_key not in used_commits:
                 filtered_matches.append(match)
                 used_commits.add(commit_key)

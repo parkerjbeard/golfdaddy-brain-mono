@@ -12,7 +12,6 @@ from app.models.raci_matrix import (
     RaciMatrix,
     RaciMatrixType,
     RaciRole,
-    UpdateAssignmentsPayload,
     UpdateRaciMatrixPayload,
 )
 

@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import status
 
 from app.api.v1.endpoints.kpi import get_kpi_service
 from app.auth.dependencies import get_current_user

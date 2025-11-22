@@ -1,9 +1,9 @@
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 from uuid import UUID
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, status
 
 from app.config.supabase_client import get_supabase_client_safe
 from app.models.user import User, UserRole

@@ -1,11 +1,7 @@
-from typing import Dict, Optional
-from uuid import UUID
-
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter
 
 from app.api import daily_report_endpoints, raci_matrix, zapier_endpoints
 from app.api.v1.endpoints import kpi, users
-from app.config.settings import settings
 
 api_v1_router = APIRouter()
 

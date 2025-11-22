@@ -5,12 +5,11 @@ GitHub webhook handler for direct integration.
 import asyncio
 import hashlib
 import hmac
-import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
-from app.core.exceptions import AIIntegrationError, BadRequestError, DatabaseError, ExternalServiceError
+from app.core.exceptions import ExternalServiceError
 from app.schemas.github_event import CommitPayload
 from app.services.commit_analysis_service import CommitAnalysisService
 from app.webhooks.base import WebhookHandler, WebhookVerificationError
@@ -144,7 +143,7 @@ class GitHubWebhookHandler(WebhookHandler):
         branch = push_data.get("ref", "").split("/")[-1]  # Extract branch name from refs/heads/branch
 
         # Extract repository info
-        repo_name = repository.get("name")
+        repository.get("name")
         repo_full_name = repository.get("full_name")  # owner/repo format
         repo_url = repository.get("html_url")
 

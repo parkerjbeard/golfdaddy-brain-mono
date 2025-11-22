@@ -2,9 +2,9 @@ import asyncio
 import json
 import textwrap
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI
 
 from app.config.settings import settings
 

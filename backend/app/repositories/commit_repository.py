@@ -102,7 +102,6 @@ class CommitRepository:
                             f"{saved_data.get('ai_estimated_hours')}. Error: {conversion_exc}",
                             exc_info=True,
                         )
-                        pass
 
                 return Commit(**saved_data)
             else:
@@ -157,7 +156,6 @@ class CommitRepository:
                                 f"Error: {conversion_exc}",
                                 exc_info=True,
                             )
-                            pass
                     saved_commits.append(Commit(**saved_data_item))
                 return saved_commits
             else:
@@ -194,7 +192,6 @@ class CommitRepository:
                             f"{saved_data.get('ai_estimated_hours')}. Error: {conversion_exc}",
                             exc_info=True,
                         )
-                        pass
                 return Commit(**saved_data)
             elif response.status_code == 406 or (not response.data and not response.error):
                 logger.info(f"Commit not found: {commit_hash}")
@@ -242,7 +239,6 @@ class CommitRepository:
                             f"{saved_data.get('ai_estimated_hours')}. Error: {conversion_exc}",
                             exc_info=True,
                         )
-                        pass
                 return Commit(**saved_data)
             else:
                 existing_commit = await self.get_commit_by_hash(commit_hash)
@@ -304,7 +300,6 @@ class CommitRepository:
                                 f"Error: {conversion_exc}",
                                 exc_info=True,
                             )
-                            pass
                     saved_commits.append(Commit(**saved_data_item))
                 return saved_commits
             else:
@@ -397,7 +392,6 @@ class CommitRepository:
                             f"{saved_data.get('ai_estimated_hours')}. Error: {conversion_exc}",
                             exc_info=True,
                         )
-                        pass
 
                 return Commit(**saved_data)
             else:
@@ -516,7 +510,6 @@ class CommitRepository:
                                     f"Error: {conversion_exc}",
                                     exc_info=True,
                                 )
-                                pass
 
                         commit = Commit(**saved_data_item)
                         commits_by_hash[commit.commit_hash] = commit

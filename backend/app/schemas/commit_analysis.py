@@ -37,8 +37,6 @@ class CommitAnalysisBase(BaseModel):
 class CommitAnalysisCreate(CommitAnalysisBase):
     """Model for creating a new commit analysis"""
 
-    pass
-
 
 class CommitAnalysisUpdate(BaseModel):
     """Model for updating commit analysis"""
