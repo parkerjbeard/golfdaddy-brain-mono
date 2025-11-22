@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { RaciMatrixForm } from "@/components/raci/RaciMatrixForm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft } from "lucide-react";
 import raciMatrixService from '@/services/raciMatrixService';
-import { CreateRaciMatrixPayload } from '@/types/entities';
+import { CreateRaciMatrixPayload, RaciMatrixTemplate } from '@/types/entities';
 
 export default function CreateRaciMatrixPage() {
   const { userProfile, loading: authLoading, session } = useAuth();
   const { toast } = useToast();
   const token = session?.access_token;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [templates, setTemplates] = useState<RaciMatrixTemplate[]>([]);
+
+  useEffect(() => {
+    raciMatrixService.getTemplates().then(setTemplates).catch((err) => {
+      console.error('Failed to load templates', err);
+    });
+  }, []);
 
   const handleMatrixSubmit = async (payload: CreateRaciMatrixPayload) => {
     try {
@@ -123,6 +130,7 @@ export default function CreateRaciMatrixPage() {
               onSubmit={handleMatrixSubmit}
               onCancel={() => window.history.back()}
               isSubmitting={isSubmitting}
+              templates={templates}
             />
           </CardContent>
         </Card>

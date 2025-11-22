@@ -3,7 +3,7 @@ import { RaciMatrix, RaciRoleType, RaciActivity, RaciRole, RaciAssignment } from
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, CheckCircle, AlertCircle } from "lucide-react";
+import { Edit, Trash2, CheckCircle } from "lucide-react";
 
 interface RaciMatrixViewProps {
   matrix: RaciMatrix;
@@ -63,6 +63,30 @@ export const RaciMatrixView: React.FC<RaciMatrixViewProps> = ({
   const sortedActivities = [...matrix.activities].sort((a, b) => a.order - b.order);
   const sortedRoles = [...matrix.roles].sort((a, b) => a.order - b.order);
 
+  const validation = React.useMemo(() => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    sortedActivities.forEach((activity) => {
+      const activityAssignments = matrix.assignments.filter((a) => a.activity_id === activity.id);
+      const accountable = activityAssignments.filter((a) => a.role === RaciRoleType.ACCOUNTABLE).length;
+      const responsible = activityAssignments.filter((a) => a.role === RaciRoleType.RESPONSIBLE).length;
+      if (accountable === 0) errors.push(`${activity.name} missing Accountable`);
+      if (accountable > 1) warnings.push(`${activity.name} has multiple Accountables`);
+      if (responsible === 0) errors.push(`${activity.name} missing Responsible`);
+    });
+    sortedRoles.forEach((role) => {
+      const used = matrix.assignments.some((a) => a.role_id === role.id);
+      if (!used) warnings.push(`${role.name} unassigned`);
+    });
+    const stats = {
+      R: matrix.assignments.filter((a) => a.role === RaciRoleType.RESPONSIBLE).length,
+      A: matrix.assignments.filter((a) => a.role === RaciRoleType.ACCOUNTABLE).length,
+      C: matrix.assignments.filter((a) => a.role === RaciRoleType.CONSULTED).length,
+      I: matrix.assignments.filter((a) => a.role === RaciRoleType.INFORMED).length,
+    };
+    return { errors, warnings, stats };
+  }, [matrix.assignments, sortedActivities, sortedRoles]);
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -97,6 +121,19 @@ export const RaciMatrixView: React.FC<RaciMatrixViewProps> = ({
           )}
         </div>
         
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          <Badge variant={validation.errors.length ? 'destructive' : 'secondary'}>
+            {validation.errors.length ? `${validation.errors.length} errors` : 'No critical errors'}
+          </Badge>
+          {validation.warnings.length > 0 && (
+            <Badge variant="outline">{validation.warnings.length} warnings</Badge>
+          )}
+          <Badge variant="outline">R:{validation.stats.R}</Badge>
+          <Badge variant="outline">A:{validation.stats.A}</Badge>
+          <Badge variant="outline">C:{validation.stats.C}</Badge>
+          <Badge variant="outline">I:{validation.stats.I}</Badge>
+        </div>
+
         {/* RACI Legend */}
         <div className="flex items-center gap-4 mt-4 p-4 bg-gray-50 rounded-lg">
           <div className="text-sm font-medium text-gray-700">Legend:</div>

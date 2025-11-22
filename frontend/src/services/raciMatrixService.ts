@@ -4,7 +4,9 @@ import {
   CreateRaciMatrixPayload,
   UpdateRaciMatrixPayload,
   CreateRaciMatrixResponse,
-  RaciMatrixType
+  RaciMatrixType,
+  RaciMatrixTemplate,
+  RaciValidationResult
 } from '@/types/entities';
 
 export const raciMatrixService = {
@@ -65,6 +67,61 @@ export const raciMatrixService = {
   // Validate a RACI matrix
   async validateMatrix(matrixId: string): Promise<{ is_valid: boolean; errors: string[] }> {
     const response = await apiClient.post(`/api/v1/raci-matrices/${matrixId}/validate`);
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data;
+  },
+
+  // Run comprehensive validation
+  async validateMatrixComplete(matrixId: string): Promise<RaciValidationResult> {
+    const response = await apiClient.post(`/api/v1/raci-matrices/${matrixId}/validate-complete`);
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data;
+  },
+
+  // Get matrix templates
+  async getTemplates(): Promise<RaciMatrixTemplate[]> {
+    const response = await apiClient.get('/api/v1/raci-matrices/templates');
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data;
+  },
+
+  // Create matrix from template
+  async createFromTemplate(
+    templateId: string,
+    name: string,
+    description?: string
+  ): Promise<CreateRaciMatrixResponse> {
+    const params = new URLSearchParams();
+    params.append('name', name);
+    if (description) params.append('description', description);
+
+    const response = await apiClient.post(
+      `/api/v1/raci-matrices/templates/${templateId}?${params.toString()}`
+    );
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data;
+  },
+
+  // Bulk assign helper
+  async bulkAssign(
+    matrixId: string,
+    payload: {
+      activity_ids: string[];
+      role_ids: string[];
+      role_type: string;
+      notes?: string;
+      clear_existing?: boolean;
+    }
+  ): Promise<{ updated_count: number; warnings: string[] }> {
+    const response = await apiClient.post(`/api/v1/raci-matrices/${matrixId}/bulk-assign`, payload);
     if (response.error) {
       throw new Error(response.error);
     }

@@ -60,19 +60,19 @@ export const dailyReportsService = {
 // RACI Matrix
 export const raciService = {
   getMatrices: async (): Promise<ApiResponse> => {
-    return apiClient.get('/raci-matrices');
+    return apiClient.get('/api/v1/raci-matrices/');
   },
 
   createMatrix: async (data: any): Promise<ApiResponse> => {
-    return apiClient.post('/raci-matrices', data);
+    return apiClient.post('/api/v1/raci-matrices/', data);
   },
 
   updateMatrix: async (id: string, data: any): Promise<ApiResponse> => {
-    return apiClient.put(`/raci-matrices/${id}`, data);
+    return apiClient.put(`/api/v1/raci-matrices/${id}`, data);
   },
 
   deleteMatrix: async (id: string): Promise<ApiResponse> => {
-    return apiClient.delete(`/raci-matrices/${id}`);
+    return apiClient.delete(`/api/v1/raci-matrices/${id}`);
   },
 };
 

@@ -64,6 +64,30 @@ export interface RaciMatrix {
   updated_at?: string;
 }
 
+export interface RaciValidationStats {
+  total_activities: number;
+  total_roles: number;
+  total_assignments: number;
+  assignments_by_type: Record<string, number>;
+}
+
+export interface RaciValidationResult {
+  is_valid: boolean;
+  errors: string[];
+  warnings: string[];
+  stats?: RaciValidationStats;
+}
+
+export interface RaciMatrixTemplate {
+  template_id: string;
+  name: string;
+  description: string;
+  matrix_type: RaciMatrixType;
+  activities: RaciActivity[];
+  roles: RaciRole[];
+  assignments: RaciAssignment[];
+}
+
 export interface CreateRaciMatrixPayload {
   name: string;
   description?: string;

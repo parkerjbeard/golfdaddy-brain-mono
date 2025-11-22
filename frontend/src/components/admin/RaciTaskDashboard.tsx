@@ -3,13 +3,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { AlertCircle, Plus, Grid } from "lucide-react";
 import { RaciMatrix } from '@/types/entities';
 import { RaciMatrixView } from '../raci/RaciMatrixView';
 import { RaciMatrixForm } from '../raci/RaciMatrixForm';
 import raciMatrixService from '@/services/raciMatrixService';
 import { useToast } from '@/components/ui/use-toast';
+import { RaciMatrixTemplate } from '@/types/entities';
 
 export const RaciTaskDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -17,15 +18,18 @@ export const RaciTaskDashboard: React.FC = () => {
 
   // RACI Matrices state
   const [matrices, setMatrices] = useState<RaciMatrix[]>([]);
+  const [templates, setTemplates] = useState<RaciMatrixTemplate[]>([]);
   const [matricesLoading, setMatricesLoading] = useState(true);
   const [matricesError, setMatricesError] = useState<string | null>(null);
   const [selectedMatrix, setSelectedMatrix] = useState<RaciMatrix | null>(null);
+  const [templateToUse, setTemplateToUse] = useState<RaciMatrixTemplate | null>(null);
   const [showMatrixForm, setShowMatrixForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     // Load matrices on component mount
     loadMatrices();
+    loadTemplates();
   }, []);
 
   const loadMatrices = async () => {
@@ -44,6 +48,15 @@ export const RaciTaskDashboard: React.FC = () => {
       });
     } finally {
       setMatricesLoading(false);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const data = await raciMatrixService.getTemplates();
+      setTemplates(data);
+    } catch (error) {
+      console.error('Failed to load RACI templates:', error);
     }
   };
 
@@ -68,6 +81,7 @@ export const RaciTaskDashboard: React.FC = () => {
       }
 
       setShowMatrixForm(false);
+      setTemplateToUse(null);
       await loadMatrices();
     } catch (error) {
       console.error('Failed to create RACI matrix:', error);
@@ -83,6 +97,7 @@ export const RaciTaskDashboard: React.FC = () => {
 
   const handleEditMatrix = (matrix: RaciMatrix) => {
     setSelectedMatrix(matrix);
+    setTemplateToUse(null);
     setShowMatrixForm(true);
   };
 
@@ -162,15 +177,18 @@ export const RaciTaskDashboard: React.FC = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RaciMatrixForm
-              matrix={selectedMatrix}
-              onSubmit={handleCreateMatrix}
-              onCancel={() => {
-                setShowMatrixForm(false);
-                setSelectedMatrix(null);
-              }}
-              isSubmitting={isSubmitting}
-            />
+              <RaciMatrixForm
+                matrix={selectedMatrix}
+                templates={templates}
+                initialTemplate={templateToUse}
+                onSubmit={handleCreateMatrix}
+                onCancel={() => {
+                  setShowMatrixForm(false);
+                  setSelectedMatrix(null);
+                  setTemplateToUse(null);
+                }}
+                isSubmitting={isSubmitting}
+              />
           </CardContent>
         </Card>
       </div>
@@ -184,13 +202,48 @@ export const RaciTaskDashboard: React.FC = () => {
           <h1 className="text-3xl font-bold">RACI Management</h1>
           <p className="text-muted-foreground">Manage RACI matrices for process workflows</p>
         </div>
-        <Button onClick={() => setShowMatrixForm(true)}>
+        <Button onClick={() => { setTemplateToUse(null); setSelectedMatrix(null); setShowMatrixForm(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Create Matrix
         </Button>
       </div>
 
       <div className="space-y-6">
+        {templates.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Start faster with a template</CardTitle>
+              <CardDescription>Common workflows already modeled with suggested roles and activities.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {templates.slice(0, 4).map((tpl) => (
+                <Card key={tpl.template_id} className="border-dashed">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Grid className="h-4 w-4" />
+                      {tpl.name}
+                    </CardTitle>
+                    <CardDescription className="line-clamp-2">{tpl.description}</CardDescription>
+                  </CardHeader>
+                  <CardFooter className="flex items-center justify-between text-sm text-muted-foreground">
+                    <div className="flex gap-3">
+                      <span>{tpl.activities.length} activities</span>
+                      <span>{tpl.roles.length} roles</span>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setSelectedMatrix(null);
+                      setTemplateToUse(tpl);
+                      setShowMatrixForm(true);
+                    }}>
+                      Use template
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {matrices.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
