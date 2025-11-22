@@ -44,6 +44,7 @@ async def login_user(request: LoginRequest, supabase: Client = Depends(get_supab
     try:
         # In test mode, return a canned token to avoid network calls
         from app.config.settings import settings as _settings
+
         if getattr(_settings, "TESTING_MODE", False):
             return TokenResponse(
                 access_token="mock_access_token",
@@ -85,6 +86,7 @@ async def refresh_token(refresh_token: str, supabase: Client = Depends(get_supab
     """
     try:
         from app.config.settings import settings as _settings
+
         if getattr(_settings, "TESTING_MODE", False):
             return TokenResponse(
                 access_token="mock_access_token",

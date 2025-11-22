@@ -168,7 +168,9 @@ class DailyReportRepository:
             # Fallback to in-memory creation for tests
             new_report = DailyReport(
                 id=uuid4(),
-                user_id=UUID(report_create.user_id) if isinstance(report_create.user_id, str) else report_create.user_id,
+                user_id=(
+                    UUID(report_create.user_id) if isinstance(report_create.user_id, str) else report_create.user_id
+                ),
                 raw_text_input=report_create.raw_text_input,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),

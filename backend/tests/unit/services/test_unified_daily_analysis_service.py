@@ -32,7 +32,7 @@ class TestUnifiedDailyAnalysisService:
         service._delegate.daily_report_repo = AsyncMock()
         service._delegate.user_repo = AsyncMock()
         service._delegate.ai_integration = AsyncMock()
-        
+
         # Mock service's own user_repo
         service.user_repo = AsyncMock()
 
@@ -46,7 +46,7 @@ class TestUnifiedDailyAnalysisService:
         service.commit_repo = service._delegate.commit_repo
         service.report_repo = service._delegate.daily_report_repo
         service.analysis_repo = service._delegate.repository
-        
+
         return service
 
     @pytest.fixture
@@ -569,10 +569,14 @@ class TestUnifiedDailyAnalysisService:
                 analysis_type="with_report" if hours > 0 else "automatic",
                 ai_analysis={
                     "key_achievements": ["Task 1", "Task 2"] if hours > 0 else [],
-                    "work_categories": {
-                        "feature_development": hours * 0.5,
-                        "bug_fixes": hours * 0.3,
-                    } if hours > 0 else {}
+                    "work_categories": (
+                        {
+                            "feature_development": hours * 0.5,
+                            "bug_fixes": hours * 0.3,
+                        }
+                        if hours > 0
+                        else {}
+                    ),
                 },
                 complexity_score=5 if hours > 0 else None,
                 repositories_analyzed=["repo1"] if hours > 0 else [],
@@ -614,7 +618,7 @@ class TestUnifiedDailyAnalysisService:
             analysis_type="automatic",
             created_at=datetime.now(),
             updated_at=datetime.now(),
-            ai_analysis={}
+            ai_analysis={},
         )
 
         updated_analysis = DailyCommitAnalysis(
@@ -628,8 +632,8 @@ class TestUnifiedDailyAnalysisService:
             ai_analysis={
                 "clarification_needed": True,
                 "clarification_request": clarification_request,
-                "clarification_status": "pending"
-            }
+                "clarification_status": "pending",
+            },
         )
 
         service.analysis_repo.get_by_id.return_value = existing_analysis
@@ -663,7 +667,7 @@ class TestUnifiedDailyAnalysisService:
             ai_analysis={
                 "clarification_needed": True,
                 "clarification_request": "Please provide more details about the bug fix.",
-                "clarification_status": "pending"
+                "clarification_status": "pending",
             },
             created_at=datetime.now(),
             updated_at=datetime.now(),
@@ -700,7 +704,7 @@ class TestUnifiedDailyAnalysisService:
 
         # Verify AI was called
         service.ai_integration.analyze_daily_work.assert_called()
-        
+
         # Note: The current implementation does not seem to pass the clarification text to the AI
         # so we cannot assert that it is in the prompt/context.
         # ai_call_args = service.ai_integration.analyze_daily_work.call_args

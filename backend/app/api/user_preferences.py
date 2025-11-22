@@ -14,9 +14,7 @@ router = APIRouter()
 
 
 @router.get("/preferences", response_model=UserPreferencesResponse)
-def get_user_preferences(
-    current_user: User = Depends(get_current_user), db = Depends(get_db)
-) -> UserPreferencesResponse:
+def get_user_preferences(current_user: User = Depends(get_current_user), db=Depends(get_db)) -> UserPreferencesResponse:
     """Get the current user's notification preferences."""
     user_repo = UserRepository(db)
     user = asyncio.run(user_repo.get_user_by_id(current_user.id))
@@ -42,7 +40,7 @@ def get_user_preferences(
 def update_user_preferences(
     preferences_update: UserPreferencesUpdate,
     current_user: User = Depends(get_current_user),
-    db = Depends(get_db),
+    db=Depends(get_db),
 ) -> UserPreferencesResponse:
     """Update the current user's notification preferences."""
     user_repo = UserRepository(db)

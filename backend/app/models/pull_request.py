@@ -27,11 +27,11 @@ class PullRequest(BaseModel):
         default=None,
         description="Primary timestamp used for activity rollups (defaults to merged_at or opened_at)",
     )
-    ai_estimated_hours: Optional[Decimal] = Field(
-        default=None, description="AI estimated hours associated with the PR"
-    )
+    ai_estimated_hours: Optional[Decimal] = Field(default=None, description="AI estimated hours associated with the PR")
     ai_summary: Optional[str] = Field(default=None, description="AI generated summary for the PR")
-    ai_prompts: Optional[List[str]] = Field(default=None, description="Prompts or manager nudges associated with this PR")
+    ai_prompts: Optional[List[str]] = Field(
+        default=None, description="Prompts or manager nudges associated with this PR"
+    )
     ai_analysis_notes: Optional[Dict[str, Any]] = Field(
         default=None, description="Structured AI analysis payload for the PR"
     )
@@ -43,4 +43,3 @@ class PullRequest(BaseModel):
 
     class Config:
         from_attributes = True
-

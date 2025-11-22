@@ -78,14 +78,12 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         if not is_allowed:
             logger.warning(f"Rate limit exceeded for {identifier} on {request.url.path}")
             from fastapi.responses import JSONResponse
+
             response = JSONResponse(
                 status_code=429,
                 content={
-                    "error": {
-                        "code": "RATE_LIMIT_EXCEEDED",
-                        "message": "Rate limit exceeded. Please try again later."
-                    }
-                }
+                    "error": {"code": "RATE_LIMIT_EXCEEDED", "message": "Rate limit exceeded. Please try again later."}
+                },
             )
             # Add rate limit headers to response
             for header_name, header_value in headers.items():
@@ -105,7 +103,11 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         """Get or create a sliding window limiter for the identifier with a 60s window."""
         limiter = self._limiters.get(identifier)
         desired_limit = per_minute_limit  # treated as limit per 60s window
-        if limiter is None or limiter.config.requests_per_hour != desired_limit or limiter.config.window_seconds != self.window_size:
+        if (
+            limiter is None
+            or limiter.config.requests_per_hour != desired_limit
+            or limiter.config.window_seconds != self.window_size
+        ):
             cfg = RateLimitConfig(
                 requests_per_hour=desired_limit,  # interpreted as requests per window
                 name=f"inbound:{identifier}",

@@ -262,9 +262,7 @@ class KpiService:
         score = (total_points * 1.5) + (total_prs * 2.0) + (total_hours * 1.0)
         return round(score, 2)
 
-    def _calculate_day_off_dates(
-        self, start_date: date, end_date: date, activity_dates: List[date]
-    ) -> List[date]:
+    def _calculate_day_off_dates(self, start_date: date, end_date: date, activity_dates: List[date]) -> List[date]:
         activity_set = set(activity_dates)
         cursor = start_date
         results: List[date] = []
@@ -285,9 +283,7 @@ class KpiService:
 
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=period_days)
-        logger.info(
-            "Building PR performance summary for user %s over %s days", user_id, period_days
-        )
+        logger.info("Building PR performance summary for user %s over %s days", user_id, period_days)
 
         return await self._build_user_summary(user_id, start_date, end_date)
 
@@ -308,9 +304,7 @@ class KpiService:
 
         return await self._build_user_summary(user_id, start_dt, end_dt)
 
-    async def _build_user_summary(
-        self, user_id: UUID, start_dt: datetime, end_dt: datetime
-    ) -> Dict[str, Any]:
+    async def _build_user_summary(self, user_id: UUID, start_dt: datetime, end_dt: datetime) -> Dict[str, Any]:
         daily_reports = await self.daily_report_repo.get_reports_by_user_and_date_range(user_id, start_dt, end_dt)
         total_eod_reported_hours = sum(dr.final_estimated_hours or 0.0 for dr in daily_reports)
         eod_report_details = [
@@ -333,20 +327,16 @@ class KpiService:
         )
 
         total_prs = len(prs_in_period)
-        merged_prs = len([pr for pr in prs_in_period if str(getattr(pr, "status", "")).lower() == "merged" or pr.merged_at])
+        merged_prs = len(
+            [pr for pr in prs_in_period if str(getattr(pr, "status", "")).lower() == "merged" or pr.merged_at]
+        )
         total_hours = sum(float(pr.ai_estimated_hours or 0.0) for pr in prs_in_period)
         total_points = sum(self._extract_impact_score(pr, self._parse_ai_notes(pr)) for pr in prs_in_period)
 
         daily_hours, daily_points, daily_counts = self._collect_daily_rollups(prs_in_period)
-        daily_hours_series = [
-            {"date": day, "hours": round(value, 2)} for day, value in sorted(daily_hours.items())
-        ]
-        daily_points_series = [
-            {"date": day, "points": round(value, 2)} for day, value in sorted(daily_points.items())
-        ]
-        daily_prs_series = [
-            {"date": day, "count": count} for day, count in sorted(daily_counts.items())
-        ]
+        daily_hours_series = [{"date": day, "hours": round(value, 2)} for day, value in sorted(daily_hours.items())]
+        daily_points_series = [{"date": day, "points": round(value, 2)} for day, value in sorted(daily_points.items())]
+        daily_prs_series = [{"date": day, "count": count} for day, count in sorted(daily_counts.items())]
 
         efficiency_pph = round(total_points / total_hours, 2) if total_hours > 0 else 0.0
         try:
@@ -369,9 +359,7 @@ class KpiService:
 
         average_turnaround = self._compute_average_turnaround_hours(prs_in_period)
         activity_dates = [
-            self._resolve_activity_timestamp(pr).date()
-            for pr in prs_in_period
-            if self._resolve_activity_timestamp(pr)
+            self._resolve_activity_timestamp(pr).date() for pr in prs_in_period if self._resolve_activity_timestamp(pr)
         ]
         day_off_dates = self._calculate_day_off_dates(start_dt.date(), end_dt.date(), activity_dates)
 
@@ -472,7 +460,9 @@ class KpiService:
             try:
                 period_agg = self._sum_points_hours_by_category(prs)
                 baselines = await self._compute_personal_baselines(user.id, end_date_dt)
-                normalized_pph, used_default, baseline_source = self._compute_normalized_efficiency(period_agg, baselines)
+                normalized_pph, used_default, baseline_source = self._compute_normalized_efficiency(
+                    period_agg, baselines
+                )
             except Exception as exc:  # pragma: no cover
                 logger.debug("Failed to compute normalized PPH for user %s: %s", user.id, exc)
                 normalized_pph = 0.0
@@ -495,8 +485,12 @@ class KpiService:
                     activity_score=self._compute_activity_score(len(prs), total_points, total_hours),
                     day_off=False,
                     daily_prs_series=[{"date": day, "count": count} for day, count in sorted(daily_counts.items())],
-                    daily_hours_series=[{"date": day, "hours": round(value, 2)} for day, value in sorted(daily_hours.items())],
-                    daily_points_series=[{"date": day, "points": round(value, 2)} for day, value in sorted(daily_points.items())],
+                    daily_hours_series=[
+                        {"date": day, "hours": round(value, 2)} for day, value in sorted(daily_hours.items())
+                    ],
+                    daily_points_series=[
+                        {"date": day, "points": round(value, 2)} for day, value in sorted(daily_points.items())
+                    ],
                     latest_activity_timestamp=latest_ts.isoformat() if latest_ts else None,
                     latest_pr_title=latest_title,
                 )

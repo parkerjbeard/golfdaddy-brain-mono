@@ -6,10 +6,10 @@ def test_auth_me_v1_requires_bearer_token(client):
     # Provide API key to bypass middleware
     headers = {"X-API-Key": "test-api-key"}
     resp = client.get("/api/v1/auth/me", headers=headers)
-    
+
     # FastAPI returns 422 when required header is missing (or 401 if logic raises it)
     # Depending on implementation of get_current_user, it might raise 401 or 422.
-    # The dependency raises 422 if header is missing when API Auth is disabled, 
+    # The dependency raises 422 if header is missing when API Auth is disabled,
     # or 401 "API key required" if enabled.
     # Let's check for either 401 or 422.
     assert resp.status_code in [401, 422]

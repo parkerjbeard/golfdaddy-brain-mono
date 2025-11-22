@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+
 # Removed SQLAlchemy-based test DB fixtures after consolidating to Supabase
 
 from app.config.settings import settings
@@ -136,13 +137,13 @@ def mock_supabase_client():
 def client(mock_supabase_client):
     """Create a FastAPI TestClient with mocked Supabase dependency."""
     from app.config.supabase_client import get_supabase_client
-    
+
     # Override the dependency to return the mock
     app.dependency_overrides[get_supabase_client] = lambda: mock_supabase_client
-    
+
     with TestClient(app) as test_client:
         yield test_client
-    
+
     # Clean up the override
     app.dependency_overrides.clear()
 

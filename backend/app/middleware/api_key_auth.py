@@ -58,14 +58,10 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             logger.warning(f"No API key provided for {request.url.path}")
             # Return JSON response directly instead of raising exception
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={
-                    "error": {
-                        "code": "AUTHENTICATION_ERROR",
-                        "message": "API key required"
-                    }
-                }
+                content={"error": {"code": "AUTHENTICATION_ERROR", "message": "API key required"}},
             )
 
         # Validate API key
@@ -73,14 +69,10 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Invalid API key provided for {request.url.path}")
             # Return JSON response directly instead of raising exception
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={
-                    "error": {
-                        "code": "AUTHENTICATION_ERROR",
-                        "message": "Invalid API key"
-                    }
-                }
+                content={"error": {"code": "AUTHENTICATION_ERROR", "message": "Invalid API key"}},
             )
 
         # Add API key info to request state for use in routes

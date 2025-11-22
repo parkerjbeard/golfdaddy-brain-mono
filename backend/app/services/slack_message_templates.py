@@ -166,8 +166,6 @@ class SlackMessageTemplates:
             "blocks": blocks,
         }
 
-    
-
     @staticmethod
     def development_plan_created(
         user_id: str, manager_user_id: str, plan_name: str, objectives: List[str], timeline: str

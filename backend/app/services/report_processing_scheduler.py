@@ -181,7 +181,9 @@ class ReportProcessingScheduler:
         offset = 0
 
         while True:
-            reports = await self.daily_report_service.get_reports_with_pending_clarifications(limit=limit, offset=offset)
+            reports = await self.daily_report_service.get_reports_with_pending_clarifications(
+                limit=limit, offset=offset
+            )
             if not reports:
                 break
 

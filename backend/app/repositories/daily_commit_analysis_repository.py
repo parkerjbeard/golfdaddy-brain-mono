@@ -234,9 +234,7 @@ class DailyCommitAnalysisRepository:
         try:
             logger.info(f"Deleting daily analysis: {analysis_id}")
 
-            response: PostgrestResponse = (
-                self._client.table(self._table).delete().eq("id", str(analysis_id)).execute()
-            )
+            response: PostgrestResponse = self._client.table(self._table).delete().eq("id", str(analysis_id)).execute()
 
             self._handle_supabase_error(response, f"Failed to delete daily analysis {analysis_id}")
 

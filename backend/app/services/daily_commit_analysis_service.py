@@ -46,9 +46,7 @@ class DailyCommitAnalysisService:
             if not force_reanalysis:
                 existing = await self.repository.get_by_user_and_date(user_id, analysis_date)
                 if existing:
-                    logger.info(
-                        f"Analysis already exists for user {user_id} on {analysis_date}: {existing.id}"
-                    )
+                    logger.info(f"Analysis already exists for user {user_id} on {analysis_date}: {existing.id}")
                     return existing
 
             # Gather inputs
@@ -65,7 +63,9 @@ class DailyCommitAnalysisService:
 
             # If no work found at all, create a zero-hour entry for consistency
             if not commits and not daily_report:
-                logger.info(f"No commits or report found for user {user_id} on {analysis_date}; creating zero-hour entry")
+                logger.info(
+                    f"No commits or report found for user {user_id} on {analysis_date}; creating zero-hour entry"
+                )
                 return await self._create_zero_hour_analysis(user_id, analysis_date, None, "automatic")
 
             # Build AI context (adds deduplication instruction if report present)
@@ -78,20 +78,14 @@ class DailyCommitAnalysisService:
             # Normalize repository field name across possible commit schema variants
             repositories = list(
                 set(
-                    (
-                        getattr(c, "repository", None)
-                        or getattr(c, "repository_name", None)
-                        or None
-                    )
+                    (getattr(c, "repository", None) or getattr(c, "repository_name", None) or None)
                     for c in commits
                     if (getattr(c, "repository", None) or getattr(c, "repository_name", None))
                 )
             )
 
             total_added = sum((getattr(c, "additions", None) or getattr(c, "lines_added", 0) or 0) for c in commits)
-            total_deleted = sum(
-                (getattr(c, "deletions", None) or getattr(c, "lines_deleted", 0) or 0) for c in commits
-            )
+            total_deleted = sum((getattr(c, "deletions", None) or getattr(c, "lines_deleted", 0) or 0) for c in commits)
 
             analysis_data = DailyCommitAnalysisCreate(
                 user_id=user_id,
@@ -236,11 +230,7 @@ class DailyCommitAnalysisService:
         commit_summaries = []
         for commit in commits:
             repo_value = getattr(commit, "repository", None) or getattr(commit, "repository_name", None)
-            files_changed = (
-                getattr(commit, "files_changed", None)
-                or getattr(commit, "changed_files", None)
-                or []
-            )
+            files_changed = getattr(commit, "files_changed", None) or getattr(commit, "changed_files", None) or []
             additions = getattr(commit, "additions", None) or getattr(commit, "lines_added", 0) or 0
             deletions = getattr(commit, "deletions", None) or getattr(commit, "lines_deleted", 0) or 0
             commit_summaries.append(
@@ -263,11 +253,7 @@ class DailyCommitAnalysisService:
             "total_commits": len(commits),
             "repositories": list(
                 set(
-                    (
-                        getattr(c, "repository", None)
-                        or getattr(c, "repository_name", None)
-                        or None
-                    )
+                    (getattr(c, "repository", None) or getattr(c, "repository_name", None) or None)
                     for c in commits
                     if (getattr(c, "repository", None) or getattr(c, "repository_name", None))
                 )

@@ -52,9 +52,7 @@ class UserRepository:
 
             if "id" not in user_dict or not user_dict["id"]:
                 logger.error("Cannot create user profile without a valid ID linked to auth.users.")
-                raise DatabaseError(
-                    "User profile creation requires a valid ID."
-                )
+                raise DatabaseError("User profile creation requires a valid ID.")
 
             response: PostgrestResponse = await asyncio.to_thread(
                 self._client.table(self._table).insert(user_dict).execute

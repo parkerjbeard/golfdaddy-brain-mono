@@ -15,7 +15,7 @@ from app.core.error_handlers import add_exception_handlers
 def test_app():
     """Create a test FastAPI app."""
     app = FastAPI()
-    
+
     # Add exception handlers to properly handle custom exceptions
     add_exception_handlers(app)
 
@@ -163,16 +163,17 @@ class TestRequestMetrics:
     def test_metrics_collection(self, test_app):
         """Test metrics collection."""
         app = test_app
-        
+
         # We'll capture the middleware instance when it's created
         captured_middleware = []
-        
+
         original_init = RequestMetricsMiddleware.__init__
+
         def capture_init(self, app):
             original_init(self, app)
             captured_middleware.append(self)
-        
-        with patch.object(RequestMetricsMiddleware, '__init__', capture_init):
+
+        with patch.object(RequestMetricsMiddleware, "__init__", capture_init):
             # Add the middleware to the app and create client while patch is active
             app.add_middleware(RequestMetricsMiddleware)
             client = TestClient(app)
@@ -182,7 +183,7 @@ class TestRequestMetrics:
 
         # Check the response
         assert response.status_code == 200
-        
+
         # Get metrics from the captured middleware instance
         assert len(captured_middleware) > 0
         metrics_middleware = captured_middleware[0]

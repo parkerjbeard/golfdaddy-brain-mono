@@ -94,9 +94,6 @@ async def test_submit_daily_report_new(
     assert report is processed_report_mock
 
 
-
-
-
 async def test_submit_daily_report_ai_processing_fails(
     daily_report_service: DailyReportService,
     mock_report_repository: AsyncMock,
@@ -267,9 +264,6 @@ async def test_link_commits_to_report_non_existent_report(
     mock_report_repository.get_daily_report_by_id.assert_called_once_with(sample_report_id)
     mock_report_repository.update_daily_report.assert_not_called()
     assert report is None
-
-
-
 
 
 async def test_submit_daily_report_ai_service_exception(

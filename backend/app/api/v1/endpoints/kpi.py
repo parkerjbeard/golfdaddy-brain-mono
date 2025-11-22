@@ -134,7 +134,6 @@ async def get_user_kpi_summary(
         raise DatabaseError(message=f"An unexpected error occurred while fetching KPI summary.")
 
 
-
 @router.post("/backfill/github-analysis")
 async def backfill_github_analysis(
     file_path: str = Query(..., description="Absolute path to a github_analysis_*.json file on server"),
@@ -215,14 +214,10 @@ async def backfill_github_analysis(
                 continue
 
             total_hours_for_day = (
-                day.get("total_hours")
-                or day.get("daily_analysis", {}).get("total_estimated_hours")
-                or 0.0
+                day.get("total_hours") or day.get("daily_analysis", {}).get("total_estimated_hours") or 0.0
             )
             hours_per_candidate = (
-                (float(total_hours_for_day) / len(pr_candidates))
-                if pr_candidates and total_hours_for_day
-                else 0.0
+                (float(total_hours_for_day) / len(pr_candidates)) if pr_candidates and total_hours_for_day else 0.0
             )
 
             for candidate in pr_candidates:
@@ -247,9 +242,7 @@ async def backfill_github_analysis(
                     author_id = None
                     author_email = candidate.get("author_email") or day.get("author_email")
                     author_username = (
-                        candidate.get("author_github_username")
-                        or candidate.get("author")
-                        or day.get("github_username")
+                        candidate.get("author_github_username") or candidate.get("author") or day.get("github_username")
                     )
 
                     if author_email:
@@ -296,9 +289,9 @@ async def backfill_github_analysis(
                             or day.get("daily_analysis", {}).get("recommendations")
                         ),
                         ai_analysis_notes=candidate,
-                        impact_score=float(candidate.get("impact_score"))
-                        if candidate.get("impact_score") is not None
-                        else None,
+                        impact_score=(
+                            float(candidate.get("impact_score")) if candidate.get("impact_score") is not None else None
+                        ),
                         impact_category=candidate.get("impact_category"),
                         review_comments=candidate.get("review_comments") or candidate.get("comments"),
                     )
@@ -315,6 +308,8 @@ async def backfill_github_analysis(
     except Exception as e:
         logger.error(f"Backfill failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Backfill failed")
+
+
 # TODO: Consider adding a main router in backend/app/api/v1/api.py to include this kpi_router
 # e.g.:
 # from fastapi import APIRouter

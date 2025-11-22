@@ -79,9 +79,7 @@ class TokenBucketRateLimiter:
                 logger.warning(f"Rate limit exceeded for '{self.config.name}', need {needed_tokens} more tokens")
                 retry_after = max(0, reset_time - time.time())
                 raise RateLimitExceededError(
-                    message=(
-                        f"Rate limit exceeded for '{self.config.name}'. Retry after {retry_after:.1f} seconds."
-                    ),
+                    message=(f"Rate limit exceeded for '{self.config.name}'. Retry after {retry_after:.1f} seconds."),
                     retry_after=retry_after,
                     service_name=self.config.name,
                 )
@@ -158,9 +156,7 @@ class SlidingWindowRateLimiter:
                     f"Rate limit exceeded for '{self.config.name}', current requests: {len(self.request_times)}"
                 )
                 raise RateLimitExceededError(
-                    message=(
-                        f"Rate limit exceeded for '{self.config.name}'. Retry after {retry_after:.1f} seconds."
-                    ),
+                    message=(f"Rate limit exceeded for '{self.config.name}'. Retry after {retry_after:.1f} seconds."),
                     retry_after=retry_after,
                     service_name=self.config.name,
                 )

@@ -34,12 +34,14 @@ async def get_current_user(
         api_auth_enabled = False
         try:
             import os
+
             val = os.environ.get("ENABLE_API_AUTH")
             if val is not None:
                 api_auth_enabled = str(val).lower() in ("1", "true", "yes")
             else:
                 # Default to settings if env not present
                 from app.config.settings import settings as _settings
+
                 api_auth_enabled = bool(getattr(_settings, "ENABLE_API_AUTH", False))
         except Exception:
             api_auth_enabled = False

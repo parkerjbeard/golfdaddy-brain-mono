@@ -54,6 +54,7 @@ if settings.enable_api_auth:
     api_keys_runtime = settings.api_keys
     if api_keys_runtime is None:
         import os, json
+
         env_keys_str = os.environ.get("API_KEYS")
         if env_keys_str:
             try:
@@ -88,6 +89,7 @@ app.include_router(auth_router, prefix="/api/v1")  # /api/v1/auth/*
 # Register custom exception handlers
 add_exception_handlers(app)
 
+
 # Health check endpoint
 @app.get("/health", tags=["status"])
 async def health_check():
@@ -104,7 +106,9 @@ def public_runtime_config():
     try:
         # Prefer explicitly provided VITE_* at runtime if present
         supabase_url = os.environ.get("VITE_SUPABASE_URL") or str(settings.SUPABASE_URL)
-        supabase_anon = os.environ.get("VITE_SUPABASE_ANON_KEY") or (settings.SUPABASE_ANON_KEY or os.environ.get("SUPABASE_ANON_KEY", ""))
+        supabase_anon = os.environ.get("VITE_SUPABASE_ANON_KEY") or (
+            settings.SUPABASE_ANON_KEY or os.environ.get("SUPABASE_ANON_KEY", "")
+        )
 
         content = (
             "window.__APP_CONFIG__ = "

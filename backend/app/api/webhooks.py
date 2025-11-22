@@ -17,6 +17,7 @@ from supabase import Client
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
 
+
 def get_github_webhook_handler(db: Client = Depends(get_db)) -> GitHubWebhookHandler:
     """
     Dependency to get GitHub webhook handler.

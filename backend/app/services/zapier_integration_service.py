@@ -112,8 +112,7 @@ class ZapierIntegrationService:
 
             # Active projects from objectives (status active)
             active_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("objectives")
+                lambda: self.supabase.table("objectives")
                 .select("id,title,owner,team,due_date,progress,status,updated_at")
                 .eq("status", "active")
                 .order("updated_at", desc=True)
@@ -122,8 +121,7 @@ class ZapierIntegrationService:
             )
 
             archived_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("objectives")
+                lambda: self.supabase.table("objectives")
                 .select("id,title,owner,team,due_date,progress,status,updated_at,original_due_date")
                 .eq("status", "archived")
                 .order("updated_at", desc=True)
@@ -157,8 +155,7 @@ class ZapierIntegrationService:
 
             # Issues list from analytics metric "issues" (expects list of strings)
             issues_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("analytics")
+                lambda: self.supabase.table("analytics")
                 .select("metric_value,timestamp")
                 .eq("metric_name", "issues")
                 .order("timestamp", desc=True)
@@ -175,8 +172,7 @@ class ZapierIntegrationService:
 
             # Insights
             insights_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("analytics")
+                lambda: self.supabase.table("analytics")
                 .select("metric_value,timestamp")
                 .eq("metric_name", "insights_weekly")
                 .order("timestamp", desc=True)
@@ -277,8 +273,7 @@ class ZapierIntegrationService:
 
             # Wins (latest titles/descriptions this week)
             wins_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("wins")
+                lambda: self.supabase.table("wins")
                 .select("title,description,timestamp")
                 .gte("timestamp", week_start_iso)
                 .lt("timestamp", week_end_iso)
@@ -295,16 +290,14 @@ class ZapierIntegrationService:
 
             # CSAT scores
             current_csat_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("user_feedback")
+                lambda: self.supabase.table("user_feedback")
                 .select("csat_score,timestamp")
                 .gte("timestamp", week_start_iso)
                 .lt("timestamp", week_end_iso)
                 .execute()
             )
             previous_csat_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("user_feedback")
+                lambda: self.supabase.table("user_feedback")
                 .select("csat_score,timestamp")
                 .gte("timestamp", prev_week_start_iso)
                 .lt("timestamp", prev_week_end_iso)
@@ -316,28 +309,27 @@ class ZapierIntegrationService:
 
             # Feedback summary (latest snippets)
             feedback_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("user_feedback")
+                lambda: self.supabase.table("user_feedback")
                 .select("feedback_text,timestamp")
                 .order("timestamp", desc=True)
                 .limit(5)
                 .execute()
             )
-            feedback_texts = [row.get("feedback_text") for row in (feedback_resp.data or []) if row.get("feedback_text")]
+            feedback_texts = [
+                row.get("feedback_text") for row in (feedback_resp.data or []) if row.get("feedback_text")
+            ]
             user_feedback_summary = " \u2022 ".join(feedback_texts) if feedback_texts else "No feedback yet"
 
             # Social media views (current vs previous week)
             social_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("social_media_metrics")
+                lambda: self.supabase.table("social_media_metrics")
                 .select("views,timestamp")
                 .gte("timestamp", week_start_iso)
                 .lt("timestamp", week_end_iso)
                 .execute()
             )
             prev_social_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("social_media_metrics")
+                lambda: self.supabase.table("social_media_metrics")
                 .select("views,timestamp")
                 .gte("timestamp", prev_week_start_iso)
                 .lt("timestamp", prev_week_end_iso)
@@ -349,8 +341,7 @@ class ZapierIntegrationService:
 
             # Retention data from analytics table
             weekly_retention_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("analytics")
+                lambda: self.supabase.table("analytics")
                 .select("metric_value,timestamp")
                 .eq("metric_name", "weekly_retention")
                 .order("timestamp", desc=True)
@@ -364,8 +355,7 @@ class ZapierIntegrationService:
                     weekly_retention = value
 
             monthly_retention_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("analytics")
+                lambda: self.supabase.table("analytics")
                 .select("metric_value,timestamp")
                 .eq("metric_name", "monthly_retention")
                 .order("timestamp", desc=True)
@@ -380,8 +370,7 @@ class ZapierIntegrationService:
 
             # Shipping metrics
             shipping_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("analytics")
+                lambda: self.supabase.table("analytics")
                 .select("metric_value,timestamp")
                 .eq("metric_name", "average_shipping_time")
                 .order("timestamp", desc=True)
@@ -394,8 +383,7 @@ class ZapierIntegrationService:
 
             # Weeks since last logistics mistake (uses analytics metric_name "logistics_mistake")
             logistics_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("analytics")
+                lambda: self.supabase.table("analytics")
                 .select("timestamp")
                 .eq("metric_name", "logistics_mistake")
                 .order("timestamp", desc=True)
@@ -444,8 +432,7 @@ class ZapierIntegrationService:
                 raise ConfigurationError("Supabase client not configured")
 
             objectives_resp = await self._run_supabase(
-                lambda: self.supabase
-                .table("objectives")
+                lambda: self.supabase.table("objectives")
                 .select("id,title,owner,due_date,progress,updated_at")
                 .eq("status", "active")
                 .order("updated_at", desc=True)
@@ -454,7 +441,7 @@ class ZapierIntegrationService:
             )
 
             objectives: List[ZapierObjectiveData] = []
-            for row in (objectives_resp.data or []):
+            for row in objectives_resp.data or []:
                 due_date = row.get("due_date") or row.get("timestamp") or ""
                 objectives.append(
                     ZapierObjectiveData(

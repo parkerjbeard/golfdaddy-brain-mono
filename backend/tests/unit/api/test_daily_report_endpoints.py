@@ -103,7 +103,9 @@ def test_submit_eod_report_validation_error(client: TestClient):
     )
 
 
-def test_get_my_daily_reports_success(client: TestClient, mock_daily_report_service: AsyncMock, current_test_user: User):
+def test_get_my_daily_reports_success(
+    client: TestClient, mock_daily_report_service: AsyncMock, current_test_user: User
+):
     report_id_1 = uuid4()
     report_id_2 = uuid4()
     mock_reports = [

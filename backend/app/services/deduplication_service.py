@@ -191,11 +191,7 @@ class DeduplicationService:
                 except Exception:
                     estimated_hours = 0.5
 
-            files_changed = (
-                getattr(commit, "files_changed", None)
-                or getattr(commit, "changed_files", None)
-                or []
-            )
+            files_changed = getattr(commit, "files_changed", None) or getattr(commit, "changed_files", None) or []
             ts = getattr(commit, "commit_timestamp", None) or getattr(commit, "commit_date", None)
             repository = getattr(commit, "repository", None) or getattr(commit, "repository_name", None)
             ai_analysis_payload = getattr(commit, "ai_analysis_notes", None)
@@ -299,9 +295,7 @@ class DeduplicationService:
             confidence_score=confidence_score,
         )
 
-    async def get_weekly_aggregated_hours(
-        self, user_id: Any, start_date: date, end_date: date
-    ) -> Dict[str, Any]:
+    async def get_weekly_aggregated_hours(self, user_id: Any, start_date: date, end_date: date) -> Dict[str, Any]:
         """Aggregate hours across a date range, delegating to find_duplicates per day.
 
         This aligns with unit test expectations and uses repository methods that tests mock.
@@ -360,7 +354,11 @@ class DeduplicationService:
                 total_dedup += dr.deduplicated_hours
             else:
                 ch = sum(
-                    float(getattr(c, "ai_estimated_hours", 0) or 0.0) if getattr(c, "ai_estimated_hours", None) is not None else 0.5
+                    (
+                        float(getattr(c, "ai_estimated_hours", 0) or 0.0)
+                        if getattr(c, "ai_estimated_hours", None) is not None
+                        else 0.5
+                    )
                     for c in day_commits
                 )
                 if ch > 0:
@@ -429,8 +427,7 @@ class DeduplicationService:
             if (
                 isinstance(commit_item.timestamp, datetime)
                 and isinstance(report_item.timestamp, datetime)
-                and abs((report_item.timestamp - commit_item.timestamp).total_seconds())
-                > self.time_window_hours * 3600
+                and abs((report_item.timestamp - commit_item.timestamp).total_seconds()) > self.time_window_hours * 3600
             ):
                 return None
 

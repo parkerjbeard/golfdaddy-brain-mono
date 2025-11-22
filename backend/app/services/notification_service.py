@@ -58,7 +58,9 @@ class NotificationService:
         return
 
     async def notify_manager_mastery_feedback(self, manager: User, feedback: Dict[str, Any]):
-        logger.debug(f"Manager mastery feedback notification skipped for manager {manager.id if manager else 'unknown'}")
+        logger.debug(
+            f"Manager mastery feedback notification skipped for manager {manager.id if manager else 'unknown'}"
+        )
         return
 
     async def notify_daily_task_followup(self, manager: User, task: Dict[str, Any]):

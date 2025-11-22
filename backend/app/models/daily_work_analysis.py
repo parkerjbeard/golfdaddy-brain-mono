@@ -72,4 +72,3 @@ class DailyWorkAnalysis(BaseModel):
     processing_error: Optional[str] = None
     last_processed_at: Optional[datetime] = None
     data_sources: Optional[List[str]] = None
-

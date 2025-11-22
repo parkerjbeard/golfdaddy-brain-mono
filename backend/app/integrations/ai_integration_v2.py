@@ -951,9 +951,7 @@ Guidance for large days:
             adds = commit.get("additions", 0)
             dels = commit.get("deletions", 0)
             files = ", ".join(commit.get("files_changed", [])[:15])  # cap file list per entry to limit length
-            line = (
-                f"{i}. [{ts}] {repo}\n   Message: {msg}\n   Changes: +{adds} -{dels}\n   Files: {files}"
-            )
+            line = f"{i}. [{ts}] {repo}\n   Message: {msg}\n   Changes: +{adds} -{dels}\n   Files: {files}"
             commits_lines.append(line)
 
         prompt = "\n\n".join([header, scoring, output_schema, context_header, "\n".join(commits_lines)])

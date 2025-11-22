@@ -777,9 +777,7 @@ class CommitAnalysisService:
                     self._log_separator(f"END: COMMIT {commit_hash} ALREADY PROCESSED", "=")
                     return existing_commit
                 elif not has_analysis:
-                    logger.info(
-                        "Existing commit found without analysis; proceeding with analysis to populate fields"
-                    )
+                    logger.info("Existing commit found without analysis; proceeding with analysis to populate fields")
                 else:
                     logger.info(f"Re-analyzing existing commit (reanalyze_existing_commits=True)")
 

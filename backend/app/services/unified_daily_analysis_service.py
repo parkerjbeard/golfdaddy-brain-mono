@@ -48,7 +48,9 @@ class UnifiedDailyAnalysisService:
             logger.info(
                 f"Delegating unified daily analysis for user {user_id} on {analysis_date} (force={force_reanalysis})"
             )
-            return await self._delegate.analyze(user_id=user_id, analysis_date=analysis_date, force_reanalysis=force_reanalysis)
+            return await self._delegate.analyze(
+                user_id=user_id, analysis_date=analysis_date, force_reanalysis=force_reanalysis
+            )
         except Exception as e:
             logger.error(f"Error delegating unified daily analysis: {e}", exc_info=True)
             raise ExternalServiceError(

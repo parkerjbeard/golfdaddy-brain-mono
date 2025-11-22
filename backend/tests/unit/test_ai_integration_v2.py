@@ -367,9 +367,7 @@ class TestAIIntegrationV2:
                             "sentiment": "Positive",
                             "potential_blockers": [],
                             "summary": "Summary text",
-                            "clarification_requests": [
-                                {"question": "What about Z?", "original_text": "- Worked on Z"}
-                            ],
+                            "clarification_requests": [{"question": "What about Z?", "original_text": "- Worked on Z"}],
                         }
                     )
                 )
@@ -399,11 +397,17 @@ class TestAIIntegrationV2:
         mock_constructor, client = mock_openai_client
         mock_response = AsyncMock()
         mock_response.choices = [
-            Mock(message=Mock(content=json.dumps({
-                "needs_clarification": True,
-                "clarification_question": "Please clarify",
-                "original_text": "- item"
-            })))
+            Mock(
+                message=Mock(
+                    content=json.dumps(
+                        {
+                            "needs_clarification": True,
+                            "clarification_question": "Please clarify",
+                            "original_text": "- item",
+                        }
+                    )
+                )
+            )
         ]
         client.chat.completions.create.return_value = mock_response
 
@@ -417,14 +421,20 @@ class TestAIIntegrationV2:
         mock_constructor, client = mock_openai_client
         mock_response = AsyncMock()
         mock_response.choices = [
-            Mock(message=Mock(content=json.dumps({
-                "response": "Thanks",
-                "needs_clarification": False,
-                "conversation_complete": True,
-                "updated_summary": "Updated",
-                "updated_hours": 2.0,
-                "key_insights": ["Insight"]
-            })))
+            Mock(
+                message=Mock(
+                    content=json.dumps(
+                        {
+                            "response": "Thanks",
+                            "needs_clarification": False,
+                            "conversation_complete": True,
+                            "updated_summary": "Updated",
+                            "updated_hours": 2.0,
+                            "key_insights": ["Insight"],
+                        }
+                    )
+                )
+            )
         ]
         client.chat.completions.create.return_value = mock_response
 
@@ -439,19 +449,25 @@ class TestAIIntegrationV2:
         mock_constructor, client = mock_openai_client
         mock_response = AsyncMock()
         mock_response.choices = [
-            Mock(message=Mock(content=json.dumps({
-                "readability_score": 0.5,
-                "complexity_score": 0.5,
-                "maintainability_score": 0.5,
-                "test_coverage_estimation": 0.5,
-                "security_concerns": [],
-                "performance_issues": [],
-                "best_practices_adherence": [],
-                "suggestions_for_improvement": [],
-                "positive_feedback": [],
-                "estimated_seniority_level": "Senior",
-                "overall_assessment_summary": "ok"
-            })))
+            Mock(
+                message=Mock(
+                    content=json.dumps(
+                        {
+                            "readability_score": 0.5,
+                            "complexity_score": 0.5,
+                            "maintainability_score": 0.5,
+                            "test_coverage_estimation": 0.5,
+                            "security_concerns": [],
+                            "performance_issues": [],
+                            "best_practices_adherence": [],
+                            "suggestions_for_improvement": [],
+                            "positive_feedback": [],
+                            "estimated_seniority_level": "Senior",
+                            "overall_assessment_summary": "ok",
+                        }
+                    )
+                )
+            )
         ]
         client.chat.completions.create.return_value = mock_response
 
@@ -464,12 +480,18 @@ class TestAIIntegrationV2:
         mock_constructor, client = mock_openai_client
         mock_response = AsyncMock()
         mock_response.choices = [
-            Mock(message=Mock(content=json.dumps({
-                "description": "Do X",
-                "learning_objectives": ["L1"],
-                "suggested_resources": ["R1"],
-                "success_metrics": ["M1"]
-            })))
+            Mock(
+                message=Mock(
+                    content=json.dumps(
+                        {
+                            "description": "Do X",
+                            "learning_objectives": ["L1"],
+                            "suggested_resources": ["R1"],
+                            "success_metrics": ["M1"],
+                        }
+                    )
+                )
+            )
         ]
         client.chat.completions.create.return_value = mock_response
 

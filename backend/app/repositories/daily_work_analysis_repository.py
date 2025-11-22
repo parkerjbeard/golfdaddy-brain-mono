@@ -75,23 +75,24 @@ class DailyWorkAnalysisRepository:
 
     async def get_by_id(self, analysis_id: UUID) -> Optional[DailyWorkAnalysis]:
         try:
-            resp = (
-                self._client.table(self._table).select("*").eq("id", str(analysis_id)).maybe_single().execute()
-            )
+            resp = self._client.table(self._table).select("*").eq("id", str(analysis_id)).maybe_single().execute()
             if not resp.data:
                 return None
 
             analysis_data = dict(resp.data)
 
-            wi_resp = self._client.table(self._work_items_table).select("*").eq(
-                "daily_analysis_id", str(analysis_id)
-            ).execute()
+            wi_resp = (
+                self._client.table(self._work_items_table)
+                .select("*")
+                .eq("daily_analysis_id", str(analysis_id))
+                .execute()
+            )
             if wi_resp.data:
                 analysis_data["work_items"] = wi_resp.data
 
-            dr_resp = self._client.table(self._dedup_table).select("*").eq(
-                "daily_analysis_id", str(analysis_id)
-            ).execute()
+            dr_resp = (
+                self._client.table(self._dedup_table).select("*").eq("daily_analysis_id", str(analysis_id)).execute()
+            )
             if dr_resp.data:
                 analysis_data["deduplication_results"] = dr_resp.data
 
@@ -116,4 +117,3 @@ class DailyWorkAnalysisRepository:
         except Exception as e:
             logger.error(f"Error fetching daily work analysis for user {user_id}: {e}", exc_info=True)
             raise DatabaseError(f"Error fetching daily work analysis: {str(e)}")
-
