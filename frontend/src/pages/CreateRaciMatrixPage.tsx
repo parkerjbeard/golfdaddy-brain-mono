@@ -10,7 +10,7 @@ import raciMatrixService from '@/services/raciMatrixService';
 import { CreateRaciMatrixPayload } from '@/types/entities';
 
 export default function CreateRaciMatrixPage() {
-  const { user, loading: authLoading, session } = useAuth();
+  const { userProfile, loading: authLoading, session } = useAuth();
   const { toast } = useToast();
   const token = session?.access_token;
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,8 +70,11 @@ export default function CreateRaciMatrixPage() {
     );
   }
 
-  if (!user || !user.id || !token) {
-    console.warn("CreateRaciMatrixPage: No authenticated user or token found after auth check. User:", user, "Token exists:", !!token);
+  if (!userProfile || !userProfile.id || !token) {
+    console.warn("CreateRaciMatrixPage: No authenticated user or token found after auth check.", {
+      hasUser: !!userProfile,
+      hasToken: !!token
+    });
     return (
       <div className="container mx-auto p-4">
         <Card className="max-w-5xl mx-auto">
@@ -79,8 +82,10 @@ export default function CreateRaciMatrixPage() {
             <CardTitle>Access Denied</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>User information not available or you are not logged in. Please ensure you are logged in to create RACI matrices.</p>
-            {/* Optionally, add a button to redirect to login */}
+            <p className="text-sm text-muted-foreground">User information not available or you are not logged in. Please sign in to create RACI matrices.</p>
+            <Button className="mt-4" onClick={() => window.location.assign('/login')}>
+              Go to login
+            </Button>
           </CardContent>
         </Card>
       </div>

@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { NavLink, useMatch } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   BarChart, 
@@ -36,11 +36,6 @@ interface AppSidebarProps {
 export function AppSidebar({ collapsible }: AppSidebarProps) {
   const { session, signOut } = useAuth();
   const user = session?.user;
-  const location = useLocation();
-
-  const isActive = (path: string) => {
-    return location.pathname === path || (path === '/tasks' && location.pathname.startsWith('/tasks'));
-  };
 
   const handleSignOut = () => {
     signOut();
@@ -49,6 +44,10 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
   // Get display name and avatar from user metadata or fallback to email/defaults
   const displayName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const avatarUrl = user?.user_metadata?.avatar_url;
+
+  const dashboardMatch = useMatch({ path: '/dashboard', end: true });
+  const adminMatch = useMatch('/admin');
+  const managerMatch = useMatch('/manager');
 
   return (
     <Sidebar collapsible={collapsible}>
@@ -62,45 +61,43 @@ export function AppSidebar({ collapsible }: AppSidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={isActive('/dashboard')} 
-                  asChild 
+                <SidebarMenuButton
+                  asChild
+                  isActive={!!dashboardMatch}
                   tooltip="Company Dashboard"
                 >
-                  <Link to="/dashboard">
+                  <NavLink to="/dashboard" end className="flex items-center gap-2">
                     <Home className="h-5 w-5" />
                     <span>Executive Overview</span>
-                  </Link>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              
+
               <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={isActive('/admin')} 
-                  asChild 
+                <SidebarMenuButton
+                  asChild
+                  isActive={!!adminMatch}
                   tooltip="Admin Dashboard"
                 >
-                  <Link to="/admin">
+                  <NavLink to="/admin" className="flex items-center gap-2">
                     <BarChart className="h-5 w-5" />
                     <span>Admin Dashboard</span>
-                  </Link>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton 
-                  isActive={isActive('/manager')} 
-                  asChild 
+                <SidebarMenuButton
+                  asChild
+                  isActive={!!managerMatch}
                   tooltip="Manager Dashboard"
                 >
-                  <Link to="/manager">
+                  <NavLink to="/manager" className="flex items-center gap-2">
                     <ClipboardList className="h-5 w-5" />
                     <span>Manager Dashboard</span>
-                  </Link>
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-
-
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

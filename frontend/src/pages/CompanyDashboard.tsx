@@ -10,6 +10,7 @@ import { api } from '@/services/api/endpoints';
 import type { WeeklyData } from '@/services/zapierApi';
 import type { DashboardData } from '@/types/dashboard';
 import dashboardData from '../dashboard_data.json';
+import { DataState } from '@/components/ui/DataState';
 
 const CompanyDashboard = () => {
   // Zapier data state
@@ -116,19 +117,29 @@ const CompanyDashboard = () => {
 
       {/* Retention Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* First Week Retention */}
-        {weeklyData && (
+        {weeklyData ? (
           <RetentionChart 
             title="First Week Retention (%)"
             data={weeklyData.weekly_retention}
           />
+        ) : (
+          <DataState
+            state={zapierLoading ? 'loading' : 'empty'}
+            title="Retention data"
+            description={zapierLoading ? 'Loading retention metrics...' : 'No retention data yet'}
+          />
         )}
 
-        {/* First Month Usage */}
-        {weeklyData && (
+        {weeklyData ? (
           <RetentionChart 
             title="First Month Usage (%)"
             data={weeklyData.monthly_retention}
+          />
+        ) : (
+          <DataState
+            state={zapierLoading ? 'loading' : 'empty'}
+            title="Usage data"
+            description={zapierLoading ? 'Loading usage metrics...' : 'No usage data yet'}
           />
         )}
       </div>
@@ -151,38 +162,41 @@ const CompanyDashboard = () => {
         )}
 
         {/* User Feedback Summary */}
-        <Card className="p-6">
-          <h3 className="text-lg font-medium mb-4">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              User Feedback Summary
-              {zapierLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
-            </div>
-          </h3>
-          <div className="prose max-w-none">
-            {weeklyData ? (
+        {weeklyData ? (
+          <Card className="p-6">
+            <h3 className="text-lg font-medium mb-4">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                User Feedback Summary
+                {zapierLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
+              </div>
+            </h3>
+            <div className="prose max-w-none">
               <p className="text-sm leading-relaxed">
                 {weeklyData.user_feedback_summary}
               </p>
-            ) : (
-              <p className="text-muted-foreground">
-                Loading user feedback from Zapier...
-              </p>
-            )}
-          </div>
-        </Card>
+            </div>
+          </Card>
+        ) : (
+          <DataState
+            state={zapierLoading ? 'loading' : 'empty'}
+            title="User feedback"
+            description={zapierLoading ? 'Fetching feedback from Zapier' : 'No feedback available'}
+            onRetry={fetchZapierData}
+          />
+        )}
       </div>
 
       {/* Recent Wins */}
-      <Card className="p-6">
-        <h2 className="text-lg font-medium mb-4">
-          <div className="flex items-center gap-2">
-            <Award className="h-5 w-5" />
-            Recent Wins
-            {zapierLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
-          </div>
-        </h2>
-        {weeklyData && weeklyData.wins.length > 0 ? (
+      {weeklyData && weeklyData.wins.length > 0 ? (
+        <Card className="p-6">
+          <h2 className="text-lg font-medium mb-4">
+            <div className="flex items-center gap-2">
+              <Award className="h-5 w-5" />
+              Recent Wins
+              {zapierLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
+            </div>
+          </h2>
           <div className="space-y-3">
             {weeklyData.wins.map((win, index) => (
               <div key={index} className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
@@ -190,19 +204,17 @@ const CompanyDashboard = () => {
               </div>
             ))}
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-lg">
-            <p className="text-muted-foreground">
-              {zapierLoading ? 'Loading wins...' : 'No recent wins recorded'}
-            </p>
-            {!zapierLoading && (
-              <Button variant="outline" className="mt-2" onClick={fetchZapierData}>
-                Refresh Data
-              </Button>
-            )}
-          </div>
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <DataState
+          state={zapierLoading ? 'loading' : 'empty'}
+          title="Recent wins"
+          description={zapierLoading ? 'Pulling latest wins...' : 'No wins logged for this period'}
+          onRetry={fetchZapierData}
+          actionLabel={!zapierLoading ? 'Refresh data' : undefined}
+          onAction={!zapierLoading ? fetchZapierData : undefined}
+        />
+      )}
 
       {/* Active Company Goals & Projects */}
       {localData && (
