@@ -81,11 +81,8 @@ app.include_router(api_v1_router, prefix="/api/v1")
 """
 Mount authentication routes.
 
-Expose under two path structures to satisfy both development and production frontend calls:
-- Root paths: `/auth/*` (used by the Vite dev proxy and AuthContext direct fetch)
-- Versioned paths: `/api/v1/auth/*` (used when `VITE_API_BASE_URL` is `/api/v1`)
+Expose under /api/v1/auth path.
 """
-app.include_router(auth_router)  # /auth/*
 app.include_router(auth_router, prefix="/api/v1")  # /api/v1/auth/*
 
 # Register custom exception handlers

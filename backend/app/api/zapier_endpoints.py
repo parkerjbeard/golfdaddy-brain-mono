@@ -4,7 +4,7 @@ API endpoints for Zapier dashboard data integration.
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -25,10 +25,10 @@ router = APIRouter(prefix="/zapier", tags=["zapier"])
 class WeeklyDataResponse(BaseModel):
     wins: List[str]
     csat_score: float
-    csat_change_percentage: float | None
+    csat_change_percentage: Optional[float]
     user_feedback_summary: str
     social_media_views: int
-    social_views_change_percentage: float | None
+    social_views_change_percentage: Optional[float]
     average_shipping_time: float
     weeks_since_logistics_mistake: int
     weekly_retention: Dict[str, float]

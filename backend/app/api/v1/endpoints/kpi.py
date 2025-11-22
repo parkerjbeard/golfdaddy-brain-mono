@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-# from app.services.auth_service import get_current_active_user # Placeholder for auth
+from app.auth.dependencies import get_admin_user, get_manager_or_admin_user
 from app.core.exceptions import (  # New import
     BadRequestError,
     DatabaseError,
@@ -35,7 +35,7 @@ async def get_all_user_widget_summaries(
     startDate: date = Query(..., description="Start date for the summary period (YYYY-MM-DD)."),
     endDate: date = Query(..., description="End date for the summary period (YYYY-MM-DD)."),
     kpi_service: KpiService = Depends(get_kpi_service),
-    # current_user: User = Depends(get_current_active_user) # TODO: Add auth, ensure manager can view
+    current_user: User = Depends(get_manager_or_admin_user),
 ):
     """
     Retrieve widget summaries (pull-request based activity metrics) for all relevant users
@@ -70,19 +70,14 @@ async def get_user_kpi_summary(
         description="End date for the summary period (YYYY-MM-DD). Defaults to today if startDate is provided without endDate.",
     ),
     kpi_service: KpiService = Depends(get_kpi_service),
-    # current_user: User = Depends(get_current_active_user) # TODO: Add auth, ensure manager can view this data
+    current_user: User = Depends(get_manager_or_admin_user),
 ):
     """
     Retrieve a pull-request centric Key Performance Indicator (KPI) summary for a specific user.
     Allows specifying a period in days (e.g., last 7 days) or a specific date range.
     """
-    # Authorization check placeholder:
-    # Example: Assuming current_user has roles and a way to check team membership
-    # if not current_user or (current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]):
-    #     raise PermissionDeniedError(message="Not authorized to view this KPI summary")
-    # if current_user.role == UserRole.MANAGER and not kpi_service.is_user_in_manager_team(current_user.id, user_id):
-    #     # (Requires KpiService or another service to have such a method)
-    #     raise PermissionDeniedError(message="Not authorized: user is not in your team")
+    # Check if a manager is trying to view a user not in their team could be added here
+    # For now, we rely on the manager_or_admin role check.
 
     try:
         # The KpiService.get_user_performance_summary expects period_days.
@@ -144,6 +139,7 @@ async def get_user_kpi_summary(
 async def backfill_github_analysis(
     file_path: str = Query(..., description="Absolute path to a github_analysis_*.json file on server"),
     kpi_service: KpiService = Depends(get_kpi_service),
+    current_user: User = Depends(get_admin_user),
 ):
     """Load an exported GitHub analysis JSON and persist pull-request level analytics.
 
@@ -164,7 +160,7 @@ async def backfill_github_analysis(
         from app.repositories.pull_request_repository import PullRequestRepository
         from app.repositories.user_repository import UserRepository
 
-        def _parse_datetime(value: str | None) -> _dt | None:
+        def _parse_datetime(value: Optional[str]) -> Optional[_dt]:
             if not value:
                 return None
             try:
@@ -182,7 +178,7 @@ async def backfill_github_analysis(
                 return [str(v) for v in value]
             return [str(value)]
 
-        def _extract_pr_number(candidate: dict) -> int | None:
+        def _extract_pr_number(candidate: dict) -> Optional[int]:
             for key in ("pr_number", "number", "id"):
                 val = candidate.get(key)
                 if isinstance(val, int):

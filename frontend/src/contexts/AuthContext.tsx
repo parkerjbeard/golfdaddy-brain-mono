@@ -89,11 +89,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return cached;
       }
 
-      // Fetch from API - note: auth endpoints are at /auth/* not /api/v1/auth/*
+      // Fetch from API
       // When running in development with Vite proxy, use relative URLs
       const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
       const isViteProxy = window.location.port === '8080'; // Vite dev server port
-      const apiUrl = isViteProxy ? '/auth/me' : `${baseUrl}/auth/me`;
+      const apiUrl = isViteProxy ? '/api/v1/auth/me' : `${baseUrl}/api/v1/auth/me`;
       
       // Production logging
       logger.logAuthEvent('Fetching user profile', { url: apiUrl, baseUrl });

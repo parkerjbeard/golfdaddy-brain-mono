@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
-// Removed StoreProvider import to prevent infinite auth loops
+import { StoreProvider } from './store'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthenticatedLayout } from './components/layout/AuthenticatedLayout'
 import { LoginPage } from './pages/LoginPage'
@@ -56,97 +56,99 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={<PageLoader />}>
-          <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<LoginPage />} />
-              
-              {/* Protected routes */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <AuthenticatedLayout />
-                  </ProtectedRoute>
-                }
-              >
-                {/* Default redirect to dashboard */}
-                <Route index element={<Navigate to="/dashboard" replace />} />
+          <StoreProvider>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<LoginPage />} />
                 
-                {/* Company dashboard - accessible to all authenticated users */}
-                <Route path="dashboard" element={<CompanyDashboard />} />
-                
-                {/* User's personal dashboard */}
-                <Route path="my-dashboard" element={<MyDashboard />} />
-                
-                {/* Profile page */}
-                <Route path="profile" element={<ProfilePage />} />
-                
-                {/* Admin-only routes */}
+                {/* Protected routes */}
                 <Route
-                  path="admin"
+                  path="/"
                   element={
-                    <ProtectedRoute requiredRoles={['admin']}>
-                      <AdminDashboard />
+                    <ProtectedRoute>
+                      <AuthenticatedLayout />
                     </ProtectedRoute>
                   }
-                />
-                <Route
-                  path="users"
-                  element={
-                    <ProtectedRoute requiredRoles={['admin']}>
-                      <UserManagementPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="teams"
-                  element={
-                    <ProtectedRoute requiredRoles={['admin']}>
-                      <TeamManagementPage />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* Manager routes */}
-                <Route
-                  path="manager"
-                  element={
-                    <ProtectedRoute requiredRoles={['manager', 'admin']}>
-                      <ManagerDashboardPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="department"
-                  element={
-                    <ProtectedRoute requiredRoles={['manager', 'admin']}>
-                      <DepartmentDashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="employees/:id"
-                  element={
-                    <ProtectedRoute requiredRoles={['manager', 'admin']}>
-                      <EmployeeDetail />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* Documentation routes removed with documentation agent */}
-                
-                {/* RACI matrices */}
-                <Route path="raci/create" element={<CreateRaciMatrixPage />} />
-                
-                {/* 404 */}
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-          </Suspense>
+                >
+                  {/* Default redirect to dashboard */}
+                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  
+                  {/* Company dashboard - accessible to all authenticated users */}
+                  <Route path="dashboard" element={<CompanyDashboard />} />
+                  
+                  {/* User's personal dashboard */}
+                  <Route path="my-dashboard" element={<MyDashboard />} />
+                  
+                  {/* Profile page */}
+                  <Route path="profile" element={<ProfilePage />} />
+                  
+                  {/* Admin-only routes */}
+                  <Route
+                    path="admin"
+                    element={
+                      <ProtectedRoute requiredRoles={['admin']}>
+                        <AdminDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="users"
+                    element={
+                      <ProtectedRoute requiredRoles={['admin']}>
+                        <UserManagementPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="teams"
+                    element={
+                      <ProtectedRoute requiredRoles={['admin']}>
+                        <TeamManagementPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  
+                  {/* Manager routes */}
+                  <Route
+                    path="manager"
+                    element={
+                      <ProtectedRoute requiredRoles={['manager', 'admin']}>
+                        <ManagerDashboardPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="department"
+                    element={
+                      <ProtectedRoute requiredRoles={['manager', 'admin']}>
+                        <DepartmentDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="employees/:id"
+                    element={
+                      <ProtectedRoute requiredRoles={['manager', 'admin']}>
+                        <EmployeeDetail />
+                      </ProtectedRoute>
+                    }
+                  />
+                  
+                  {/* Documentation routes removed with documentation agent */}
+                  
+                  {/* RACI matrices */}
+                  <Route path="raci/create" element={<CreateRaciMatrixPage />} />
+                  
+                  {/* 404 */}
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </StoreProvider>
           <Toaster />
-      </AuthProvider>
-    </BrowserRouter>
+        </AuthProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   )
 }

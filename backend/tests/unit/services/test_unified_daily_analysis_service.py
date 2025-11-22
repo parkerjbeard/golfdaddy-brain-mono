@@ -15,6 +15,7 @@ from app.core.exceptions import AIIntegrationError, DatabaseError
 from app.models.commit import Commit
 from app.models.daily_commit_analysis import DailyCommitAnalysis, DailyCommitAnalysisCreate
 from app.models.daily_report import AiAnalysis, DailyReport
+from app.models.daily_work_analysis import DailyWorkAnalysis
 from app.services.unified_daily_analysis_service import UnifiedDailyAnalysisService
 
 
@@ -25,10 +26,24 @@ class TestUnifiedDailyAnalysisService:
     def service(self):
         """Create service instance with mocked dependencies."""
         service = UnifiedDailyAnalysisService()
-        service.ai_integration = AsyncMock()
-        service.commit_repo = AsyncMock()
-        service.report_repo = AsyncMock()
-        service.analysis_repo = AsyncMock()
+        # Mock dependencies of the delegate since logic is delegated
+        service._delegate.repository = AsyncMock()
+        service._delegate.commit_repo = AsyncMock()
+        service._delegate.daily_report_repo = AsyncMock()
+        service._delegate.user_repo = AsyncMock()
+        service._delegate.ai_integration = AsyncMock()
+
+        # Setup user repo to return a mock user (needed for context building)
+        mock_user = Mock()
+        mock_user.name = "Test User"
+        service._delegate.user_repo.get_by_id.return_value = mock_user
+
+        # Alias service attributes to delegate attributes so tests continue to work
+        service.ai_integration = service._delegate.ai_integration
+        service.commit_repo = service._delegate.commit_repo
+        service.report_repo = service._delegate.daily_report_repo
+        service.analysis_repo = service._delegate.repository
+        
         return service
 
     @pytest.fixture
@@ -197,9 +212,9 @@ class TestUnifiedDailyAnalysisService:
         """Test analyzing daily work with both commits and report."""
         # Setup mocks
         service.analysis_repo.get_by_user_and_date.return_value = None
-        service.commit_repo.get_commits_by_user_date_range.return_value = sample_commits
+        service.commit_repo.get_commits_by_user_in_range.return_value = sample_commits
         service.report_repo.get_daily_reports_by_user_and_date.return_value = sample_daily_report
-        service.ai_integration.analyze_unified_daily_work.return_value = sample_ai_response
+        service.ai_integration.analyze_daily_work.return_value = sample_ai_response
 
         expected_analysis = DailyWorkAnalysis(
             id=uuid4(),
@@ -228,7 +243,7 @@ class TestUnifiedDailyAnalysisService:
         assert result == expected_analysis
 
         # Verify AI was called with proper prompt
-        ai_call_args = service.ai_integration.analyze_unified_daily_work.call_args
+        ai_call_args = service.ai_integration.analyze_daily_work.call_args
         prompt = ai_call_args[0][0]
 
         # Check prompt contains key elements
@@ -239,7 +254,7 @@ class TestUnifiedDailyAnalysisService:
         assert "2 commits" in prompt
 
         # Verify repository calls
-        service.commit_repo.get_commits_by_user_date_range.assert_called_once()
+        service.commit_repo.get_commits_by_user_in_range.assert_called_once()
         service.report_repo.get_daily_reports_by_user_and_date.assert_called_once()
         service.analysis_repo.create.assert_called_once()
 
@@ -248,7 +263,7 @@ class TestUnifiedDailyAnalysisService:
         """Test analyzing daily work with only commits (no report)."""
         # Setup mocks
         service.analysis_repo.get_by_user_and_date.return_value = None
-        service.commit_repo.get_commits_by_user_date_range.return_value = sample_commits
+        service.commit_repo.get_commits_by_user_in_range.return_value = sample_commits
         service.report_repo.get_daily_reports_by_user_and_date.return_value = None
 
         ai_response = {
@@ -288,7 +303,7 @@ class TestUnifiedDailyAnalysisService:
             "confidence_score": 0.9,
             "analysis_reasoning": "Analysis based on commits only. No daily report available.",
         }
-        service.ai_integration.analyze_unified_daily_work.return_value = ai_response
+        service.ai_integration.analyze_daily_work.return_value = ai_response
 
         expected_analysis = DailyWorkAnalysis(
             id=uuid4(),
@@ -323,7 +338,7 @@ class TestUnifiedDailyAnalysisService:
         """Test analyzing daily work with only report (no commits)."""
         # Setup mocks
         service.analysis_repo.get_by_user_and_date.return_value = None
-        service.commit_repo.get_commits_by_user_date_range.return_value = []
+        service.commit_repo.get_commits_by_user_in_range.return_value = []
         service.report_repo.get_daily_reports_by_user_and_date.return_value = sample_daily_report
 
         ai_response = {
@@ -379,7 +394,7 @@ class TestUnifiedDailyAnalysisService:
             "confidence_score": 0.85,
             "analysis_reasoning": "Analysis based on daily report only. No commits found.",
         }
-        service.ai_integration.analyze_unified_daily_work.return_value = ai_response
+        service.ai_integration.analyze_daily_work.return_value = ai_response
 
         expected_analysis = DailyWorkAnalysis(
             id=uuid4(),
@@ -414,7 +429,7 @@ class TestUnifiedDailyAnalysisService:
         """Test analyzing daily work with no commits or report."""
         # Setup mocks
         service.analysis_repo.get_by_user_and_date.return_value = None
-        service.commit_repo.get_commits_by_user_date_range.return_value = []
+        service.commit_repo.get_commits_by_user_in_range.return_value = []
         service.report_repo.get_daily_reports_by_user_and_date.return_value = None
 
         # Execute
@@ -429,7 +444,7 @@ class TestUnifiedDailyAnalysisService:
         assert len(result.deduplicated_items) == 0
 
         # AI should not be called for zero activity
-        service.ai_integration.analyze_unified_daily_work.assert_not_called()
+        service.ai_integration.analyze_daily_work.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_analyze_daily_work_existing_analysis(self, service, sample_user_id, sample_date):
@@ -453,9 +468,9 @@ class TestUnifiedDailyAnalysisService:
         assert result == existing_analysis
 
         # No other methods should be called
-        service.commit_repo.get_commits_by_user_date_range.assert_not_called()
+        service.commit_repo.get_commits_by_user_in_range.assert_not_called()
         service.report_repo.get_daily_reports_by_user_and_date.assert_not_called()
-        service.ai_integration.analyze_unified_daily_work.assert_not_called()
+        service.ai_integration.analyze_daily_work.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_analyze_daily_work_force_reanalysis(
@@ -473,9 +488,9 @@ class TestUnifiedDailyAnalysisService:
             status="completed",
         )
         service.analysis_repo.get_by_user_and_date.return_value = existing_analysis
-        service.commit_repo.get_commits_by_user_date_range.return_value = sample_commits
+        service.commit_repo.get_commits_by_user_in_range.return_value = sample_commits
         service.report_repo.get_daily_reports_by_user_and_date.return_value = sample_daily_report
-        service.ai_integration.analyze_unified_daily_work.return_value = sample_ai_response
+        service.ai_integration.analyze_daily_work.return_value = sample_ai_response
 
         new_analysis = DailyWorkAnalysis(
             id=existing_analysis.id,
@@ -524,11 +539,11 @@ class TestUnifiedDailyAnalysisService:
         """Test handling of AI integration errors."""
         # Setup mocks
         service.analysis_repo.get_by_user_and_date.return_value = None
-        service.commit_repo.get_commits_by_user_date_range.return_value = sample_commits
+        service.commit_repo.get_commits_by_user_in_range.return_value = sample_commits
         service.report_repo.get_daily_reports_by_user_and_date.return_value = sample_daily_report
 
         # Simulate AI error
-        service.ai_integration.analyze_unified_daily_work.side_effect = AIIntegrationError("OpenAI API error")
+        service.ai_integration.analyze_daily_work.side_effect = AIIntegrationError("OpenAI API error")
 
         # Execute and expect error
         with pytest.raises(AIIntegrationError):
@@ -612,7 +627,7 @@ class TestUnifiedDailyAnalysisService:
         service.analysis_repo.update.return_value = updated_analysis
 
         # Execute
-        result = await service.handle_clarification_needed(existing_analysis, clarification_request)
+        result = await service.handle_clarification_needed(existing_analysis.id, clarification_request)
 
         # Verify
         assert result == updated_analysis
@@ -638,11 +653,11 @@ class TestUnifiedDailyAnalysisService:
         )
 
         service.analysis_repo.get_by_id.return_value = pending_analysis
-        service.commit_repo.get_commits_by_user_date_range.return_value = sample_commits
+        service.commit_repo.get_commits_by_user_in_range.return_value = sample_commits
         service.report_repo.get_daily_reports_by_user_and_date.return_value = sample_daily_report
 
         # Update AI response based on clarification
-        service.ai_integration.analyze_unified_daily_work.return_value = sample_ai_response
+        service.ai_integration.analyze_daily_work.return_value = sample_ai_response
 
         updated_analysis = DailyWorkAnalysis(
             id=analysis_id,
@@ -664,7 +679,7 @@ class TestUnifiedDailyAnalysisService:
         assert result.status == "completed"
 
         # Verify AI was called with clarification in prompt
-        ai_call_args = service.ai_integration.analyze_unified_daily_work.call_args
+        ai_call_args = service.ai_integration.analyze_daily_work.call_args
         prompt = ai_call_args[0][0]
         assert "JWT token expiration" in prompt
         assert "CLARIFICATION PROVIDED" in prompt
@@ -676,9 +691,9 @@ class TestUnifiedDailyAnalysisService:
         """Test that deduplication instructions are properly included in prompt."""
         # Setup
         service.analysis_repo.get_by_user_and_date.return_value = None
-        service.commit_repo.get_commits_by_user_date_range.return_value = sample_commits
+        service.commit_repo.get_commits_by_user_in_range.return_value = sample_commits
         service.report_repo.get_daily_reports_by_user_and_date.return_value = sample_daily_report
-        service.ai_integration.analyze_unified_daily_work.return_value = {
+        service.ai_integration.analyze_daily_work.return_value = {
             "total_productive_hours": 7.5,
             "commit_hours": 6.0,
             "additional_report_hours": 1.5,

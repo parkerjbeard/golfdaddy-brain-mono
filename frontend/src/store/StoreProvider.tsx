@@ -33,8 +33,6 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
   const [isInitialized, setIsInitialized] = React.useState(false);
   const { user } = useAuth();
   
-  const userStore = useUserStore();
-  
   // Initialize sync utilities
   useStoreSynchronization();
   
@@ -51,6 +49,7 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
     if (!user) return;
 
     try {
+      const userStore = useUserStore.getState();
       // Warm cache with essential data in priority order
       await warmCache([
         // High priority: current user and their immediate data
@@ -76,23 +75,23 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
       // Still mark as initialized to allow app to function
       setIsInitialized(true);
     }
-  }, [user, userStore, warmCache, checkConsistency, fixConsistencyIssues, enableDataConsistencyCheck]);
+  }, [user, warmCache, checkConsistency, fixConsistencyIssues, enableDataConsistencyCheck]);
 
   // Refresh all data
   const refreshAllData = React.useCallback(async () => {
     try {
       await Promise.allSettled([
-        userStore.fetchUsers(true), // force refresh
+        useUserStore.getState().fetchUsers(true), // force refresh
       ]);
     } catch (error) {
       console.error('Failed to refresh data:', error);
     }
-  }, [userStore]);
+  }, []);
 
   // Clear all caches
   const clearAllCaches = React.useCallback(() => {
-    userStore.invalidateCache();
-  }, [userStore]);
+    useUserStore.getState().invalidateCache();
+  }, []);
 
   // Initialize stores when user is available
   useEffect(() => {

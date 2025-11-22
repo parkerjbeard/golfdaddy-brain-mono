@@ -1,4 +1,3 @@
-import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, UserCog, Grid } from "lucide-react";
 import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
@@ -6,21 +5,6 @@ import { RaciTaskDashboard } from '@/components/admin/RaciTaskDashboard';
 
 
 const AdminDashboard = () => {
-  const { session } = useAuth();
-
-
-  // Check if user has leadership role
-  // TODO: Re-enable role check once roles are properly set in Supabase
-  // if (userRole !== 'admin' && userRole !== UserRole.ADMIN) {
-  //   return (
-  //     <div className="flex flex-col items-center justify-center h-full p-8">
-  //       <h1 className="text-2xl font-semibold mb-4">Access Denied</h1>
-  //       <p className="text-muted-foreground mb-6">You don't have permission to access the admin dashboard.</p>
-  //       <Button onClick={() => navigate('/')}>Go to Home</Button>
-  //     </div>
-  //   );
-  // }
-
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">

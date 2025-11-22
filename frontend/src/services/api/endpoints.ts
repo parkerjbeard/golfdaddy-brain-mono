@@ -38,14 +38,14 @@ const createEndpoint = (basePath: string) => ({
 // Auth endpoints - using the actual backend routes
 const auth = {
   login: (credentials: { email: string; password: string }) => 
-    apiClient.post('/api/auth/login', credentials),
-  logout: () => apiClient.post('/api/auth/logout'),
+    apiClient.post('/api/v1/auth/login', credentials),
+  logout: () => apiClient.post('/api/v1/auth/logout'),
   getCurrentUser: async () => {
-    const result = await apiClient.get('/api/auth/me');
+    const result = await apiClient.get('/api/v1/auth/me');
     if (result.error) throw new Error(result.error);
     return result.data;
   },
-  register: (data: any) => apiClient.post('/api/auth/register', data),
+  register: (data: any) => apiClient.post('/api/v1/auth/register', data),
 };
 
 // User endpoints

@@ -67,8 +67,8 @@ async def get_current_user(
         user_id = UUID(auth_user.id)
         logger.info(f"JWT token validated for user ID: {user_id}")
 
-        # Create a UserRepository without passing Supabase client in response
-        user_repository = UserRepository()
+        # Create a UserRepository using the injected Supabase client
+        user_repository = UserRepository(client=supabase)
         user_profile = await user_repository.get_user_by_id(user_id)
 
         if not user_profile:
