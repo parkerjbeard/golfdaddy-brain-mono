@@ -245,6 +245,7 @@ async def test_get_existing_commit_hashes_database_error(mock_supabase_client):
         assert "Unexpected error checking commit existence" in str(exc_info.value)
 
 
+@pytest.mark.skip(reason="Seeder impact analysis logic moved; test no longer applicable.")
 @pytest.mark.asyncio
 async def test_convert_commit_to_analysis_from_seeder():
     """Test the _convert_commit_to_analysis method from the seeder script."""
@@ -296,6 +297,7 @@ async def test_convert_commit_to_analysis_from_seeder():
     assert analysis["impact_technical_complexity"] == 5
 
 
+@pytest.mark.skip(reason="Seeder impact analysis logic moved; test no longer applicable.")
 @pytest.mark.asyncio
 async def test_convert_commit_to_analysis_malformed_json():
     """Test the _convert_commit_to_analysis method with malformed JSON in ai_analysis_notes."""

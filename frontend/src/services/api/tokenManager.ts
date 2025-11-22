@@ -2,7 +2,15 @@
  * Comprehensive token management with automatic refresh and secure storage
  */
 
-import { TokenManager } from './base';
+// Lightweight interface previously imported from the removed enhanced API client
+export interface TokenManager {
+  getToken(): Promise<string | null>;
+  refreshToken(): Promise<string | null>;
+  clearToken(): Promise<void>;
+  onTokenRefresh(callback: (token: string) => void): void;
+  onTokenExpired(callback: () => void): void;
+}
+
 import { LoginResponse, RefreshTokenResponse } from '@/types/api';
 import { secureStorage } from '@/services/secureStorage';
 import { tokenCleanupService, TokenCleanupService } from '@/services/tokenCleanupService';

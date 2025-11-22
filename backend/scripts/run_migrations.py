@@ -28,7 +28,8 @@ class MigrationRunner:
     """Handles database migrations."""
     
     def __init__(self, database_url: str):
-        self.database_url = database_url
+        # Handle SQLAlchemy-style DSNs
+        self.database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
         self.migrations_dir = Path(__file__).parent.parent / "migrations"
         
     async def create_migrations_table(self, conn: asyncpg.Connection):

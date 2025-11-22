@@ -21,6 +21,7 @@ def mock_report_repository():
 def daily_report_service(mock_report_repository):
     service = DailyReportService()
     service.report_repository = mock_report_repository
+    service.ai_integration = AsyncMock()
     # Mock AI and User services if they were active
     # service.ai_service = AsyncMock()
     # service.user_service = AsyncMock()
@@ -67,21 +68,19 @@ async def test_submit_daily_report_new(
     created_report_mock = DailyReport(id=sample_report_id, **sample_daily_report_create_data.model_dump())
     mock_report_repository.create_daily_report.return_value = created_report_mock
 
-    # This will be the report returned after the AI analysis update
     processed_report_mock = DailyReport(
         id=sample_report_id,
         user_id=sample_user_id,
         raw_text_input=sample_daily_report_create_data.raw_text_input,
-        ai_analysis=AiAnalysis(
-            summary=f"AI processing pending for: {sample_daily_report_create_data.raw_text_input[:50]}..."
-        ),
+        ai_analysis=AiAnalysis(summary="AI done"),
         clarified_tasks_summary=sample_daily_report_create_data.raw_text_input,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
-    mock_report_repository.update_daily_report.return_value = processed_report_mock
 
-    report = await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)
+    with patch.object(daily_report_service, "process_report_with_ai", new_callable=AsyncMock) as mock_process_ai:
+        mock_process_ai.return_value = processed_report_mock
+        report = await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)
 
     mock_report_repository.get_daily_reports_by_user_and_date.assert_called_once()
     mock_report_repository.create_daily_report.assert_called_once()
@@ -91,79 +90,11 @@ async def test_submit_daily_report_new(
     assert call_args.user_id == sample_user_id
     assert call_args.raw_text_input == sample_daily_report_create_data.raw_text_input
 
-    mock_report_repository.update_daily_report.assert_called_once()
-    update_call_args = mock_report_repository.update_daily_report.call_args[0][1]  # second arg is the update payload
-    assert isinstance(update_call_args, DailyReportUpdate)
-    assert update_call_args.ai_analysis is not None
-    assert update_call_args.ai_analysis.summary.startswith("AI processing pending for:")
-    assert update_call_args.clarified_tasks_summary == sample_daily_report_create_data.raw_text_input
-
-    assert report is not None
-    assert report.id == sample_report_id
-    assert report.user_id == sample_user_id
-    assert report.ai_analysis is not None
-    assert report.ai_analysis.summary.startswith("AI processing pending for:")
+    mock_report_repository.update_daily_report.assert_not_called()
+    assert report is processed_report_mock
 
 
-async def test_submit_daily_report_existing(
-    daily_report_service: DailyReportService,
-    mock_report_repository: AsyncMock,
-    sample_user_id: UUID,
-    sample_daily_report_create_data: DailyReportCreate,
-    sample_daily_report: DailyReport,
-):
-    sample_daily_report.raw_text_input = "Old text"  # Simulate existing report having different text
-    mock_report_repository.get_daily_reports_by_user_and_date.return_value = sample_daily_report
 
-    updated_report_after_raw_text_change = DailyReport(
-        id=sample_daily_report.id,
-        user_id=sample_user_id,
-        raw_text_input=sample_daily_report_create_data.raw_text_input,  # new text
-        ai_analysis=sample_daily_report.ai_analysis,  # old AI analysis initially
-        created_at=sample_daily_report.created_at,
-        updated_at=datetime.utcnow(),
-    )
-
-    # Mock the first update (raw_text update)
-    # Mock the second update (AI analysis update)
-    processed_report_mock = DailyReport(
-        id=sample_daily_report.id,
-        user_id=sample_user_id,
-        raw_text_input=sample_daily_report_create_data.raw_text_input,
-        ai_analysis=AiAnalysis(
-            summary=f"AI processing pending for: {sample_daily_report_create_data.raw_text_input[:50]}..."
-        ),
-        clarified_tasks_summary=sample_daily_report_create_data.raw_text_input,
-    )
-    mock_report_repository.update_daily_report.side_effect = [
-        updated_report_after_raw_text_change,  # result of updating raw_text_input
-        processed_report_mock,  # result of updating with AI analysis
-    ]
-
-    report = await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)
-
-    mock_report_repository.get_daily_reports_by_user_and_date.assert_called_once()
-    mock_report_repository.create_daily_report.assert_not_called()
-
-    assert mock_report_repository.update_daily_report.call_count == 2
-
-    # Check first update call (raw_text update)
-    first_update_call_args = mock_report_repository.update_daily_report.call_args_list[0][0]
-    assert first_update_call_args[0] == sample_daily_report.id
-    assert isinstance(first_update_call_args[1], DailyReportUpdate)
-    assert first_update_call_args[1].raw_text_input == sample_daily_report_create_data.raw_text_input
-
-    # Check second update call (AI analysis)
-    second_update_call_args = mock_report_repository.update_daily_report.call_args_list[1][0]
-    assert second_update_call_args[0] == sample_daily_report.id
-    assert isinstance(second_update_call_args[1], DailyReportUpdate)
-    assert second_update_call_args[1].ai_analysis is not None
-    assert second_update_call_args[1].ai_analysis.summary.startswith("AI processing pending for:")
-
-    assert report is not None
-    assert report.id == sample_daily_report.id
-    assert report.raw_text_input == sample_daily_report_create_data.raw_text_input
-    assert report.ai_analysis.summary.startswith("AI processing pending for:")
 
 
 async def test_submit_daily_report_ai_processing_fails(
@@ -177,17 +108,12 @@ async def test_submit_daily_report_ai_processing_fails(
     created_report_mock = DailyReport(id=sample_report_id, **sample_daily_report_create_data.model_dump())
     mock_report_repository.create_daily_report.return_value = created_report_mock
 
-    # Simulate AI processing step failing to update (e.g., DB issue on second update)
-    mock_report_repository.update_daily_report.return_value = None
-
-    report = await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)
+    with patch.object(daily_report_service, "process_report_with_ai", new_callable=AsyncMock) as mock_process_ai:
+        mock_process_ai.side_effect = Exception("AI processing failed")
+        with pytest.raises(Exception):
+            await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)
 
     mock_report_repository.create_daily_report.assert_called_once()
-    mock_report_repository.update_daily_report.assert_called_once()  # Called for AI data
-
-    assert report is not None
-    assert report.id == sample_report_id
-    assert report.ai_analysis is None  # Should be None as per current placeholder logic if update fails
 
 
 async def test_get_report_by_id(
@@ -343,59 +269,7 @@ async def test_link_commits_to_report_non_existent_report(
     assert report is None
 
 
-async def test_submit_daily_report_update_fails_after_get_existing(
-    daily_report_service: DailyReportService,
-    mock_report_repository: AsyncMock,
-    sample_user_id: UUID,
-    sample_daily_report_create_data: DailyReportCreate,
-    sample_daily_report: DailyReport,
-):
-    mock_report_repository.get_daily_reports_by_user_and_date.return_value = sample_daily_report
-    # Simulate the first update (raw_text) failing
-    mock_report_repository.update_daily_report.return_value = None
 
-    with pytest.raises(Exception, match="Failed to update existing report"):
-        await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)
-
-    mock_report_repository.get_daily_reports_by_user_and_date.assert_called_once()
-    mock_report_repository.update_daily_report.assert_called_once()  # Attempted the first update
-    # Ensure AI processing part (second update) is not reached
-    # This depends on how many times update_daily_report is called or further specific assertions.
-    # In this case, if the first update_daily_report returns None, it raises an exception.
-
-
-async def test_submit_daily_report_ai_update_fails_after_successful_first_update(
-    daily_report_service: DailyReportService,
-    mock_report_repository: AsyncMock,
-    sample_user_id: UUID,
-    sample_daily_report_create_data: DailyReportCreate,
-    sample_daily_report: DailyReport,  # Existing report
-):
-    mock_report_repository.get_daily_reports_by_user_and_date.return_value = sample_daily_report
-
-    # First update (raw_text) is successful
-    updated_report_after_raw_text_change = sample_daily_report.model_copy(deep=True)
-    updated_report_after_raw_text_change.raw_text_input = sample_daily_report_create_data.raw_text_input
-
-    # Second update (AI analysis) fails
-    mock_report_repository.update_daily_report.side_effect = [
-        updated_report_after_raw_text_change,  # Successful raw_text update
-        None,  # AI analysis update fails
-    ]
-
-    returned_report = await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)
-
-    assert mock_report_repository.update_daily_report.call_count == 2
-
-    # The service logs an error but returns the report as it was after the first update
-    assert returned_report is not None
-    assert returned_report.id == updated_report_after_raw_text_change.id
-    assert returned_report.raw_text_input == updated_report_after_raw_text_change.raw_text_input
-    # AI Analysis should be the one from 'updated_report_after_raw_text_change' (i.e., the old one),
-    # because the update that would have set the "AI processing pending..." failed.
-    # If `sample_daily_report` had an existing AI analysis, it would be that.
-    # If it was None, this would also be None.
-    assert returned_report.ai_analysis == updated_report_after_raw_text_change.ai_analysis
 
 
 async def test_submit_daily_report_ai_service_exception(
@@ -413,6 +287,7 @@ async def test_submit_daily_report_ai_service_exception(
     mock_report_repository.create_daily_report.return_value = created_report_mock
 
     # Make the update_daily_report call within the AI processing block raise an exception
+    daily_report_service.ai_integration.analyze_eod_report.return_value = {"summary": "Test summary"}
     mock_report_repository.update_daily_report.side_effect = Exception("AI related DB error")
 
     report = await daily_report_service.submit_daily_report(sample_daily_report_create_data, sample_user_id)

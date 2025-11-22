@@ -29,6 +29,10 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
         # Update request count for this path
         path_key = f"{method}:{path}"
         self.request_counts[path_key] = self.request_counts.get(path_key, 0) + 1
+        # Prevent unbounded growth when paths contain dynamic segments
+        if len(self.request_counts) > 500:
+            # Drop oldest-ish entry to keep memory bounded
+            self.request_counts.pop(next(iter(self.request_counts)))
 
         # Process the request
         try:

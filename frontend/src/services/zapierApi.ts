@@ -1,4 +1,4 @@
-import { apiClient } from './api/base';
+import { apiClient } from './api/client';
 
 // Types for Zapier data
 export interface WeeklyData {

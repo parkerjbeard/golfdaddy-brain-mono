@@ -153,7 +153,8 @@ class TestCircuitBreaker:
 
         result = await breaker.call(success_func)
         assert result == "recovery_success"
-        assert breaker.state == CircuitState.CLOSED
+        assert breaker.state == CircuitState.HALF_OPEN
+        assert breaker.success_count == 1
 
     @pytest.mark.asyncio
     async def test_half_open_state_recovery(self, breaker):
@@ -349,7 +350,7 @@ class TestGlobalCircuitManager:
 
     def test_github_circuit_breaker_creation(self):
         """Test creating GitHub circuit breaker."""
-        with patch("app.core.circuit_breaker.settings") as mock_settings:
+        with patch("app.config.settings.settings") as mock_settings:
             mock_settings.GITHUB_CIRCUIT_BREAKER_FAILURE_THRESHOLD = 3
             mock_settings.GITHUB_CIRCUIT_BREAKER_TIMEOUT = 30
 
@@ -363,7 +364,7 @@ class TestGlobalCircuitManager:
 
     def test_openai_circuit_breaker_creation(self):
         """Test creating OpenAI circuit breaker."""
-        with patch("app.core.circuit_breaker.settings") as mock_settings:
+        with patch("app.config.settings.settings") as mock_settings:
             mock_settings.OPENAI_CIRCUIT_BREAKER_FAILURE_THRESHOLD = 2
             mock_settings.OPENAI_CIRCUIT_BREAKER_TIMEOUT = 20
 

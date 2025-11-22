@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
@@ -20,7 +19,7 @@ from app.core.exceptions import (  # New imports for context and future use
     PermissionDeniedError,
     ResourceNotFoundError,
 )
-from app.integrations.ai_integration_v2 import AIIntegrationV2
+from app.integrations.commit_analysis import CommitAnalyzer
 from app.integrations.github_integration import GitHubIntegration
 from app.models.commit import Commit
 from app.models.daily_report import DailyReport
@@ -41,7 +40,9 @@ class CommitAnalysisService:
         self.supabase = supabase
         self.commit_repository = CommitRepository(supabase)
         self.user_repository = UserRepository(supabase)
-        self.ai_integration = AIIntegrationV2()
+        self.commit_analyzer = CommitAnalyzer()
+        # Alias retained for backward compatibility with callers/tests that expect `ai_integration`
+        self.ai_integration = self.commit_analyzer
         self.github_integration = GitHubIntegration()
         self.daily_report_service = DailyReportService()  # Uncommented and initialized
 
@@ -123,7 +124,10 @@ class CommitAnalysisService:
                         f"Attempting to fetch diff from GitHub. Original repo input: '{commit_data.get('repository')}', Derived/Used repo: '{repository}', Commit SHA: '{commit_hash}'"
                     )
 
-                    diff_data = self.github_integration.get_commit_diff(repository, commit_hash)
+                    # Run blocking GitHub request off the event loop
+                    diff_data = await asyncio.to_thread(
+                        self.github_integration.get_commit_diff, repository, commit_hash
+                    )
 
                     if diff_data:
                         logger.info(
@@ -213,8 +217,8 @@ class CommitAnalysisService:
                 }
             else:
                 # Call AI integration with the structured data
-                logger.info("Sending commit data to AI for analysis...")
-                analysis_result = await self.ai_integration.analyze_commit_diff(ai_commit_data)
+                logger.info("Sending commit data to CommitAnalyzer (Impact Points v2.0)...")
+                analysis_result = await self.commit_analyzer.analyze_commit_diff(ai_commit_data)
 
             # --- New EOD/Code Quality Integration Point ---
             # TODO: Fetch relevant EOD report from DailyReportService for this user & date.
@@ -405,12 +409,17 @@ class CommitAnalysisService:
             impact_score = analysis_result.get("impact_score", 0)
             impact_business_value = analysis_result.get("impact_business_value", 0)
             impact_technical_complexity = analysis_result.get("impact_technical_complexity", 0)
-            impact_code_quality = analysis_result.get("impact_code_quality", 1.0)
-            impact_risk_factor = analysis_result.get("impact_risk_factor", 1.0)
+            impact_code_quality_points = analysis_result.get("impact_code_quality_points")
+            if impact_code_quality_points is None:
+                impact_code_quality_points = analysis_result.get("impact_code_quality", 0)
+
+            impact_risk_penalty = analysis_result.get("impact_risk_penalty")
+            if impact_risk_penalty is None:
+                impact_risk_penalty = analysis_result.get("impact_risk_factor", 0)
 
             logger.info(f"✓ Analysis complete: Points={ai_points}, Hours={ai_hours}, Seniority={seniority_score}")
             logger.info(
-                f"✓ Impact Score: {impact_score} (BV:{impact_business_value} × TC:{impact_technical_complexity} × CQ:{impact_code_quality} / RF:{impact_risk_factor})"
+                f"✓ Impact Score: {impact_score} ((BV:{impact_business_value}×2) + (TC:{impact_technical_complexity}×1.5) + CQ:{impact_code_quality_points} - Risk:{impact_risk_penalty})"
             )
 
             # 3. Map commit author to internal user ID
@@ -449,14 +458,20 @@ class CommitAnalysisService:
                 # Impact scoring data
                 "impact_score": impact_score,
                 "impact_business_value": impact_business_value,
+                "impact_business_value_decision_path": analysis_result.get("impact_business_value_decision_path"),
                 "impact_technical_complexity": impact_technical_complexity,
-                "impact_code_quality": impact_code_quality,
-                "impact_risk_factor": impact_risk_factor,
+                "impact_code_quality_points": impact_code_quality_points,
+                "impact_code_quality_checklist": analysis_result.get("impact_code_quality_checklist"),
+                "impact_risk_penalty": impact_risk_penalty,
                 "impact_business_value_reasoning": analysis_result.get("impact_business_value_reasoning"),
                 "impact_technical_complexity_reasoning": analysis_result.get("impact_technical_complexity_reasoning"),
                 "impact_code_quality_reasoning": analysis_result.get("impact_code_quality_reasoning"),
-                "impact_risk_factor_reasoning": analysis_result.get("impact_risk_factor_reasoning"),
-                "impact_dominant_category": analysis_result.get("impact_dominant_category"),
+                "impact_risk_reasoning": analysis_result.get("impact_risk_reasoning"),
+                # Compatibility aliases for downstream consumers still expecting older field names
+                "impact_code_quality": analysis_result.get("impact_code_quality", impact_code_quality_points),
+                "impact_risk_factor": analysis_result.get("impact_risk_factor", impact_risk_penalty),
+                "impact_dominant_category": analysis_result.get("impact_dominant_category")
+                or (analysis_result.get("impact_classification") or {}).get("primary_category"),
                 "impact_classification": analysis_result.get("impact_classification"),
                 "impact_calculation_breakdown": analysis_result.get("impact_calculation_breakdown"),
                 # Metadata

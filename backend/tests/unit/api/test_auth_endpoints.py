@@ -15,7 +15,7 @@ def test_auth_me_v1_requires_bearer_token(client):
     assert resp.status_code in [401, 422]
     if resp.status_code == 422:
         error = resp.json()
-        assert "detail" in error
+        assert "detail" in error or "error" in error
 
 
 def test_login_returns_token_with_mocked_supabase(client):

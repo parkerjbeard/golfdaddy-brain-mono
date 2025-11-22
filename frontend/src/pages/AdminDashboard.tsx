@@ -2,19 +2,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, UserCog, Grid } from "lucide-react";
 import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
 import { RaciTaskDashboard } from '@/components/admin/RaciTaskDashboard';
+import { AdminSettingsButton } from '@/components/admin/AdminSettingsButton';
 
 
 const AdminDashboard = () => {
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-          <BarChart className="h-6 w-6 text-primary" />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+            <BarChart className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
+            <p className="text-muted-foreground">Manage employees and view key metrics</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage employees and view key metrics</p>
-        </div>
+        <AdminSettingsButton />
       </div>
       
       <Tabs defaultValue="employees" className="w-full">

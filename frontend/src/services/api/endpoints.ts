@@ -101,21 +101,21 @@ const users = {
 
 
 
-// Daily reports endpoints
+// Daily reports endpoints (align with backend /api/v1/reports/daily routes)
 const dailyReports = {
-  ...createEndpoint('/api/daily-reports'),
+  ...createEndpoint('/api/v1/reports/daily'),
   getReports: (params?: any) => {
     const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
-    return apiClient.get(`/api/daily-reports${queryString}`);
+    return apiClient.get(`/api/v1/reports/daily${queryString}`);
   },
-  createReport: (data: any) => apiClient.post('/api/daily-reports', data),
-  updateReport: (id: string, data: any) => apiClient.put(`/api/daily-reports/${id}`, data),
-  deleteReport: (id: string) => apiClient.delete(`/api/daily-reports/${id}`),
-  getMyReports: () => apiClient.get('/api/daily-reports/mine'),
-  getReportByDate: (date: string) => apiClient.get(`/api/daily-reports/date/${date}`),
-  getReportsByUser: (userId: string) => apiClient.get(`/api/daily-reports/user/${userId}`),
+  createReport: (data: any) => apiClient.post('/api/v1/reports/daily', data),
+  updateReport: (id: string, data: any) => apiClient.put(`/api/v1/reports/daily/${id}`, data),
+  deleteReport: (id: string) => apiClient.delete(`/api/v1/reports/daily/${id}`),
+  getMyReports: () => apiClient.get('/api/v1/reports/daily/me'),
+  getReportByDate: (date: string) => apiClient.get(`/api/v1/reports/daily/date/${date}`),
+  getReportsByUser: (userId: string) => apiClient.get(`/api/v1/reports/daily/user/${userId}`),
   getReportsByDateRange: (start: string, end: string) => 
-    apiClient.get(`/api/daily-reports/range?start=${start}&end=${end}`),
+    apiClient.get(`/api/v1/reports/daily/range?start=${start}&end=${end}`),
 };
 
 // KPI endpoints
@@ -145,6 +145,28 @@ const developerInsights = {
   getTeamInsights: (teamId: string) => apiClient.get(`/api/developer-insights/team/${teamId}`),
   getCommitAnalysis: (userId: string, days: number = 30) => 
     apiClient.get(`/api/developer-insights/${userId}/commits?days=${days}`),
+};
+
+// Daily commit analysis + manual runs
+const dailyAnalysis = {
+  triggerUserAnalysis: async (userId: string, analysisDate: string) => {
+    const qs = new URLSearchParams({ analysis_date: analysisDate }).toString();
+    const result = await apiClient.post(`/api/daily-analysis/trigger-analysis/${userId}?${qs}`);
+    if (result.error) throw new Error(result.error);
+    return result.data;
+  },
+  triggerBatchAnalysis: async (analysisDate: string) => {
+    const qs = new URLSearchParams({ analysis_date: analysisDate }).toString();
+    const result = await apiClient.post(`/api/daily-analysis/admin/batch-analysis?${qs}`);
+    if (result.error) throw new Error(result.error);
+    return result.data;
+  },
+  getStats: async (startDate: string, endDate: string) => {
+    const qs = new URLSearchParams({ start_date: startDate, end_date: endDate }).toString();
+    const result = await apiClient.get(`/api/daily-analysis/admin/stats?${qs}`);
+    if (result.error) throw new Error(result.error);
+    return result.data;
+  }
 };
 
 // GitHub endpoints
@@ -213,6 +235,7 @@ export const api = {
   github,
   kpi,
   developerInsights,
+  dailyAnalysis,
   archive,
   system,
   webhook,

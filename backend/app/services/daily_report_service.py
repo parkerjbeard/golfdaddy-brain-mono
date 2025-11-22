@@ -300,12 +300,13 @@ class DailyReportService:
             user_id, week_start, week_end, daily_reports, commits
         )
 
-    async def get_reports_with_pending_clarifications(self) -> List[DailyReport]:
+    async def get_reports_with_pending_clarifications(self, limit: int = 200, offset: int = 0) -> List[DailyReport]:
         """
-        Get all reports that have pending clarification requests.
+        Get reports that have pending clarification requests.
+
+        The fetch is limited to avoid unbounded scans; callers can paginate via offset.
         """
-        # This would ideally be a database query, but for now we'll filter in memory
-        all_reports = await self.report_repository.get_all_daily_reports(limit=1000)
+        all_reports = await self.report_repository.get_all_daily_reports(limit=limit, offset=offset)
 
         pending_reports = []
         for report in all_reports:

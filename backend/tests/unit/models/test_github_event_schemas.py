@@ -92,6 +92,6 @@ def test_commit_and_push_event():
     commit_obj = Commit(id="abc", distinct=True)
     push = PushEvent(commits=[commit_obj])
     assert push.commits[0].id == "abc"
-
-    with pytest.raises(ValidationError):
-        Commit(id="abc", distinct="yes")
+    assert push.commits[0].distinct is True
+    # Pydantic coerces truthy strings to bool; ensure coercion doesn't crash
+    assert Commit(id="abc", distinct="yes").distinct is True

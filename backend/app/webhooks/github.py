@@ -2,6 +2,7 @@
 GitHub webhook handler for direct integration.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -161,33 +162,37 @@ class GitHubWebhookHandler(WebhookHandler):
         processed_commits = []
         errors = []
 
-        for commit in non_merge_commits:
-            try:
-                # Convert GitHub commit to our CommitPayload format
-                commit_payload = self._convert_to_commit_payload(
-                    commit, repository=repo_full_name, repo_url=repo_url, branch=branch
-                )
+        # Process commits concurrently but with bounded concurrency to protect upstreams
+        semaphore = asyncio.Semaphore(3)
 
-                # Process through existing commit analysis service
-                logger.info(f"Analyzing commit {commit_payload.commit_hash}")
-                result = await self.commit_analysis_service.process_commit(
-                    commit_payload, scan_docs=True  # Enable documentation scanning by default
-                )
-
-                if result:
-                    processed_commits.append(
-                        {
-                            "hash": commit_payload.commit_hash,
-                            "message": commit_payload.commit_message,
-                            "status": "analyzed",
-                        }
+        async def analyze_single(commit_data: Dict[str, Any]):
+            async with semaphore:
+                try:
+                    commit_payload = self._convert_to_commit_payload(
+                        commit_data, repository=repo_full_name, repo_url=repo_url, branch=branch
                     )
-                else:
-                    errors.append({"hash": commit_payload.commit_hash, "error": "Analysis failed"})
+                    logger.info(f"Analyzing commit {commit_payload.commit_hash}")
+                    result = await asyncio.wait_for(
+                        self.commit_analysis_service.process_commit(commit_payload, scan_docs=True), timeout=90
+                    )
+                    if result:
+                        processed_commits.append(
+                            {
+                                "hash": commit_payload.commit_hash,
+                                "message": commit_payload.commit_message,
+                                "status": "analyzed",
+                            }
+                        )
+                    else:
+                        errors.append({"hash": commit_payload.commit_hash, "error": "Analysis failed"})
+                except asyncio.TimeoutError:
+                    logger.error(f"Commit analysis timed out for {commit_data.get('id')}")
+                    errors.append({"hash": commit_data.get("id"), "error": "Analysis timed out"})
+                except Exception as e:
+                    logger.error(f"Error processing commit {commit_data.get('id')}: {e}", exc_info=True)
+                    errors.append({"hash": commit_data.get("id"), "error": str(e)})
 
-            except Exception as e:
-                logger.error(f"Error processing commit {commit.get('id')}: {e}", exc_info=True)
-                errors.append({"hash": commit.get("id"), "error": str(e)})
+        await asyncio.gather(*(analyze_single(commit) for commit in non_merge_commits))
 
         return {
             "status": "success",
