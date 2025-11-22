@@ -47,13 +47,7 @@ class UserRepository:
         The user_data.id MUST match the auth.users.id.
         """
         try:
-            # Exclude default-valued fields so we don't attempt to insert columns
-            # that may not yet exist in older database schemas (e.g., is_active, preferences).
-            user_dict_initial = user_data.model_dump(
-                exclude_unset=True,
-                exclude_defaults=True,
-                by_alias=False,
-            )
+            user_dict_initial = user_data.model_dump(exclude_unset=True, by_alias=False)
             user_dict = self._process_user_dict_for_supabase(user_dict_initial)
 
             if "id" not in user_dict or not user_dict["id"]:
@@ -236,11 +230,6 @@ class UserRepository:
                 except Exception as e:
                     logger.error(f"Failed to update auth.users email for {user_id}: {e}", exc_info=True)
                     raise DatabaseError("Error updating auth user email")
-
-            # Strip fields that may not exist on older schemas to avoid 42703 errors.
-            # These are safe to omit because they have defaults in the model.
-            for optional_field in ("is_active", "preferences", "last_login_at", "team_id", "reports_to_id"):
-                update_data.pop(optional_field, None)
 
             processed_update_data = self._process_user_dict_for_supabase(update_data)
             response: PostgrestResponse = await asyncio.to_thread(

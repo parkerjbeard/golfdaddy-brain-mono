@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from postgrest import APIResponse as PostgrestResponse
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.config.supabase_client import get_supabase_client_safe
@@ -99,6 +100,12 @@ class PullRequestRepository:
             if response and response.data:
                 return self._materialize_pull_requests(list(response.data))
             return []
+        except APIError as exc:
+            if getattr(exc, "code", None) == "42P01":
+                # Table has not been created yet in Supabase; fall back gracefully.
+                logger.warning("Supabase table '%s' is missing; returning no pull requests", self._table, exc_info=True)
+                return []
+            raise DatabaseError(f"Unexpected error fetching pull requests: {exc}")
         except DatabaseError:
             raise
         except Exception as exc:
@@ -137,6 +144,16 @@ class PullRequestRepository:
                         grouped[author_uuid] = []
                     grouped[author_uuid].extend(self._materialize_pull_requests([record]))
             return grouped
+        except APIError as exc:
+            if getattr(exc, "code", None) == "42P01":
+                logger.warning(
+                    "Supabase table '%s' is missing; returning no pull requests for %d users",
+                    self._table,
+                    len(user_ids),
+                    exc_info=True,
+                )
+                return {uid: [] for uid in user_ids}
+            raise DatabaseError(f"Unexpected error fetching pull requests for users: {exc}")
         except DatabaseError:
             raise
         except Exception as exc:

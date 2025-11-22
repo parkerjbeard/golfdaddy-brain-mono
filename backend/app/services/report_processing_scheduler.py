@@ -176,25 +176,35 @@ class ReportProcessingScheduler:
         """
         logger.info("Checking for clarification timeouts")
 
-        # Get all reports with pending clarifications
-        reports = await self.daily_report_service.get_reports_with_pending_clarifications()
+        # Page through all reports with pending clarifications to avoid missing items beyond first batch
+        limit = 200
+        offset = 0
 
-        for report in reports:
-            try:
-                conv_state = report.conversation_state or {}
-                expires_at_str = conv_state.get("expires_at")
+        while True:
+            reports = await self.daily_report_service.get_reports_with_pending_clarifications(limit=limit, offset=offset)
+            if not reports:
+                break
 
-                if not expires_at_str:
-                    continue
+            for report in reports:
+                try:
+                    conv_state = report.conversation_state or {}
+                    expires_at_str = conv_state.get("expires_at")
 
-                expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+                    if not expires_at_str:
+                        continue
 
-                if datetime.now(timezone.utc) > expires_at:
-                    # Clarification expired - finalize report
-                    await self._finalize_expired_clarification(report)
+                    expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
 
-            except Exception as e:
-                logger.error(f"Error checking clarification timeout for report {report.id}: {e}", exc_info=True)
+                    if datetime.now(timezone.utc) > expires_at:
+                        # Clarification expired - finalize report
+                        await self._finalize_expired_clarification(report)
+
+                except Exception as e:
+                    logger.error(f"Error checking clarification timeout for report {report.id}: {e}", exc_info=True)
+
+            if len(reports) < limit:
+                break
+            offset += limit
 
     async def _finalize_expired_clarification(self, report: DailyReport):
         """

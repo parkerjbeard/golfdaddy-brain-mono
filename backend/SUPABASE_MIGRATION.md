@@ -11,6 +11,7 @@ We've created schema files in the `supabase/schemas` directory:
 - `tasks.sql` - Tasks with RACI assignments
 - `docs.sql` - AI-generated documentation 
 - `commits.sql` - GitHub commit tracking (already existed)
+- `pull_requests.sql` - Pull request activity used for KPI widgets
 
 To apply these schemas to your Supabase project:
 
