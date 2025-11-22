@@ -69,7 +69,7 @@ jobs:
         working-directory: frontend
         env:
           CI: "true"
-        run: npm run test -- --runInBand
+        run: npm run test
 
       - name: Build
         working-directory: frontend
