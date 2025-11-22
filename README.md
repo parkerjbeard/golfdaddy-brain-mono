@@ -1,202 +1,66 @@
 # GolfDaddy Brain
 
-GolfDaddy Brain is an AI-powered software engineering assistant that helps teams track work, manage tasks, and improve productivity through intelligent analysis of code commits and daily reports.
+AI-assisted engineering manager with a FastAPI backend (Supabase + OpenAI) and a Vite/React frontend.
 
-## Key Features
+## Stack (current)
+- Backend: Python 3.11, FastAPI, Supabase client (no SQLAlchemy), asyncpg migrations via `backend/scripts/run_migrations.py`
+- Frontend: React 18 + TypeScript, Vite (port 8080), Tailwind/shadcn, Supabase Auth
+- AI integrations: OpenAI for commit analysis and reporting
+- Deployment: single Docker image (serves API + built SPA), see `render.yaml`
 
-- **Daily Batch Commit Analysis**: Revolutionary AI-powered system that analyzes all daily commits together for 90% cost reduction and improved accuracy
-- **GitHub Commit Analysis**: AI-powered analysis of individual commits to estimate work hours and complexity
-- **Daily Report Collection**: Slack bot collects end-of-day reports with intelligent deduplication
-- **RACI Task Management**: Complete task tracking with Responsible, Accountable, Consulted, and Informed roles
-- **KPI Tracking**: Automated calculation of velocity, completion rates, and team performance
-- **Automatic Documentation**: AI generates and updates documentation based on code changes
- 
+## Quickstart (local)
+1) Prereqs: Python 3.11, Node 18/20, npm, Supabase project, OpenAI key (optional for analysis).
 
-## Project Structure
-
-The project is structured into two main parts:
-
-- `backend/`: FastAPI-based backend API with AI integrations
-- `frontend/`: React/TypeScript frontend application with real-time updates
-
-## Setup and Installation
-
-### Prerequisites
-
-- Python 3.11+
-- Bun 1.x (frontend dev/build)
-
-### Local Development Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/golfdaddy.git
-   cd golfdaddy
-   ```
-
-2. **Set up environment variables**:
-   ```bash
-   # Create root .env file
-   cp .env.example .env
-   
-   # Frontend .env is optional (frontend defaults to '/api' or '/api/v1')
-   # echo "VITE_API_BASE_URL=http://localhost:8000" > frontend/.env
-   ```
-
-3. **Install dependencies**:
-  ```bash
-  # Install frontend dependencies
-  cd frontend && bun install
-  
-  # Install backend dependencies (preferably in a virtual environment)
-  python -m venv venv
-  source venv/bin/activate  # On Windows: venv\Scripts\activate
-  pip install -r backend/requirements.txt
-  ```
-
-4. **Start development servers**:
-   ```bash
-  # Start separately (recommended for clarity)
-  # Backend
-  (cd backend && make run)
-
-  # Frontend (Bun + Vite)
-  (cd frontend && bun run dev)
-   ```
-
-5. **Access the application**:
-   - Frontend: http://localhost:5173
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
-
-### Viewing Logs
-
-- Backend: logs print in the terminal running `make run`
-- Frontend: logs print in the terminal running `bun run dev`
-
-Ensure your `.env` (root) and `backend/.env` are configured with your Supabase `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and `DATABASE_URL` before starting.
-
-## First-Time GitHub Seeding (30 Days)
-
-Seed historical GitHub data for the last 30 days so dashboards and reports have immediate context. These commands work against any public repo, and private repos when a GitHub token is provided.
-
-Prerequisites
-- OpenAI: set `OPENAI_API_KEY` in your root `.env`.
-- GitHub: set `GITHUB_TOKEN` in `.env` (see “GitHub Token Setup” below) for private repos and higher rate limits.
-- Database: set `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and `DATABASE_URL` in `.env`.
-- Backend deps: install once with `python -m venv venv && source venv/bin/activate && pip install -r backend/requirements.txt`.
-
-GitHub Token Setup (recommended)
-1) Choose token type
-   - Fine-grained PAT (recommended): least-privilege, repo-scoped.
-   - Classic PAT: broader scope; simpler if you need quick private repo access.
-
-2) Create a Fine-grained PAT (recommended)
-   - Open: https://github.com/settings/personal-access-tokens/new?type=beta
-   - Resource owner: pick your user or the organization that owns the repo.
-   - Repository access: select the specific repo(s) you will analyze (or “All repositories” if needed).
-   - Repository permissions (minimum):
-     - Contents: Read
-     - Metadata: Read
-     - Optional (if you’ll analyze PRs later): Pull requests: Read
-   - Generate the token and copy it.
-
-3) Or create a Classic PAT
-   - Open: https://github.com/settings/tokens/new
-   - Scopes:
-     - Private repos: check `repo` (full repo scope).
-     - Public-only: `public_repo` is sufficient.
-   - Generate the token and copy it.
-
-4) If your organization enforces SAML SSO
-   - After creating the token, click “Configure SSO” on the token and “Authorize” it for the organization; otherwise private org repos will return 404/401.
-
-5) Save the token (do not quote) in your root `.env`
-   - `GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
-   - Alternatively for a single session: `export GITHUB_TOKEN=ghp_xxx`
-
-6) Validate the token (optional but helpful)
-   - Check rate limit (should be 5,000/hr when authenticated):
-     - `curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit | jq .resources.core`
-   - Confirm repo access:
-     - `curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/<owner>/<repo>/commits?per_page=1 | jq '.[0].sha'`
-
-Notes
-- Without a token, GitHub API is limited to ~60 requests/hour; seeding may be slow or fail.
-- Fine-grained tokens can expire; set a calendar reminder to rotate if you use expiration.
-- Treat the token like a password. Never commit `.env`. Restrict scopes to only what you need.
-
-Choose Your Analysis Mode
-- Individual (per-commit): Highest granularity; more API usage. Recommended for smaller backfills or precision.
-- Daily (per-day batch): 90% cheaper; great for first-time backfills and ongoing daily automation.
-
-Quick Start — Copy/Paste Commands
-- Individual analysis (both scoring methods):
-  - `python backend/scripts/seed_historical_commits.py --repo <owner>/<repo> --days 30 --analysis-mode individual --scoring-method both --max-concurrent 5`
-  - Tip: add `--use-openai-batch` to reduce cost by queueing analysis asynchronously.
-
-- Individual analysis (hours only):
-  - `python backend/scripts/seed_historical_commits.py --repo <owner>/<repo> --days 30 --analysis-mode individual --scoring-method hours --max-concurrent 5`
-
-- Individual analysis (impact points only):
-  - `python backend/scripts/seed_historical_commits.py --repo <owner>/<repo> --days 30 --analysis-mode individual --scoring-method impact --max-concurrent 5`
-
-- Daily batch analysis (recommended for first pass):
-  - `python backend/scripts/seed_historical_commits.py --repo <owner>/<repo> --days 30 --analysis-mode daily`
-
-Useful Options
-- `--single-branch`: Only analyze the default branch (faster for a first run).
-- `--branches main develop`: Limit analysis to specific branches.
-- `--no-check-existing`: Re-analyze even if commits already exist in your DB.
-- `--output auto`: Save a JSON export of the results to the current directory.
-
-Examples
-- Backfill with daily batches for speed, saving an export:
-  - `python backend/scripts/seed_historical_commits.py --repo acme/widgets --days 30 --analysis-mode daily --output auto`
-
-- High-fidelity per-commit backfill using both scoring methods with batch cost savings:
-  - `python backend/scripts/seed_historical_commits.py --repo acme/widgets --days 30 --analysis-mode individual --scoring-method both --use-openai-batch --max-concurrent 5 --output auto`
-
-Where Results Go
-- Individual mode: results are upserted into the `commits` table (reused if a commit already exists).
-- Daily mode: results are stored in `daily_work_analyses` with one “work item” per commit.
-
-Troubleshooting
-- Rate limits: add `GITHUB_TOKEN` and/or reduce `--max-concurrent`.
-- Private repos: require `GITHUB_TOKEN` with `repo` scope.
-- Large repos: try `--single-branch` for a quick first pass, then add more branches.
-- Dry run: add `--dry-run` to generate output and logs without writing to the database.
-
-## Testing
-
-### Running Backend Tests
-
-```bash
-cd backend
-pytest
+2) Env (`.env` at repo root is read by the backend):
+```
+SUPABASE_URL=https://<project>.supabase.co
+SUPABASE_SERVICE_KEY=service-role-key
+SUPABASE_ANON_KEY=public-anon-key
+DATABASE_URL=postgresql://...        # Supabase connection string (used by migrations)
+OPENAI_API_KEY=sk-...                # required for analysis scripts
+GITHUB_TOKEN=ghp_...                 # optional, lifts rate limits
+API_KEYS={"local":{"role":"admin","rate_limit":1000}}
 ```
 
-### Running Frontend Tests
-
-```bash
-cd frontend && bun run test
+3) Backend
+```
+python -m venv backend/venv
+source backend/venv/bin/activate
+pip install -r backend/requirements-dev.txt
+cd backend && make run          # http://localhost:8000, docs at /docs
 ```
 
-## Daily Batch Commit Analysis
+4) Frontend
+```
+cd frontend
+npm install
+npm run dev                     # http://localhost:8080 (proxies /api, /auth, /config.js)
+```
 
-**NEW**: Revolutionary approach to commit analysis that provides 90% cost reduction and improved accuracy:
+5) Run both from root (expects backend venv at backend/venv):
+```
+npm start
+```
 
-### How It Works
-1. **Daily Report Submission**: When users submit daily reports, all commits from that day are analyzed together
-2. **Midnight Automatic Analysis**: Users without reports get automatic analysis at 12:05 AM
-3. **Holistic AI Analysis**: Single AI call analyzes entire day's work with full context
-4. **Smart Reconciliation**: Compares AI estimates with user-reported hours for accuracy
+## Tests
+- Backend: `cd backend && make test`
+- Frontend: `cd frontend && npm test`
 
-### Benefits
-- **90% Cost Reduction**: One AI call per day instead of per commit
-- **Better Context**: AI sees full daily work patterns and context switching
-- **Improved Accuracy**: Holistic analysis provides more realistic hour estimates
-- **Automatic Coverage**: Works with or without daily reports
+## Database migrations
+Apply SQL migrations in `backend/migrations` with:
+```
+python backend/scripts/run_migrations.py   # uses $DATABASE_URL
+```
+
+## GitHub backfill (optional)
+```
+python backend/scripts/seed_historical_commits.py --repo owner/repo --days 30 --analysis-mode daily --output auto
+```
+Supports individual or daily modes, optional OpenAI Batch (`--use-openai-batch`), and reuse of existing analyses.
+
+## Deployment
+- Single Dockerfile builds frontend then runs FastAPI with gunicorn.
+- Render blueprint: `render.yaml` (service name `brain`). Build args expect Supabase keys; see `RENDER_DEPLOYMENT.md`.
 
 ### Configuration
 ```bash

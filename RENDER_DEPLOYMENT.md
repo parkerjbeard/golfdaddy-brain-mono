@@ -25,6 +25,7 @@ Render Services:
    - `DATABASE_URL` (Supabase Postgres connection string)
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_KEY`
+   - `SUPABASE_ANON_KEY`
    - `OPENAI_API_KEY` (if applicable)
    - Any other keys referenced in `backend/app/config/settings.py`
 
@@ -48,13 +49,11 @@ Notes:
 ## Database Setup
 
 1. Create PostgreSQL on Render (if not present)
-2. Set `DATABASE_URL` in the service env (use the external URL)
-3. Add to backend as `DATABASE_URL`
-4. Run migrations:
+2. Add `DATABASE_URL` plus Supabase keys to the env group: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`
+3. Run migrations (SQL files in `backend/migrations`):
    ```bash
-   # SSH into your backend service or run locally
-   cd backend
-   alembic upgrade head
+   # SSH into your running service or run locally with the same DATABASE_URL
+   python backend/scripts/run_migrations.py
    ```
 
 ## Debugging Authentication Issues

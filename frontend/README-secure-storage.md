@@ -2,7 +2,7 @@
 
 ## Overview
 
-The GolfDaddy Brain frontend implements a comprehensive secure token storage system using Web Crypto API encryption. This ensures that authentication tokens and sensitive data are never stored in plain text.
+The GolfDaddy Brain frontend stores auth/session data through a wrapper around the Web Crypto API (AES‑GCM). In development, the helper will fall back to plain localStorage if encryption is unavailable so the app can still run on older browsers; in production keep encryption enabled.
 
 ## Key Features
 
@@ -68,13 +68,13 @@ const token = await tokenManager.getToken();
 ### Encryption Details
 
 - **Algorithm**: AES-GCM (256-bit)
-- **Key Derivation**: PBKDF2 (100,000 iterations)
+- **Key Derivation**: PBKDF2 (100,000 iterations) from a per-browser fingerprint + fixed salt
 - **IV Generation**: Cryptographically secure random
-- **Salt**: Unique per encryption operation
+- **Salt field**: Stored with each payload for forward compatibility; the current master key is derived from the browser fingerprint so decrypting on another device will fail by design
 
 ### Token Lifecycle
 
-1. **Login**: Tokens encrypted and stored
+1. **Login**: Tokens encrypted and stored (or stored plainly if fallback mode is enabled in dev)
 2. **Usage**: Automatic decryption on access
 3. **Refresh**: Proactive renewal before expiration
 4. **Logout**: Complete cleanup across all tabs

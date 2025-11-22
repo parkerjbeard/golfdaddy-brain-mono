@@ -1,46 +1,24 @@
-# GolfDaddy Brain Tests
+# Backend Test Suite
 
-This directory contains all tests for the GolfDaddy Brain application.
+pytest-based tests that mock Supabase so they run offline.
 
-## Directory Structure
+## Layout
+- `unit/` – module-focused tests grouped by area (`api`, `services`, `repositories`, `webhooks`, etc.)
+- `fixtures/` – shared payloads and sample objects
+- `utils/` – helper utilities used by tests
+- `conftest.py` – global fixtures, including a mocked Supabase client and `TESTING_MODE` toggle
 
-- `unit/`: Unit tests for individual components
-  - Tests are isolated and don't require external services
-  - Naming convention: `test_<module_name>.py`
-
-- `integrations/`: Integration tests between components and external services
-  - Tests interactions between multiple components or with external services
-  - Naming convention: `test_<integration_name>.py`
-
-- `fixtures/`: Shared test fixtures and test data
-  - Contains reusable test data and helper fixtures
-  - Structured by domain area
-
-- `utils/`: Test utilities and helpers
-  - Contains helper functions used across tests
-  - Reduces code duplication in test files
-
-## Running Tests
-
-Run all tests:
+## Running
 ```bash
-pytest
+cd backend
+make test                   # full suite with coverage
+pytest tests/unit/api       # scoped run
+pytest -k "github_app"      # pattern match
 ```
 
-Run a specific test module:
-```bash
-pytest tests/unit/test_raci_service.py
-```
+Tests expect valid Supabase values in the environment (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`); they are not used for real network calls but are validated for presence.
 
-Run tests with code coverage:
-```bash
-pytest --cov=app tests/
-```
-
-## Test Conventions
-
-1. All test files should be prefixed with `test_`
-2. Test class names should be prefixed with `Test`
-3. Test method names should be prefixed with `test_`
-4. Use fixtures for reusable test setup/teardown
-5. Use meaningful test names that describe the behavior being tested 
+## Conventions
+- Files: `test_*.py`
+- Classes: `Test*`
+- Prefer fixtures over ad-hoc mocks; reuse the Supabase mock in `conftest.py`.
