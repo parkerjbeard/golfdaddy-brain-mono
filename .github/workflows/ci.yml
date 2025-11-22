@@ -2,13 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
-  backend-tests:
-    name: Backend Unit Tests
+  backend:
+    name: Backend · lint, type-check, tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -17,76 +21,58 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
 
-      - name: Install backend dev dependencies
+      - name: Install backend dependencies
+        working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements-dev.txt
+          pip install -r requirements-dev.txt
 
-      - name: Run backend unit tests
-        run: |
-          cd backend
-          pytest tests/unit -v
+      - name: Lint
+        working-directory: backend
+        run: make lint
 
-  backend-lint:
-    name: Backend Lint
+      - name: Type check
+        working-directory: backend
+        run: make type-check
+
+      - name: Test
+        working-directory: backend
+        run: make test
+
+  frontend:
+    name: Frontend · lint, test, build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
-
-      - name: Install backend dev dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements-dev.txt
-
-      - name: Run linters
-        run: |
-          cd backend
-          make lint
-
-  frontend-tests:
-    name: Frontend Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        run: |
-          cd frontend
-          bun ci
+        working-directory: frontend
+        run: npm ci
 
-      - name: Run frontend tests
-        run: |
-          cd frontend
-          bun run test -- --run
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
 
-  frontend-build:
-    name: Frontend Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Test
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: npm run test -- --runInBand
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          bun ci
-
-      - name: Build frontend
-        run: |
-          cd frontend
-          bun run build
+      - name: Build
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: npm run build
