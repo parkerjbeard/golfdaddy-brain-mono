@@ -22,7 +22,9 @@ import {
   CalendarDays,
   Eye,
   EyeOff,
+  ExternalLink,
   KeyRound,
+  Link2,
   Loader2,
   PlayCircle,
   RefreshCw,
@@ -37,6 +39,51 @@ type StoredOpenAIKey = {
 };
 
 const OPENAI_KEY_STORAGE_KEY = "admin_openai_api_key";
+const ZAPIER_TABLE_LINKS_STORAGE_KEY = "admin_zapier_table_links";
+
+const ZAPIER_TABLES = [
+  {
+    key: "analytics",
+    label: "Analytics",
+    helper: "Weekly KPI rollups (social, retention, shipping metrics).",
+  },
+  {
+    key: "wins",
+    label: "Wins",
+    helper: "Employee acknowledgments surfaced on the dashboard.",
+  },
+  {
+    key: "objectives",
+    label: "Objectives",
+    helper: "ClickUp/OKR objectives synced via Zapier.",
+  },
+  {
+    key: "user_feedback",
+    label: "User feedback",
+    helper: "CSAT + qualitative feedback collected from support forms.",
+  },
+  {
+    key: "social_media_metrics",
+    label: "Social media metrics",
+    helper: "Views/engagement per platform.",
+  },
+  {
+    key: "form_submissions",
+    label: "Form submissions",
+    helper: "Inbound lead and survey responses.",
+  },
+  {
+    key: "employees",
+    label: "Employees",
+    helper: "Roster data powering assignments and notifications.",
+  },
+];
+
+const createDefaultZapierLinks = () =>
+  ZAPIER_TABLES.reduce<Record<string, string>>((acc, table) => {
+    acc[table.key] = "";
+    return acc;
+  }, {});
 
 export const AdminSettingsButton = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -62,6 +109,8 @@ export const AdminSettingsButton = () => {
   const [refreshingZapier, setRefreshingZapier] = useState(false);
   const [archiveDays, setArchiveDays] = useState("180");
   const [archiving, setArchiving] = useState(false);
+  const [zapierTableLinks, setZapierTableLinks] = useState<Record<string, string>>(createDefaultZapierLinks);
+  const [savingZapierLinks, setSavingZapierLinks] = useState(false);
 
   const selectedUserLabel = useMemo(() => {
     const found = users.find((u) => u.id === selectedUserId);
@@ -78,6 +127,87 @@ export const AdminSettingsButton = () => {
       setLastSavedAt(null);
     }
   }, []);
+
+  const loadZapierTableLinks = useCallback(async () => {
+    try {
+      const storedLinks = await secureStorage.getItem<Record<string, string>>(ZAPIER_TABLE_LINKS_STORAGE_KEY);
+      if (storedLinks) {
+        setZapierTableLinks((prev) => ({ ...prev, ...storedLinks }));
+      }
+    } catch (error) {
+      console.error("Failed to load Zapier table links", error);
+    }
+  }, []);
+
+  const handleZapierLinkChange = (key: string, value: string) => {
+    setZapierTableLinks((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const saveZapierLinks = async () => {
+    setSavingZapierLinks(true);
+    try {
+      await secureStorage.setItem(ZAPIER_TABLE_LINKS_STORAGE_KEY, zapierTableLinks, {
+        tags: ["admin", "zapier"],
+        // Keep links fresh; re-validate every 90 days
+        expiresIn: 1000 * 60 * 60 * 24 * 90,
+      });
+      toast({
+        title: "Zapier links saved",
+        description: "Quick links updated for all Zapier tables.",
+      });
+    } catch (error) {
+      toast({
+        title: "Save failed",
+        description: error instanceof Error ? error.message : "Unable to save Zapier table links",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingZapierLinks(false);
+    }
+  };
+
+  const clearZapierLinks = async () => {
+    setSavingZapierLinks(true);
+    try {
+      await secureStorage.removeItem(ZAPIER_TABLE_LINKS_STORAGE_KEY);
+      setZapierTableLinks(createDefaultZapierLinks());
+      toast({
+        title: "Links cleared",
+        description: "All Zapier table links were removed from this device.",
+      });
+    } catch (error) {
+      toast({
+        title: "Clear failed",
+        description: error instanceof Error ? error.message : "Unable to clear Zapier table links",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingZapierLinks(false);
+    }
+  };
+
+  const openZapierTable = (key: string) => {
+    const url = zapierTableLinks[key]?.trim();
+    if (!url) {
+      toast({
+        title: "Missing link",
+        description: "Add the Zapier Tables share link first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const normalized = url.startsWith("http") ? url : `https://${url}`;
+    try {
+      window.open(normalized, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast({
+        title: "Could not open link",
+        description: error instanceof Error ? error.message : "Check the Zapier table URL and try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSaveKey = async () => {
     const trimmed = openAiKeyInput.trim();
@@ -286,8 +416,9 @@ export const AdminSettingsButton = () => {
       if (!users.length) {
         fetchUsers();
       }
+      loadZapierTableLinks();
     }
-  }, [isOpen, loadStoredKey, fetchUsers, users.length]);
+  }, [isOpen, loadStoredKey, fetchUsers, users.length, loadZapierTableLinks]);
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -439,6 +570,74 @@ export const AdminSettingsButton = () => {
                   Run for everyone
                 </Button>
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Link2 className="h-4 w-4 text-primary" />
+                  Zapier tables
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Store the shared URLs for each Zapier Table so admins can jump into the source data that powers the dashboards.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {ZAPIER_TABLES.map((table) => {
+                const currentLink = zapierTableLinks[table.key] || "";
+                const hasLink = Boolean(currentLink.trim());
+                return (
+                  <div key={table.key} className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{table.label}</p>
+                        <p className="text-xs text-muted-foreground">{table.helper}</p>
+                      </div>
+                      <Badge variant={hasLink ? "secondary" : "outline"}>{hasLink ? "Linked" : "Missing"}</Badge>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        value={currentLink}
+                        onChange={(e) => handleZapierLinkChange(table.key, e.target.value)}
+                        placeholder="https://tables.zapier.com/app/your-app-id/table/..."
+                        className="flex-1"
+                        inputMode="url"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openZapierTable(table.key)}
+                        disabled={!hasLink}
+                        className="sm:w-36"
+                      >
+                        <ExternalLink className="mr-1 h-4 w-4" />
+                        Open table
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearZapierLinks}
+                disabled={savingZapierLinks}
+              >
+                Clear links
+              </Button>
+              <Button type="button" size="sm" onClick={saveZapierLinks} disabled={savingZapierLinks}>
+                {savingZapierLinks && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                Save Zapier links
+              </Button>
             </div>
           </div>
 
