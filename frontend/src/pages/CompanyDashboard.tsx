@@ -18,8 +18,9 @@ const CompanyDashboard = () => {
   const [zapierLoading, setZapierLoading] = useState(false);
   const [authError, setAuthError] = useState(false);
   
-  // Local dashboard data
+  // Local dashboard data (fallback for sections not yet powered by Zapier)
   const [localData, setLocalData] = useState<DashboardData | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
 
   // Fetch Zapier data
   const fetchZapierData = async () => {
@@ -40,9 +41,22 @@ const CompanyDashboard = () => {
     }
   };
 
+  const fetchDashboardOverview = async () => {
+    setOverviewLoading(true);
+    try {
+      const data = await api.zapier.getDashboardOverview();
+      setLocalData(data as DashboardData);
+    } catch (error) {
+      console.warn('Falling back to static dashboard data:', error);
+      setLocalData(dashboardData as DashboardData);
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchZapierData();
-    setLocalData(dashboardData as DashboardData);
+    fetchDashboardOverview();
   }, []);
 
   const formatDate = (dateString: string) => {
@@ -88,23 +102,23 @@ const CompanyDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard 
             title="CSAT Score" 
-            value={localData ? localData.dashboard.kpis.csat.current.toString() : (weeklyData ? `${weeklyData.csat_score}%` : '-')}
-            description={localData ? `Previous: ${localData.dashboard.kpis.csat.previous}` : "Customer satisfaction"}
-            trend={localData ? localData.dashboard.kpis.csat.trend : (weeklyData?.csat_change_percentage && weeklyData.csat_change_percentage > 0 ? 'up' : weeklyData?.csat_change_percentage && weeklyData.csat_change_percentage < 0 ? 'down' : 'neutral')}
-            percentageChange={localData ? parseFloat(((localData.dashboard.kpis.csat.change / localData.dashboard.kpis.csat.previous) * 100).toFixed(1)) : (weeklyData?.csat_change_percentage || undefined)}
+            value={weeklyData ? weeklyData.csat_score.toFixed(2) : localData ? localData.dashboard.kpis.csat.current.toString() : '-'}
+            description={weeklyData ? `Change vs prev week: ${weeklyData.csat_change_percentage?.toFixed(1) ?? '0'}%` : localData ? `Previous: ${localData.dashboard.kpis.csat.previous}` : "Customer satisfaction"}
+            trend={weeklyData ? (weeklyData.csat_change_percentage && weeklyData.csat_change_percentage > 0 ? 'up' : weeklyData?.csat_change_percentage && weeklyData.csat_change_percentage < 0 ? 'down' : 'neutral') : localData ? localData.dashboard.kpis.csat.trend : 'neutral'}
+            percentageChange={weeklyData?.csat_change_percentage ?? (localData ? parseFloat(((localData.dashboard.kpis.csat.change / localData.dashboard.kpis.csat.previous) * 100).toFixed(1)) : undefined)}
           />
           <KpiCard 
             title="Social Media Views" 
-            value={localData ? `${(localData.dashboard.kpis.socialMedia.totalViews / 1000000).toFixed(1)}M` : (weeklyData?.social_media_views.toLocaleString() || '-')}
-            description={localData ? `Across ${localData.dashboard.kpis.socialMedia.platforms.length} platforms` : "Total social views"}
-            trend={weeklyData?.social_views_change_percentage && weeklyData.social_views_change_percentage > 0 ? 'up' : weeklyData?.social_views_change_percentage && weeklyData.social_views_change_percentage < 0 ? 'down' : 'neutral'}
-            percentageChange={weeklyData?.social_views_change_percentage || undefined}
+            value={weeklyData ? (weeklyData.social_media_views >= 1_000_000 ? `${(weeklyData.social_media_views / 1_000_000).toFixed(1)}M` : weeklyData.social_media_views.toLocaleString()) : localData ? `${(localData.dashboard.kpis.socialMedia.totalViews / 1000000).toFixed(1)}M` : '-'}
+            description={weeklyData ? 'Total views (last 7 days)' : localData ? `Across ${localData.dashboard.kpis.socialMedia.platforms.length} platforms` : "Total social views"}
+            trend={weeklyData ? (weeklyData.social_views_change_percentage && weeklyData.social_views_change_percentage > 0 ? 'up' : weeklyData?.social_views_change_percentage && weeklyData.social_views_change_percentage < 0 ? 'down' : 'neutral') : 'neutral'}
+            percentageChange={weeklyData?.social_views_change_percentage ?? undefined}
           />
           <KpiCard 
             title="Week 1 Retention" 
-            value={localData ? `${localData.dashboard.kpis.retention.week1.toFixed(1)}%` : '-'}
+            value={weeklyData?.monthly_retention?.['Week 1'] !== undefined ? `${weeklyData.monthly_retention['Week 1'].toFixed(1)}%` : localData ? `${localData.dashboard.kpis.retention.week1.toFixed(1)}%` : '-'}
             description={localData ? `Target: ${localData.dashboard.kpis.retention.week1Target}%` : "User retention"}
-            trend={localData && localData.dashboard.kpis.retention.week1 < localData.dashboard.kpis.retention.week1Target ? 'down' : 'neutral'}
+            trend={weeklyData ? 'neutral' : localData && localData.dashboard.kpis.retention.week1 < localData.dashboard.kpis.retention.week1Target ? 'down' : 'neutral'}
           />
           <KpiCard 
             title="Active Projects" 
@@ -156,7 +170,7 @@ const CompanyDashboard = () => {
               </div>
             </h3>
             <p className="text-sm leading-relaxed">
-              {localData.dashboard.insights.weekly}
+              {localData.dashboard.insights.weekly || 'No insights yet'}
             </p>
           </Card>
         )}

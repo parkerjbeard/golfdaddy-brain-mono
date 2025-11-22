@@ -263,6 +263,11 @@ export const api = {
       if (res.error) throw new Error(res.error);
       return res.data;
     },
+    getDashboardOverview: async () => {
+      const res = await apiClient.get('/api/v1/zapier/dashboard-overview');
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
     refreshDashboardData: async () => {
       const res = await apiClient.post('/api/v1/zapier/refresh');
       if (res.error) throw new Error(res.error);

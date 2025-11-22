@@ -55,6 +55,10 @@ class DashboardRefreshResponse(BaseModel):
     timestamp: datetime
 
 
+class DashboardOverviewResponse(BaseModel):
+    dashboard: Dict[str, Any]
+
+
 def get_zapier_service(db: Client = Depends(get_db)) -> ZapierIntegrationService:
     """Dependency to get Zapier integration service."""
     return ZapierIntegrationService(db)
@@ -207,4 +211,27 @@ async def refresh_dashboard_data(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while refreshing dashboard data",
+        )
+
+
+@router.get("/dashboard-overview", response_model=DashboardOverviewResponse)
+async def get_dashboard_overview(
+    zapier_service: ZapierIntegrationService = Depends(get_zapier_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Return dashboard overview data (projects, issues, insights, team stats) from Zapier/Supabase."""
+    try:
+        overview = await zapier_service.get_dashboard_overview()
+        if not overview:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unable to fetch dashboard overview data"
+            )
+        return DashboardOverviewResponse(**overview)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching dashboard overview: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while fetching dashboard overview",
         )
