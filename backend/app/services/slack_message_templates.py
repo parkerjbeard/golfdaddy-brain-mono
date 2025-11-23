@@ -537,17 +537,13 @@ class SlackMessageTemplates:
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": block_text}})
 
         blocks.append({"type": "divider"})
-        blocks.append(
+        context_elements: List[Dict[str, Any]] = [
             {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": "_Please reply to this message with clarifications, and I'll update your report._",
-                    }
-                ],
+                "type": "mrkdwn",
+                "text": "_Please reply to this message with clarifications, and I'll update your report._",
             }
-        )
+        ]
+        blocks.append({"type": "context", "elements": context_elements})
         return {"text": "I need some clarification on your daily report", "blocks": blocks}
 
     @staticmethod

@@ -17,7 +17,7 @@ class User(BaseModel):
     name: Optional[str] = None
     avatar_url: Optional[str] = None
     email: Optional[EmailStr] = None  # This should ideally be consistently sourced from auth or kept in sync
-    slack_id: Optional[str] = Field(None, unique=True, description="User's Slack ID")
+    slack_id: Optional[str] = Field(None, description="User's Slack ID")
     github_username: Optional[str] = Field(None, description="User's GitHub username")
     role: UserRole = UserRole.EMPLOYEE
     team: Optional[str] = None

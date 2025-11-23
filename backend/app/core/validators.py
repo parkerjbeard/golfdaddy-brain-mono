@@ -6,7 +6,7 @@ import logging
 import re
 import unicodedata
 from datetime import datetime
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ class ReportValidator:
         # Check for excessive repetition
         words = cls._extract_words(content)
         if words:
-            word_freq = {}
+            word_freq: Dict[str, int] = {}
             for word in words:
                 word_lower = word.lower()
                 word_freq[word_lower] = word_freq.get(word_lower, 0) + 1

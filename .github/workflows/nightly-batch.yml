@@ -1,15 +1,67 @@
 name: Nightly AI Batch
+
 on:
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  run:
+  run-nightly-analysis:
+    name: Run nightly analysis batch
     runs-on: ubuntu-latest
-    if: ${{ secrets.NIGHTLY_BATCH_URL != '' && secrets.CRON_API_KEY != '' }}
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ENVIRONMENT: production
     steps:
-      - name: Trigger nightly batch endpoint
+      - name: Check required secrets
+        id: secret-check
         run: |
-          curl -fsSL -H "X-API-Key: ${{ secrets.CRON_API_KEY }}" \
-            ${{ secrets.NIGHTLY_BATCH_URL }}
+          missing=()
+          [ -z "${SUPABASE_URL}" ] && missing+=("SUPABASE_URL")
+          [ -z "${SUPABASE_SERVICE_KEY}" ] && missing+=("SUPABASE_SERVICE_KEY")
+          [ -z "${DATABASE_URL}" ] && missing+=("DATABASE_URL")
+          [ -z "${OPENAI_API_KEY}" ] && missing+=("OPENAI_API_KEY")
+
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+            printf "missing=%s\n" "$(IFS=,; echo "${missing[*]}")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip when secrets are missing
+        if: ${{ steps.secret-check.outputs.required != 'true' }}
+        run: echo "Nightly batch skipped; missing secrets: ${{ steps.secret-check.outputs.missing || 'unknown' }}"
+
+      - name: Checkout repository
+        if: ${{ steps.secret-check.outputs.required == 'true' }}
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: ${{ steps.secret-check.outputs.required == 'true' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        if: ${{ steps.secret-check.outputs.required == 'true' }}
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run nightly batch analysis script
+        if: ${{ steps.secret-check.outputs.required == 'true' }}
+        working-directory: backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: python -m scripts.run_daily_analysis

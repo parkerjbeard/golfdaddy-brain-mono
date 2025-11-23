@@ -483,7 +483,7 @@ class DiffParser:
         Returns:
             List of file diff dictionaries
         """
-        file_diffs = []
+        file_diffs: List[Dict[str, Any]] = []
         current_file = None
         current_hunk = None
 

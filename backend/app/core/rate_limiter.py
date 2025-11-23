@@ -10,7 +10,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Literal, Optional, Union, overload
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class TokenBucketRateLimiter:
         self.last_refill = now
 
     @property
-    def status(self) -> Dict[str, any]:
+    def status(self) -> Dict[str, Any]:
         """Get current rate limiter status."""
         self._refill_bucket()
         return {
@@ -170,7 +170,7 @@ class SlidingWindowRateLimiter:
             )
 
     @property
-    def status(self) -> Dict[str, any]:
+    def status(self) -> Dict[str, Any]:
         """Get current rate limiter status."""
         now = time.time()
         window_start = now - self.window_size
@@ -191,14 +191,30 @@ class RateLimiterManager:
     """
 
     def __init__(self):
-        self._limiters: Dict[str, TokenBucketRateLimiter] = {}
+        self._limiters: Dict[str, Union[TokenBucketRateLimiter, SlidingWindowRateLimiter]] = {}
+
+    @overload
+    def create_limiter(
+        self, name: str, config: RateLimitConfig, limiter_type: Literal["token_bucket"] = "token_bucket"
+    ) -> TokenBucketRateLimiter:
+        ...
+
+    @overload
+    def create_limiter(
+        self, name: str, config: RateLimitConfig, limiter_type: Literal["sliding_window"]
+    ) -> SlidingWindowRateLimiter:
+        ...
 
     def create_limiter(
-        self, name: str, config: RateLimitConfig, limiter_type: str = "token_bucket"
-    ) -> TokenBucketRateLimiter:
+        self,
+        name: str,
+        config: RateLimitConfig,
+        limiter_type: Literal["token_bucket", "sliding_window"] = "token_bucket",
+    ) -> Union[TokenBucketRateLimiter, SlidingWindowRateLimiter]:
         """Create and register a new rate limiter."""
         config.name = name
 
+        limiter: Union[TokenBucketRateLimiter, SlidingWindowRateLimiter]
         if limiter_type == "token_bucket":
             limiter = TokenBucketRateLimiter(config)
         elif limiter_type == "sliding_window":
@@ -209,11 +225,11 @@ class RateLimiterManager:
         self._limiters[name] = limiter
         return limiter
 
-    def get_limiter(self, name: str) -> Optional[TokenBucketRateLimiter]:
+    def get_limiter(self, name: str) -> Optional[Union[TokenBucketRateLimiter, SlidingWindowRateLimiter]]:
         """Get rate limiter by name."""
         return self._limiters.get(name)
 
-    def get_status(self) -> Dict[str, Dict[str, any]]:
+    def get_status(self) -> Dict[str, Dict[str, Any]]:
         """Get status of all rate limiters."""
         return {name: limiter.status for name, limiter in self._limiters.items()}
 

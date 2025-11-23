@@ -200,7 +200,7 @@ class DocumentationOutput(BaseModel):
     validation_errors: List[str] = Field(default_factory=list, description="Validation errors if any")
     warnings: List[str] = Field(default_factory=list, description="Warnings about the documentation")
 
-    def get_typed_content(self) -> BaseModel:
+    def get_typed_content(self) -> BaseModel | Dict[str, Any]:
         """Get the content as the appropriate typed model."""
         schema_map = {
             DocType.API_REFERENCE: APIReferenceDoc,

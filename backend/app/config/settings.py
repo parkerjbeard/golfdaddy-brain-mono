@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 from pydantic import Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings
@@ -25,100 +25,100 @@ else:
 
 class Settings(BaseSettings):
     # Supabase Config
-    SUPABASE_URL: HttpUrl = Field(..., env="SUPABASE_URL")
-    SUPABASE_SERVICE_KEY: str = Field(..., env="SUPABASE_SERVICE_KEY")
+    SUPABASE_URL: HttpUrl = Field(...)
+    SUPABASE_SERVICE_KEY: str = Field(...)
     SUPABASE_ANON_KEY: Optional[str] = Field(
-        None, env="SUPABASE_ANON_KEY"
+        None
     )  # Public key, needed for client-side JS/frontend
 
     # PostgreSQL Database URL (for SQLAlchemy)
-    DATABASE_URL: str = Field(..., env="DATABASE_URL")
+    DATABASE_URL: str = Field(...)
 
     # General App Settings
-    TESTING_MODE: bool = Field(False, env="TESTING_MODE")  # Added for testing purposes
+    TESTING_MODE: bool = Field(False)  # Added for testing purposes
     REANALYZE_EXISTING_COMMITS: bool = Field(
-        False, env="REANALYZE_EXISTING_COMMITS"
+        False
     )  # Controls whether to reprocess commits already in the database
-    FRONTEND_URL: str = Field("http://localhost:8080", env="FRONTEND_URL")  # Frontend URL for links in notifications
+    FRONTEND_URL: str = Field("http://localhost:8080")  # Frontend URL for links in notifications
 
     # Documentation agent removed — related config deleted
 
     # Slack Config
-    SLACK_BOT_TOKEN: Optional[str] = Field(None, env="SLACK_BOT_TOKEN")  # Bot user OAuth token
-    SLACK_SIGNING_SECRET: Optional[str] = Field(None, env="SLACK_SIGNING_SECRET")
-    SLACK_DEFAULT_CHANNEL: Optional[str] = Field(None, env="SLACK_DEFAULT_CHANNEL")  # Default channel for notifications
+    SLACK_BOT_TOKEN: Optional[str] = Field(None)  # Bot user OAuth token
+    SLACK_SIGNING_SECRET: Optional[str] = Field(None)
+    SLACK_DEFAULT_CHANNEL: Optional[str] = Field(None)  # Default channel for notifications
 
     # Slack Circuit Breaker Settings
-    SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = Field(5, env="SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD")
-    SLACK_CIRCUIT_BREAKER_TIMEOUT: int = Field(60, env="SLACK_CIRCUIT_BREAKER_TIMEOUT")
+    SLACK_CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = Field(5)
+    SLACK_CIRCUIT_BREAKER_TIMEOUT: int = Field(60)
 
     # EOD Reminder Settings
-    EOD_REMINDER_TIME: str = Field("16:30", env="EOD_REMINDER_TIME")  # 24-hour format (4:30 PM)
-    EOD_REMINDER_TIMEZONE: str = Field("America/Los_Angeles", env="EOD_REMINDER_TIMEZONE")
+    EOD_REMINDER_TIME: str = Field("16:30")  # 24-hour format (4:30 PM)
+    EOD_REMINDER_TIMEZONE: str = Field("America/Los_Angeles")
 
     # Integration Keys
-    GITHUB_TOKEN: Optional[str] = Field(None, env="GITHUB_TOKEN")  # Legacy PAT, prefer GitHub App
+    GITHUB_TOKEN: Optional[str] = Field(None)  # Legacy PAT, prefer GitHub App
     # Legacy AI service key removed
 
     # GitHub App Configuration (preferred over PAT)
-    GITHUB_APP_ID: Optional[str] = Field(None, env="GITHUB_APP_ID")
-    GITHUB_APP_PRIVATE_KEY: Optional[str] = Field(None, env="GITHUB_APP_PRIVATE_KEY")
-    GITHUB_APP_INSTALLATION_ID: Optional[str] = Field(None, env="GITHUB_APP_INSTALLATION_ID")
+    GITHUB_APP_ID: Optional[str] = Field(None)
+    GITHUB_APP_PRIVATE_KEY: Optional[str] = Field(None)
+    GITHUB_APP_INSTALLATION_ID: Optional[str] = Field(None)
 
     # GitHub Webhook Configuration
-    GITHUB_WEBHOOK_SECRET: Optional[str] = Field(None, env="GITHUB_WEBHOOK_SECRET")
+    GITHUB_WEBHOOK_SECRET: Optional[str] = Field(None)
     # Legacy MAKE_* integration variables removed
 
     # Legacy webhook URL placeholders removed; direct Slack messages are generally disabled
 
     # OpenAI settings
-    OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")
-    OPENAI_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="OPENAI_MODEL")
+    OPENAI_API_KEY: Optional[str] = Field(None)
+    OPENAI_MODEL: Optional[str] = Field("gpt-5-2025-08-07")
     # Doc agent model removed
-    OPENAI_REASONING_EFFORT: str = Field("medium", env="OPENAI_REASONING_EFFORT")
+    OPENAI_REASONING_EFFORT: str = Field("medium")
 
     # Service-specific AI models
-    COMMIT_ANALYSIS_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="COMMIT_ANALYSIS_MODEL")
-    CODE_QUALITY_MODEL: Optional[str] = Field("gpt-5-2025-08-07", env="CODE_QUALITY_MODEL")
+    COMMIT_ANALYSIS_MODEL: Optional[str] = Field("gpt-5-2025-08-07")
+    CODE_QUALITY_MODEL: Optional[str] = Field("gpt-5-2025-08-07")
 
     # Health check toggles
-    HEALTH_CHECK_TIMEOUT: int = Field(10, env="HEALTH_CHECK_TIMEOUT")
-    ENABLE_DETAILED_HEALTH_CHECKS: bool = Field(False, env="ENABLE_DETAILED_HEALTH_CHECKS")
+    HEALTH_CHECK_TIMEOUT: int = Field(10)
+    ENABLE_DETAILED_HEALTH_CHECKS: bool = Field(False)
 
     # Embeddings/semantic search removed — related config deleted
 
     # Data Retention and Archiving Settings
-    DAILY_REPORTS_RETENTION_MONTHS: int = Field(12, env="DAILY_REPORTS_RETENTION_MONTHS")
-    COMMITS_RETENTION_MONTHS: int = Field(24, env="COMMITS_RETENTION_MONTHS")
-    COMPLETED_TASKS_RETENTION_MONTHS: int = Field(6, env="COMPLETED_TASKS_RETENTION_MONTHS")
+    DAILY_REPORTS_RETENTION_MONTHS: int = Field(12)
+    COMMITS_RETENTION_MONTHS: int = Field(24)
+    COMPLETED_TASKS_RETENTION_MONTHS: int = Field(6)
     # Docs retention removed with doc agent
-    ENABLE_AUTO_ARCHIVE: bool = Field(True, env="ENABLE_AUTO_ARCHIVE")
-    ARCHIVE_SCHEDULE_HOUR: int = Field(2, env="ARCHIVE_SCHEDULE_HOUR")  # Run at 2 AM daily
+    ENABLE_AUTO_ARCHIVE: bool = Field(True)
+    ARCHIVE_SCHEDULE_HOUR: int = Field(2)  # Run at 2 AM daily
 
     # Zapier Integration Settings
-    ZAPIER_WEEKLY_ANALYTICS_URL: Optional[str] = Field(None, env="ZAPIER_WEEKLY_ANALYTICS_URL")
-    ZAPIER_OBJECTIVES_URL: Optional[str] = Field(None, env="ZAPIER_OBJECTIVES_URL")
-    ZAPIER_API_KEY: Optional[str] = Field(None, env="ZAPIER_API_KEY")
+    ZAPIER_WEEKLY_ANALYTICS_URL: Optional[str] = Field(None)
+    ZAPIER_OBJECTIVES_URL: Optional[str] = Field(None)
+    ZAPIER_API_KEY: Optional[str] = Field(None)
 
     # Zapier Webhook Settings
-    ZAPIER_API_KEYS: Optional[str] = Field(None, env="ZAPIER_API_KEYS")  # Comma-separated list of valid API keys
-    ZAPIER_WEBHOOK_SECRET: Optional[str] = Field(None, env="ZAPIER_WEBHOOK_SECRET")  # For HMAC signature verification
-    ZAPIER_REQUIRE_AUTH: bool = Field(True, env="ZAPIER_REQUIRE_AUTH")  # Require authentication for webhooks
-    ENVIRONMENT: str = Field("production", env="ENVIRONMENT")  # development, staging, production
+    ZAPIER_API_KEYS: Optional[str] = Field(None)  # Comma-separated list of valid API keys
+    ZAPIER_WEBHOOK_SECRET: Optional[str] = Field(None)  # For HMAC signature verification
+    ZAPIER_REQUIRE_AUTH: bool = Field(True)  # Require authentication for webhooks
+    ENVIRONMENT: str = Field("production")  # development, staging, production
 
     # API Gateway Settings
-    ENABLE_API_AUTH: bool = Field(True, env="ENABLE_API_AUTH")
-    ENABLE_RATE_LIMITING: bool = Field(True, env="ENABLE_RATE_LIMITING")
-    API_KEY_HEADER: str = Field("X-API-Key", env="API_KEY_HEADER")
-    DEFAULT_RATE_LIMIT: int = Field(60, env="DEFAULT_RATE_LIMIT")  # requests per minute
+    ENABLE_API_AUTH: bool = Field(True)
+    ENABLE_RATE_LIMITING: bool = Field(True)
+    API_KEY_HEADER: str = Field("X-API-Key")
+    DEFAULT_RATE_LIMIT: int = Field(60)  # requests per minute
     AUTH_EXCLUDE_PATHS: str = Field(
-        "/docs,/redoc,/openapi.json,/health,/auth/login", env="AUTH_EXCLUDE_PATHS"
+        "/docs,/redoc,/openapi.json,/health,/auth/login"
     )  # Adjusted exclude paths
     RATE_LIMIT_EXCLUDE_PATHS: str = Field(
-        "/health,/auth/login", env="RATE_LIMIT_EXCLUDE_PATHS"
+        "/health,/auth/login"
     )  # Adjusted exclude paths
-    API_KEYS: Optional[Dict[str, Dict[str, Any]]] = Field(None, env="API_KEYS")
-    API_KEYS_FILE_PATH: Optional[str] = Field(None, env="API_KEYS_FILE_PATH")
+    API_KEYS: Optional[Dict[str, Dict[str, Any]]] = Field(None)
+    API_KEYS_FILE_PATH: Optional[str] = Field(None)
 
     # CORS Settings removed — unified same-origin deployment
 
